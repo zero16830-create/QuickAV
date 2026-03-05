@@ -35,7 +35,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-vcpkg-x64-windows-
 
-      - name: Setup FFmpeg (vcpkg)
+      - name: Setup FFmpeg/SDL2 (vcpkg)
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -52,7 +52,7 @@ jobs:
             & "$vcpkgRoot\bootstrap-vcpkg.bat" -disableMetrics
           }
 
-          & "$vcpkgRoot\vcpkg.exe" install "ffmpeg:x64-windows" --disable-metrics
+          & "$vcpkgRoot\vcpkg.exe" install "ffmpeg:x64-windows" "sdl2:x64-windows" --disable-metrics
 
           "VCPKG_ROOT=$vcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "VCPKG_DEFAULT_TRIPLET=x64-windows" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
