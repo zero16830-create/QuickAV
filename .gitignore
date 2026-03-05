@@ -1,0 +1,8 @@
+/target
+fix_*.py
+inject_*.py
+generate_rust_skeleton.py
+implement_ffmpeg_logic.py
+rollback_stable.py
+sync_all_logic.py
+write_supplemental_logic.py

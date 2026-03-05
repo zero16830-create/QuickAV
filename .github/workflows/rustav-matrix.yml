@@ -1,0 +1,42 @@
+name: RustAV Matrix
+
+on:
+  push:
+    paths:
+      - "src/**"
+      - "examples/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/rustav-matrix.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "examples/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/rustav-matrix.yml"
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: RustAV
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cargo Check
+        run: cargo check
+
+      - name: Cargo Check Example
+        run: cargo check --example test_player
+
+      - name: Run Native-Aligned Matrix (CI)
+        shell: pwsh
+        run: |
+          ./examples/run_native_test_matrix.ps1 -Ci -Cases all -SkipRtsp -MaxSeconds 3
