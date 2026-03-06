@@ -49,16 +49,15 @@
 2. 产物：`RustAV.xcframework`
 3. Unity 插件目录：`Assets/Plugins/iOS/RustAV.xcframework`
 
-### GitHub Actions 侧后续工作
+### GitHub Actions 现状
 
-1. 安装 Rust target：
-   - `rustup target add aarch64-apple-ios`
-   - `rustup target add aarch64-apple-ios-sim`
-2. 准备 iOS FFmpeg 预编译库。
-3. 执行两次静态库构建：
-   - `cargo build --release --target aarch64-apple-ios`
-   - `cargo build --release --target aarch64-apple-ios-sim`
-4. 通过 `xcodebuild -create-xcframework` 合成 `RustAV.xcframework`。
+1. 已新增 iOS `xcframework` job。
+2. GitHub Actions 使用 `macos-latest + Xcode + rustup targets`。
+3. FFmpeg 与 Android 一样，改为通过 `mobile-ffmpeg-build -> ffmpeg-next/build` 在云端从源码构建。
+4. 当前云端构建命令是：
+   - `cargo build --release --lib --locked --target aarch64-apple-ios --features mobile-ffmpeg-build`
+   - `cargo build --release --lib --locked --target aarch64-apple-ios-sim --features mobile-ffmpeg-build`
+5. 构建完成后通过 `xcodebuild -create-xcframework` 打包 `RustAV.xcframework` 并上传 artifact。
 
 ### Unity 侧接入
 
@@ -84,12 +83,16 @@ Windows 专属接口：
 
 ## 后续最小落地顺序
 
-1. 在 GitHub Actions 先打通 Android `arm64-v8a`。
-2. 再补 iOS device + simulator 两个 target。
+1. 在 GitHub Actions 先稳定 Android `arm64-v8a`。
+2. 再稳定 iOS device + simulator 两个 target。
 3. 最后把生成物复制到 Unity 插件目录并做真机验证。
 
 ## 当前结论
 
 1. Android 云端编译链路已经接入 GitHub Actions。
-2. iOS 仍然保持未启用状态，后续单独补。
+2. iOS 云端编译链路已经接入 GitHub Actions，并输出 `RustAV.xcframework`。
 3. Windows 云端校验已经调整为只检查库本体，不再编译 `test_player`。
+4. 三端当前都已接入缓存：
+   - Windows：`rust-cache + vcpkg cache`
+   - Android：`rust-cache`
+   - iOS：`rust-cache`

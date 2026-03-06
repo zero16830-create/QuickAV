@@ -4,19 +4,23 @@ on:
   push:
     paths:
       - "src/**"
+      - "include/**"
       - "examples/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - "UNITY_MOBILE_BUILD.md"
+      - "UNITY_PLUGIN_ABI.md"
       - "UNITY_WIN_IOS_ANDROID_PLAN.md"
       - ".github/workflows/rustav-matrix.yml"
   pull_request:
     paths:
       - "src/**"
+      - "include/**"
       - "examples/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - "UNITY_MOBILE_BUILD.md"
+      - "UNITY_PLUGIN_ABI.md"
       - "UNITY_WIN_IOS_ANDROID_PLAN.md"
       - ".github/workflows/rustav-matrix.yml"
   workflow_dispatch:
@@ -167,4 +171,103 @@ jobs:
         with:
           name: rustav-android-arm64-v8a
           path: target/android-unity-libs/arm64-v8a/librustav_native.so
+          if-no-files-found: error
+
+  ios-build:
+    name: iOS XCFramework Build
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+
+      - name: Patch ffmpeg-sys-next iOS SDK lookup
+        shell: bash
+        run: |
+          cargo fetch --locked --target aarch64-apple-ios --target aarch64-apple-ios-sim
+          python3 <<'PY'
+          import os
+          import pathlib
+          import sys
+
+          cargo_home = pathlib.Path(os.environ.get("CARGO_HOME", pathlib.Path.home() / ".cargo"))
+          matches = sorted(cargo_home.glob("registry/src/*/ffmpeg-sys-next-*/build.rs"))
+          if not matches:
+              print("ffmpeg-sys-next build.rs not found", file=sys.stderr)
+              sys.exit(1)
+
+          path = matches[-1]
+          text = path.read_text(encoding="utf-8")
+
+          block_old = '''fn get_ffmpeg_target_os() -> String {
+              let cargo_target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
+              match cargo_target_os.as_str() {
+                  "ios" => "darwin".to_string(),
+                  _ => cargo_target_os,
+              }
+          }
+          '''
+          helper_new = '''fn get_ffmpeg_target_os() -> String {
+              let cargo_target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
+              match cargo_target_os.as_str() {
+                  "ios" => "darwin".to_string(),
+                  _ => cargo_target_os,
+              }
+          }
+
+          fn get_apple_sdk_name() -> &'static str {
+              match env::var("TARGET") {
+                  Ok(target) if target.contains("-ios-sim") => "iphonesimulator",
+                  _ => "iphoneos",
+              }
+          }
+          '''
+          if block_old not in text:
+              print(f"expected get_ffmpeg_target_os block not found in {path}", file=sys.stderr)
+              sys.exit(1)
+
+          text = text.replace(block_old, helper_new, 1)
+          text = text.replace('["--sdk", "iphoneos", "--show-sdk-path"]', '["--sdk", get_apple_sdk_name(), "--show-sdk-path"]')
+          text = text.replace('["--sdk", "iphoneos", "-f", "clang"]', '["--sdk", get_apple_sdk_name(), "-f", "clang"]')
+
+          path.write_text(text, encoding="utf-8")
+          print(f"patched {path}")
+          PY
+
+      - name: Show Xcode Version
+        run: |
+          xcodebuild -version
+
+      - name: Build iOS Device Library
+        run: |
+          cargo build --release --lib --locked --target aarch64-apple-ios --features mobile-ffmpeg-build
+
+      - name: Build iOS Simulator Library
+        run: |
+          cargo build --release --lib --locked --target aarch64-apple-ios-sim --features mobile-ffmpeg-build
+
+      - name: Package iOS XCFramework
+        run: |
+          mkdir -p target/apple-unity
+          xcodebuild -create-xcframework \
+            -library target/aarch64-apple-ios/release/librustav_native.a -headers include \
+            -library target/aarch64-apple-ios-sim/release/librustav_native.a -headers include \
+            -output target/apple-unity/RustAV.xcframework
+
+      - name: Upload iOS Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustav-ios-xcframework
+          path: target/apple-unity/RustAV.xcframework
           if-no-files-found: error

@@ -115,4 +115,6 @@ typedef struct RustAVFrameMeta {
 
 1. `GetPlayer` 目前只对 Windows D3D11 有效。
 2. `CreatePlayerPullRGBA` 是当前三端统一的最小公共能力。
-3. iOS / Android 的实际二进制产物将在后续 GitHub Actions 中生成。
+3. Android 云端产物为 `librustav_native.so`。
+4. iOS 云端产物为 `RustAV.xcframework`，打包头文件位于 `include/RustAV.h`。
+5. Unity iOS 侧 `DllImport` 应使用 `__Internal`，Android / Windows 侧使用 `rustav_native`。
