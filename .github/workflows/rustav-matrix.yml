@@ -115,12 +115,52 @@ jobs:
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
 
+      - name: Patch ffmpeg-sys-next Android tool lookup
+        shell: bash
+        run: |
+          cargo fetch --locked --target aarch64-linux-android
+          python3 <<'PY'
+          import os
+          import pathlib
+          import re
+          import sys
+
+          cargo_home = pathlib.Path(os.environ.get("CARGO_HOME", pathlib.Path.home() / ".cargo"))
+          matches = sorted(cargo_home.glob("registry/src/*/ffmpeg-sys-next-*/build.rs"))
+          if not matches:
+              print("ffmpeg-sys-next build.rs not found", file=sys.stderr)
+              sys.exit(1)
+
+          path = matches[-1]
+          text = path.read_text(encoding="utf-8")
+          old = (
+              'android_cc_path\n'
+              '                    .join("..")\n'
+              '                    .join(format!("llvm-{tool}"))\n'
+              '                    .canonicalize()'
+          )
+          new = (
+              'android_cc_path\n'
+              '                    .parent()\n'
+              '                    .expect("android compiler path must have parent")\n'
+              '                    .join(format!("llvm-{tool}"))\n'
+              '                    .canonicalize()'
+          )
+
+          if old not in text:
+              print(f"expected ffmpeg-sys-next snippet not found in {path}", file=sys.stderr)
+              sys.exit(1)
+
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          print(f"patched {path}")
+          PY
+
       - name: Build Android arm64 Library
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
-          cargo ndk -t arm64-v8a -o target/android-unity-libs build --release --lib --features mobile-ffmpeg-build
+          cargo ndk -t arm64-v8a -o target/android-unity-libs build --release --lib --locked --features mobile-ffmpeg-build
 
       - name: Upload Android Artifact
         uses: actions/upload-artifact@v4
