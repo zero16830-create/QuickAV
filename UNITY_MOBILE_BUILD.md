@@ -96,3 +96,4 @@ Windows 专属接口：
    - Windows：`rust-cache + vcpkg cache`
    - Android：`rust-cache`
    - iOS：`rust-cache`
+5. 当前为了集中收敛 iOS 问题，GitHub Actions 已临时暂停 Windows / Android job，仅保留 iOS job 运行。
