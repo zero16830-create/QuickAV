@@ -2,6 +2,7 @@
 #![allow(non_camel_case_types)]
 
 use crate::AVLibPlayer::AVLibPlayer;
+use crate::AudioExportState::{ExportedAudioState, SharedExportedAudioState};
 use crate::FrameExportClient::{FrameExportClient, SharedExportedFrameState};
 use crate::IVideoClient::IVideoClient;
 use crate::Logging::Debug::Debug;
@@ -18,12 +19,28 @@ impl Player {
     pub const RTSP_PREFIX: &'static str = "rtsp://";
     pub const RTMP_PREFIX: &'static str = "rtmp://";
 
-    pub fn Create(uri: String, video_client: Box<dyn IVideoClient + Send>) -> Option<Self> {
+    fn ValidateUri(uri: &str) -> bool {
         if !uri.contains(Self::RTSP_PREFIX) && !uri.contains(Self::RTMP_PREFIX) {
-            if std::fs::File::open(&uri).is_err() {
+            if std::fs::File::open(uri).is_err() {
                 Debug::LogError(&format!("File does not exist at given uri: {}", uri));
-                return None;
+                return false;
             }
+        }
+
+        true
+    }
+
+    pub fn Create(uri: String, video_client: Box<dyn IVideoClient + Send>) -> Option<Self> {
+        Self::CreateWithOptionalAudioExport(uri, video_client, None)
+    }
+
+    fn CreateWithOptionalAudioExport(
+        uri: String,
+        video_client: Box<dyn IVideoClient + Send>,
+        audio_export: Option<SharedExportedAudioState>,
+    ) -> Option<Self> {
+        if !Self::ValidateUri(&uri) {
+            return None;
         }
 
         let target_width = video_client.Width();
@@ -39,6 +56,7 @@ impl Player {
             target_height,
             target_format,
             video_client,
+            audio_export,
         )?;
 
         Some(Self {
@@ -57,8 +75,18 @@ impl Player {
         target_width: i32,
         target_height: i32,
     ) -> Option<(Self, SharedExportedFrameState)> {
+        let (player, frame_shared, _) =
+            Self::CreateWithFrameAndAudioExport(uri, target_width, target_height)?;
+        Some((player, frame_shared))
+    }
+
+    pub fn CreateWithFrameAndAudioExport(
+        uri: String,
+        target_width: i32,
+        target_height: i32,
+    ) -> Option<(Self, SharedExportedFrameState, SharedExportedAudioState)> {
         if target_width <= 0 || target_height <= 0 {
-            Debug::LogError("Player::CreateWithFrameExport - target size must be positive");
+            Debug::LogError("Player::CreateWithFrameAndAudioExport - target size must be positive");
             return None;
         }
 
@@ -67,8 +95,9 @@ impl Player {
             target_height,
             PixelFormat::PIXEL_FORMAT_RGBA32,
         );
-        let player = Self::Create(uri, Box::new(client))?;
-        Some((player, shared))
+        let audio_shared = ExportedAudioState::Shared();
+        let player = Self::CreateWithOptionalAudioExport(uri, Box::new(client), Some(audio_shared.clone()))?;
+        Some((player, shared, audio_shared))
     }
 
     pub fn Write(&mut self) {
@@ -117,5 +146,9 @@ impl Player {
 
     pub fn CurrentTime(&self) -> f64 {
         self._avlib_player.CurrentTime()
+    }
+
+    pub fn SetAudioSinkDelay(&self, delay_sec: f64) {
+        self._avlib_player.SetAudioSinkDelay(delay_sec);
     }
 }

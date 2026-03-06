@@ -8,6 +8,8 @@ pub mod Rendering {
     pub mod TextureWriter;
 }
 pub mod AVLibDecoder;
+pub mod AVLibAudioDecoder;
+pub mod AudioExportState;
 pub mod AVLibFileSource;
 pub mod AVLibFrame;
 pub mod AVLibPacket;
@@ -20,6 +22,7 @@ pub mod AVLibVideoDecoder;
 pub mod FixedSizeQueue;
 pub mod Frame;
 pub mod FrameExportClient;
+pub mod AudioFrame;
 pub mod IAVLibDecoderVisitor;
 pub mod IAVLibSource;
 pub mod IFrameVisitor;
@@ -30,6 +33,7 @@ pub mod Player;
 pub mod TextureClient;
 pub mod UnityConnection;
 pub mod VideoFrame;
+pub mod PlaybackClock;
 pub mod dllmain;
 pub mod stdafx;
 

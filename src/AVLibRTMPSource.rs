@@ -36,6 +36,15 @@ struct RtmpVideoConfig {
     extra_data: Vec<u8>,
 }
 
+#[derive(Clone, PartialEq)]
+struct RtmpAudioConfig {
+    codec_id: codec::Id,
+    sample_rate: i32,
+    channels: i32,
+    time_base: f64,
+    extra_data: Vec<u8>,
+}
+
 #[derive(Clone)]
 struct RtmpTarget {
     host: String,
@@ -51,6 +60,7 @@ pub struct AVLibRTMPSource {
     _streamTypes: Arc<Mutex<Vec<AVMediaType>>>,
     _streams: Arc<Mutex<Vec<AVLibStreamInfo>>>,
     _videoConfig: Arc<Mutex<Option<RtmpVideoConfig>>>,
+    _audioConfig: Arc<Mutex<Option<RtmpAudioConfig>>>,
     _stayAlive: Arc<AtomicBool>,
     _thread: Option<thread::JoinHandle<()>>,
     _isConnected: Arc<AtomicBool>,
@@ -59,11 +69,14 @@ pub struct AVLibRTMPSource {
     _checkStartTicks: Arc<Mutex<Option<Instant>>>,
     _packetCount: Arc<Mutex<u64>>,
     _connectRequested: Arc<AtomicBool>,
+    _videoTimestampOrigin: Arc<Mutex<Option<i64>>>,
+    _audioTimestampOrigin: Arc<Mutex<Option<i64>>>,
     _recycler: Arc<Mutex<AVLibPacketRecycler>>,
 }
 
 impl AVLibRTMPSource {
     const REALTIME_VIDEO_PACKET_QUEUE_SIZE: usize = 3;
+    const REALTIME_AUDIO_PACKET_QUEUE_SIZE: usize = 96;
     const BEGIN_TIMEOUT_CHECK_SECONDS: u64 = 3;
     const TIMEOUT_SECONDS: u64 = 2;
     const CONNECT_RETRY_DELAY_MS: u64 = 200;
@@ -75,17 +88,34 @@ impl AVLibRTMPSource {
     pub fn new(uri: String) -> Self {
         let _ = ffmpeg_next::init();
 
-        let packet_queues = Arc::new(Mutex::new(vec![Arc::new(FixedSizeQueue::new(
-            Self::REALTIME_VIDEO_PACKET_QUEUE_SIZE,
-        ))]));
-        let stream_types = Arc::new(Mutex::new(vec![AVMediaType::AVMEDIA_TYPE_VIDEO]));
-        let streams = Arc::new(Mutex::new(vec![AVLibStreamInfo {
-            index: 0,
-            codec_type: AVMediaType::AVMEDIA_TYPE_VIDEO,
-            width: 0,
-            height: 0,
-        }]));
+        let packet_queues = Arc::new(Mutex::new(vec![
+            Arc::new(FixedSizeQueue::new(Self::REALTIME_VIDEO_PACKET_QUEUE_SIZE)),
+            Arc::new(FixedSizeQueue::new(Self::REALTIME_AUDIO_PACKET_QUEUE_SIZE)),
+        ]));
+        let stream_types = Arc::new(Mutex::new(vec![
+            AVMediaType::AVMEDIA_TYPE_VIDEO,
+            AVMediaType::AVMEDIA_TYPE_UNKNOWN,
+        ]));
+        let streams = Arc::new(Mutex::new(vec![
+            AVLibStreamInfo {
+                index: 0,
+                codec_type: AVMediaType::AVMEDIA_TYPE_VIDEO,
+                width: 0,
+                height: 0,
+                sample_rate: 0,
+                channels: 0,
+            },
+            AVLibStreamInfo {
+                index: 1,
+                codec_type: AVMediaType::AVMEDIA_TYPE_UNKNOWN,
+                width: 0,
+                height: 0,
+                sample_rate: 0,
+                channels: 0,
+            },
+        ]));
         let video_config = Arc::new(Mutex::new(None));
+        let audio_config = Arc::new(Mutex::new(None));
         let stay_alive = Arc::new(AtomicBool::new(true));
         let is_connected = Arc::new(AtomicBool::new(false));
         let last_activity_ticks = Arc::new(Mutex::new(None));
@@ -93,6 +123,8 @@ impl AVLibRTMPSource {
         let check_start_ticks = Arc::new(Mutex::new(None));
         let packet_count = Arc::new(Mutex::new(0_u64));
         let connect_requested = Arc::new(AtomicBool::new(true));
+        let video_timestamp_origin = Arc::new(Mutex::new(None));
+        let audio_timestamp_origin = video_timestamp_origin.clone();
         let recycler = Arc::new(Mutex::new(AVLibPacketRecycler::new(30)));
 
         let mut source = Self {
@@ -101,6 +133,7 @@ impl AVLibRTMPSource {
             _streamTypes: stream_types.clone(),
             _streams: streams.clone(),
             _videoConfig: video_config.clone(),
+            _audioConfig: audio_config.clone(),
             _stayAlive: stay_alive.clone(),
             _thread: None,
             _isConnected: is_connected.clone(),
@@ -109,6 +142,8 @@ impl AVLibRTMPSource {
             _checkStartTicks: check_start_ticks.clone(),
             _packetCount: packet_count.clone(),
             _connectRequested: connect_requested.clone(),
+            _videoTimestampOrigin: video_timestamp_origin.clone(),
+            _audioTimestampOrigin: audio_timestamp_origin.clone(),
             _recycler: recycler.clone(),
         };
 
@@ -126,10 +161,13 @@ impl AVLibRTMPSource {
                     stream_types.clone(),
                     streams.clone(),
                     video_config.clone(),
+                    audio_config.clone(),
                     is_connected.clone(),
                     last_activity_ticks.clone(),
                     packet_count.clone(),
                     checking_connection.clone(),
+                    video_timestamp_origin.clone(),
+                    audio_timestamp_origin.clone(),
                     recycler.clone(),
                 );
 
@@ -160,6 +198,26 @@ impl AVLibRTMPSource {
             time_base: 1.0 / 1000.0,
             frame_rate: -1.0,
             extra_data: Vec::new(),
+        }
+    }
+
+    fn DefaultAudioConfig() -> RtmpAudioConfig {
+        RtmpAudioConfig {
+            codec_id: codec::Id::AAC,
+            sample_rate: 44_100,
+            channels: 2,
+            time_base: 1.0 / 1000.0,
+            extra_data: Vec::new(),
+        }
+    }
+
+    fn FlvSoundRateToHz(sound_rate: u8) -> i32 {
+        match sound_rate {
+            0 => 5_500,
+            1 => 11_025,
+            2 => 22_050,
+            3 => 44_100,
+            _ => 0,
         }
     }
 
@@ -297,6 +355,36 @@ impl AVLibRTMPSource {
         }
     }
 
+    fn PublishAudioStreamShape(
+        sample_rate: i32,
+        channels: i32,
+        stream_types: &Arc<Mutex<Vec<AVMediaType>>>,
+        streams: &Arc<Mutex<Vec<AVLibStreamInfo>>>,
+    ) {
+        {
+            let mut types_guard = stream_types
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if let Some(entry) = types_guard.get_mut(1) {
+                *entry = AVMediaType::AVMEDIA_TYPE_AUDIO;
+            }
+        }
+
+        {
+            let mut stream_guard = streams
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if let Some(entry) = stream_guard.get_mut(1) {
+                entry.index = 1;
+                entry.codec_type = AVMediaType::AVMEDIA_TYPE_AUDIO;
+                entry.width = 0;
+                entry.height = 0;
+                entry.sample_rate = sample_rate;
+                entry.channels = channels;
+            }
+        }
+    }
+
     fn UpdateVideoConfigFromMetadata(
         metadata: &StreamMetadata,
         stream_types: &Arc<Mutex<Vec<AVMediaType>>>,
@@ -334,6 +422,45 @@ impl AVLibRTMPSource {
         }
     }
 
+    fn UpdateAudioConfigFromMetadata(
+        metadata: &StreamMetadata,
+        stream_types: &Arc<Mutex<Vec<AVMediaType>>>,
+        streams: &Arc<Mutex<Vec<AVLibStreamInfo>>>,
+        audio_config: &Arc<Mutex<Option<RtmpAudioConfig>>>,
+    ) {
+        let (sample_rate, channels) = {
+            let mut cfg_guard = audio_config
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let mut cfg = cfg_guard.clone().unwrap_or_else(Self::DefaultAudioConfig);
+
+            if let Some(v) = metadata.audio_sample_rate {
+                cfg.sample_rate = v as i32;
+            }
+
+            if let Some(v) = metadata.audio_channels {
+                cfg.channels = v as i32;
+            } else if let Some(is_stereo) = metadata.audio_is_stereo {
+                cfg.channels = if is_stereo { 2 } else { 1 };
+            }
+
+            if let Some(v) = metadata.audio_codec_id {
+                cfg.codec_id = match v {
+                    2 => codec::Id::MP3,
+                    10 => codec::Id::AAC,
+                    _ => cfg.codec_id,
+                };
+            }
+
+            let sample_rate = cfg.sample_rate;
+            let channels = cfg.channels;
+            *cfg_guard = Some(cfg);
+            (sample_rate, channels)
+        };
+
+        Self::PublishAudioStreamShape(sample_rate, channels, stream_types, streams);
+    }
+
     fn UpdateVideoConfigFromSequenceHeader(
         extra_data: Vec<u8>,
         stream_types: &Arc<Mutex<Vec<AVMediaType>>>,
@@ -363,6 +490,18 @@ impl AVLibRTMPSource {
             .lock()
             .ok()
             .and_then(|g| g.as_ref().map(|cfg| !cfg.extra_data.is_empty()))
+            .unwrap_or(false)
+    }
+
+    fn HasAudioDecoderConfig(audio_config: &Arc<Mutex<Option<RtmpAudioConfig>>>) -> bool {
+        audio_config
+            .lock()
+            .ok()
+            .and_then(|g| {
+                g.as_ref().map(|cfg| {
+                    cfg.codec_id != codec::Id::AAC || !cfg.extra_data.is_empty()
+                })
+            })
             .unwrap_or(false)
     }
 
@@ -401,6 +540,25 @@ impl AVLibRTMPSource {
         wrapped_packet
     }
 
+    fn BuildPacketFromAudioPayload(
+        payload: &[u8],
+        dts_ms: i64,
+        recycler: &Arc<Mutex<AVLibPacketRecycler>>,
+    ) -> AVLibPacket {
+        let mut wrapped_packet = recycler
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .GetPacket();
+
+        let mut packet = Packet::copy(payload);
+        packet.set_stream(1);
+        packet.set_dts(Some(dts_ms));
+        packet.set_pts(Some(dts_ms));
+        packet.set_duration(0);
+        wrapped_packet.Packet = packet;
+        wrapped_packet
+    }
+
     fn ProcessVideoDataEvent(
         timestamp_ms: i64,
         data: Bytes,
@@ -412,6 +570,7 @@ impl AVLibRTMPSource {
         last_activity_ticks: &Arc<Mutex<Option<Instant>>>,
         packet_count: &Arc<Mutex<u64>>,
         checking_connection: &Arc<AtomicBool>,
+        video_timestamp_origin: &Arc<Mutex<Option<i64>>>,
         recycler: &Arc<Mutex<AVLibPacketRecycler>>,
     ) {
         if data.len() < 5 {
@@ -454,9 +613,17 @@ impl AVLibRTMPSource {
                     queues_guard.get(0).cloned()
                 };
 
+                let normalized_timestamp_ms = {
+                    let mut origin = video_timestamp_origin
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                    let base = origin.get_or_insert(timestamp_ms);
+                    timestamp_ms.saturating_sub(*base)
+                };
+
                 let wrapped_packet = Self::BuildPacketFromAvcPayload(
                     payload,
-                    timestamp_ms,
+                    normalized_timestamp_ms,
                     composition_time,
                     frame_type,
                     recycler,
@@ -485,6 +652,177 @@ impl AVLibRTMPSource {
         }
     }
 
+    fn ProcessAudioDataEvent(
+        timestamp_ms: i64,
+        data: Bytes,
+        packet_queues: &Arc<Mutex<Vec<Arc<FixedSizeQueue<AVLibPacket>>>>>,
+        stream_types: &Arc<Mutex<Vec<AVMediaType>>>,
+        streams: &Arc<Mutex<Vec<AVLibStreamInfo>>>,
+        audio_config: &Arc<Mutex<Option<RtmpAudioConfig>>>,
+        last_activity_ticks: &Arc<Mutex<Option<Instant>>>,
+        packet_count: &Arc<Mutex<u64>>,
+        checking_connection: &Arc<AtomicBool>,
+        audio_timestamp_origin: &Arc<Mutex<Option<i64>>>,
+        recycler: &Arc<Mutex<AVLibPacketRecycler>>,
+    ) {
+        if data.len() < 2 {
+            return;
+        }
+
+        let sound_format = data[0] >> 4;
+        let sound_rate = (data[0] >> 2) & 0x03;
+        let sound_type = data[0] & 0x01;
+        let channels = if sound_type == 1 { 2 } else { 1 };
+        let sample_rate_from_tag = Self::FlvSoundRateToHz(sound_rate);
+
+        match sound_format {
+            10 => {
+                let aac_packet_type = data[1];
+                let payload = &data[2..];
+                match aac_packet_type {
+                    0 => {
+                        if payload.is_empty() {
+                            return;
+                        }
+
+                        let (sample_rate, channels) = {
+                            let mut cfg_guard = audio_config
+                                .lock()
+                                .unwrap_or_else(|poisoned| poisoned.into_inner());
+                            let mut cfg =
+                                cfg_guard.clone().unwrap_or_else(Self::DefaultAudioConfig);
+                            cfg.codec_id = codec::Id::AAC;
+                            if sample_rate_from_tag > 0 {
+                                cfg.sample_rate = sample_rate_from_tag;
+                            }
+                            cfg.channels = channels;
+                            cfg.extra_data = payload.to_vec();
+                            let sample_rate = cfg.sample_rate;
+                            let channels = cfg.channels;
+                            *cfg_guard = Some(cfg);
+                            (sample_rate, channels)
+                        };
+
+                        Self::PublishAudioStreamShape(sample_rate, channels, stream_types, streams);
+                    }
+                    1 => {
+                        if payload.is_empty() || !Self::HasAudioDecoderConfig(audio_config) {
+                            return;
+                        }
+
+                        let queue = {
+                            let queues_guard = packet_queues
+                                .lock()
+                                .unwrap_or_else(|poisoned| poisoned.into_inner());
+                            queues_guard.get(1).cloned()
+                        };
+
+                        let normalized_timestamp_ms = {
+                            let mut origin = audio_timestamp_origin
+                                .lock()
+                                .unwrap_or_else(|poisoned| poisoned.into_inner());
+                            let base = origin.get_or_insert(timestamp_ms);
+                            timestamp_ms.saturating_sub(*base)
+                        };
+
+                        let wrapped_packet = Self::BuildPacketFromAudioPayload(
+                            payload,
+                            normalized_timestamp_ms,
+                            recycler,
+                        );
+
+                        if let Some(q) = queue {
+                            q.Push(wrapped_packet);
+                        } else {
+                            recycler
+                                .lock()
+                                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                                .Recycle(wrapped_packet);
+                            return;
+                        }
+
+                        if let Ok(mut count) = packet_count.lock() {
+                            *count += 1;
+                        }
+                        if let Ok(mut last) = last_activity_ticks.lock() {
+                            *last = Some(Instant::now());
+                        }
+                        checking_connection.store(false, Ordering::SeqCst);
+                    }
+                    _ => {}
+                }
+            }
+            2 => {
+                let payload = &data[1..];
+                if payload.is_empty() {
+                    return;
+                }
+
+                let queue = {
+                    let queues_guard = packet_queues
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                    queues_guard.get(1).cloned()
+                };
+
+                {
+                    let mut cfg_guard = audio_config
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                    let mut cfg = cfg_guard.clone().unwrap_or_else(Self::DefaultAudioConfig);
+                    cfg.codec_id = codec::Id::MP3;
+                    if sample_rate_from_tag > 0 {
+                        cfg.sample_rate = sample_rate_from_tag;
+                    }
+                    cfg.channels = channels;
+                    cfg.extra_data.clear();
+                    let sample_rate = cfg.sample_rate;
+                    let channel_count = cfg.channels;
+                    *cfg_guard = Some(cfg);
+                    Self::PublishAudioStreamShape(
+                        sample_rate,
+                        channel_count,
+                        stream_types,
+                        streams,
+                    );
+                }
+
+                let normalized_timestamp_ms = {
+                    let mut origin = audio_timestamp_origin
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                    let base = origin.get_or_insert(timestamp_ms);
+                    timestamp_ms.saturating_sub(*base)
+                };
+
+                let wrapped_packet = Self::BuildPacketFromAudioPayload(
+                    payload,
+                    normalized_timestamp_ms,
+                    recycler,
+                );
+
+                if let Some(q) = queue {
+                    q.Push(wrapped_packet);
+                } else {
+                    recycler
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner())
+                        .Recycle(wrapped_packet);
+                    return;
+                }
+
+                if let Ok(mut count) = packet_count.lock() {
+                    *count += 1;
+                }
+                if let Ok(mut last) = last_activity_ticks.lock() {
+                    *last = Some(Instant::now());
+                }
+                checking_connection.store(false, Ordering::SeqCst);
+            }
+            _ => {}
+        }
+    }
+
     fn WriteAll(stream: &mut TcpStream, bytes: &[u8]) -> Result<(), String> {
         stream
             .write_all(bytes)
@@ -504,10 +842,13 @@ impl AVLibRTMPSource {
         stream_types: &Arc<Mutex<Vec<AVMediaType>>>,
         streams: &Arc<Mutex<Vec<AVLibStreamInfo>>>,
         video_config: &Arc<Mutex<Option<RtmpVideoConfig>>>,
+        audio_config: &Arc<Mutex<Option<RtmpAudioConfig>>>,
         is_connected: &Arc<AtomicBool>,
         last_activity_ticks: &Arc<Mutex<Option<Instant>>>,
         packet_count: &Arc<Mutex<u64>>,
         checking_connection: &Arc<AtomicBool>,
+        video_timestamp_origin: &Arc<Mutex<Option<i64>>>,
+        audio_timestamp_origin: &Arc<Mutex<Option<i64>>>,
         recycler: &Arc<Mutex<AVLibPacketRecycler>>,
     ) -> Result<(), String> {
         let mut pending: VecDeque<ClientSessionResult> = results.into_iter().collect();
@@ -541,6 +882,12 @@ impl AVLibRTMPSource {
                             video_config,
                             is_connected,
                         );
+                        Self::UpdateAudioConfigFromMetadata(
+                            &metadata,
+                            stream_types,
+                            streams,
+                            audio_config,
+                        );
                     }
                     ClientSessionEvent::VideoDataReceived { timestamp, data } => {
                         Self::ProcessVideoDataEvent(
@@ -554,10 +901,25 @@ impl AVLibRTMPSource {
                             last_activity_ticks,
                             packet_count,
                             checking_connection,
+                            video_timestamp_origin,
                             recycler,
                         );
                     }
-                    ClientSessionEvent::AudioDataReceived { .. } => {}
+                    ClientSessionEvent::AudioDataReceived { timestamp, data } => {
+                        Self::ProcessAudioDataEvent(
+                            timestamp.value as i64,
+                            data,
+                            packet_queues,
+                            stream_types,
+                            streams,
+                            audio_config,
+                            last_activity_ticks,
+                            packet_count,
+                            checking_connection,
+                            audio_timestamp_origin,
+                            recycler,
+                        );
+                    }
                     ClientSessionEvent::PublishRequestAccepted => {}
                     ClientSessionEvent::UnhandleableAmf0Command { command_name, .. } => {
                         Debug::LogWarning(&format!(
@@ -604,12 +966,22 @@ impl AVLibRTMPSource {
         stream_types: Arc<Mutex<Vec<AVMediaType>>>,
         streams: Arc<Mutex<Vec<AVLibStreamInfo>>>,
         video_config: Arc<Mutex<Option<RtmpVideoConfig>>>,
+        audio_config: Arc<Mutex<Option<RtmpAudioConfig>>>,
         is_connected: Arc<AtomicBool>,
         last_activity_ticks: Arc<Mutex<Option<Instant>>>,
         packet_count: Arc<Mutex<u64>>,
         checking_connection: Arc<AtomicBool>,
+        video_timestamp_origin: Arc<Mutex<Option<i64>>>,
+        audio_timestamp_origin: Arc<Mutex<Option<i64>>>,
         recycler: Arc<Mutex<AVLibPacketRecycler>>,
     ) -> Result<(), String> {
+        if let Ok(mut origin) = video_timestamp_origin.lock() {
+            *origin = None;
+        }
+        if let Ok(mut origin) = audio_timestamp_origin.lock() {
+            *origin = None;
+        }
+
         let target = Self::ParseRtmpTarget(&uri)?;
         let mut socket = Self::ConnectSocket(&target)?;
 
@@ -634,10 +1006,13 @@ impl AVLibRTMPSource {
                 &stream_types,
                 &streams,
                 &video_config,
+                &audio_config,
                 &is_connected,
                 &last_activity_ticks,
                 &packet_count,
                 &checking_connection,
+                &video_timestamp_origin,
+                &audio_timestamp_origin,
                 &recycler,
             )?;
         }
@@ -701,10 +1076,13 @@ impl AVLibRTMPSource {
                     &stream_types,
                     &streams,
                     &video_config,
+                    &audio_config,
                     &is_connected,
                     &last_activity_ticks,
                     &packet_count,
                     &checking_connection,
+                    &video_timestamp_origin,
+                    &audio_timestamp_origin,
                     &recycler,
                 )?;
                 connect_sent = true;
@@ -727,10 +1105,13 @@ impl AVLibRTMPSource {
                 &stream_types,
                 &streams,
                 &video_config,
+                &audio_config,
                 &is_connected,
                 &last_activity_ticks,
                 &packet_count,
                 &checking_connection,
+                &video_timestamp_origin,
+                &audio_timestamp_origin,
                 &recycler,
             )?;
         }
@@ -780,6 +1161,44 @@ impl AVLibRTMPSource {
         decoder.video().ok()
     }
 
+    fn CreateAudioDecoderFromConfig(config: &RtmpAudioConfig) -> Option<ffmpeg_next::decoder::Audio> {
+        let codec = ffmpeg_next::decoder::find(config.codec_id)?;
+        let mut context = ffmpeg_next::codec::context::Context::new_with_codec(codec);
+
+        let time_base = Rational::new(1, 1000);
+        context.set_time_base(time_base);
+
+        unsafe {
+            let ctx = context.as_mut_ptr();
+            (*ctx).codec_type = AVMediaType::AVMEDIA_TYPE_AUDIO;
+            (*ctx).codec_id = config.codec_id.into();
+            (*ctx).sample_rate = config.sample_rate;
+            (*ctx).thread_count = 1;
+            (*ctx).flags |= AV_CODEC_FLAG_LOW_DELAY as i32;
+
+            if !config.extra_data.is_empty() {
+                let extra_data_size = config.extra_data.len();
+                let padded_size = extra_data_size + AV_INPUT_BUFFER_PADDING_SIZE as usize;
+                let extra_ptr = av_mallocz(padded_size) as *mut u8;
+
+                if extra_ptr.is_null() {
+                    Debug::LogError(
+                        "AVLibRTMPSource::CreateAudioDecoderFromConfig - alloc extradata failed",
+                    );
+                    return None;
+                }
+
+                ptr::copy_nonoverlapping(config.extra_data.as_ptr(), extra_ptr, extra_data_size);
+                (*ctx).extradata = extra_ptr;
+                (*ctx).extradata_size = extra_data_size as i32;
+            }
+        }
+
+        let mut decoder = context.decoder();
+        decoder.set_packet_time_base(time_base);
+        decoder.audio().ok()
+    }
+
     pub fn VideoDecoder(&self, streamIndex: i32) -> Option<ffmpeg_next::decoder::Video> {
         let stream_info = self.Stream(streamIndex);
         if stream_info.index < 0 {
@@ -793,6 +1212,16 @@ impl AVLibRTMPSource {
             .and_then(|g| g.as_ref().cloned())?;
 
         Self::CreateDecoderFromConfig(&config)
+    }
+
+    pub fn AudioDecoder(&self, _streamIndex: i32) -> Option<ffmpeg_next::decoder::Audio> {
+        let config = self
+            ._audioConfig
+            .lock()
+            .ok()
+            .and_then(|g| g.as_ref().cloned())?;
+
+        Self::CreateAudioDecoderFromConfig(&config)
     }
 }
 
@@ -857,29 +1286,40 @@ impl IAVLibSource for AVLibRTMPSource {
     }
 
     fn TimeBase(&self, streamIndex: i32) -> f64 {
-        if streamIndex != 0 {
-            Debug::LogError("AVLibRTMPSource::TimeBase - streamIndex was out of range");
-            return -1.0;
+        match streamIndex {
+            0 => self
+                ._videoConfig
+                .lock()
+                .ok()
+                .and_then(|g| g.as_ref().map(|cfg| cfg.time_base))
+                .unwrap_or(-1.0),
+            1 => self
+                ._audioConfig
+                .lock()
+                .ok()
+                .and_then(|g| g.as_ref().map(|cfg| cfg.time_base))
+                .unwrap_or(-1.0),
+            _ => {
+                Debug::LogError("AVLibRTMPSource::TimeBase - streamIndex was out of range");
+                -1.0
+            }
         }
-
-        self._videoConfig
-            .lock()
-            .ok()
-            .and_then(|g| g.as_ref().map(|cfg| cfg.time_base))
-            .unwrap_or(-1.0)
     }
 
     fn FrameRate(&self, streamIndex: i32) -> f64 {
-        if streamIndex != 0 {
-            Debug::LogError("AVLibRTMPSource::FrameRate - streamIndex was out of range");
-            return -1.0;
+        match streamIndex {
+            0 => self
+                ._videoConfig
+                .lock()
+                .ok()
+                .and_then(|g| g.as_ref().map(|cfg| cfg.frame_rate))
+                .unwrap_or(-1.0),
+            1 => 0.0,
+            _ => {
+                Debug::LogError("AVLibRTMPSource::FrameRate - streamIndex was out of range");
+                -1.0
+            }
         }
-
-        self._videoConfig
-            .lock()
-            .ok()
-            .and_then(|g| g.as_ref().map(|cfg| cfg.frame_rate))
-            .unwrap_or(-1.0)
     }
 
     fn FrameDuration(&self, streamIndex: i32) -> f64 {

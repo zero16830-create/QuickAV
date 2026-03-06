@@ -1,5 +1,7 @@
 #![allow(non_snake_case)]
 
+use crate::AudioExportState::SharedExportedAudioState;
+use crate::AVLibAudioDecoder::AVLibAudioDecoder;
 use crate::AVLibDecoder::AVLibDecoder;
 use crate::AVLibFileSource::AVLibFileSource;
 use crate::AVLibRTMPSource::AVLibRTMPSource;
@@ -7,7 +9,9 @@ use crate::AVLibRTSPSource::AVLibRTSPSource;
 use crate::IAVLibSource::IAVLibSource;
 use crate::IFrameVisitor::IFrameVisitor;
 use crate::IVideoClient::IVideoClient;
+use crate::Logging::Debug::Debug;
 use crate::PixelFormat::PixelFormat;
+use crate::PlaybackClock::PlaybackClock;
 use crate::VideoFrame::VideoFrame;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -21,12 +25,14 @@ static PROCESS_WIDE_INIT: Once = Once::new();
 pub struct AVLibPlayer {
     pub _source: Arc<Mutex<Box<dyn IAVLibSource + Send>>>,
     pub _decoders: Arc<Mutex<Vec<Arc<AVLibDecoder>>>>,
+    _audio_decoder: Arc<Mutex<Option<Arc<AVLibAudioDecoder>>>>,
+    _audio_export: Option<SharedExportedAudioState>,
     _video_client: Arc<Mutex<Box<dyn IVideoClient + Send>>>,
-    _time: Arc<Mutex<i64>>,
+    _clock: Arc<Mutex<PlaybackClock>>,
+    _videoSyncCompensationSec: Arc<Mutex<f64>>,
     _playing: Arc<AtomicBool>,
     _looping: Arc<AtomicBool>,
     _stayAlive: Arc<AtomicBool>,
-    _lastTick: Arc<Mutex<Instant>>,
     _killMutex: Arc<Mutex<()>>,
     _killCondition: Arc<Condvar>,
     _thread: Option<thread::JoinHandle<()>>,
@@ -37,6 +43,47 @@ impl AVLibPlayer {
     const RTMP_PREFIX: &'static str = "rtmp://";
     const CONNECT_RETRY_MILLISECONDS: u64 = 200;
     const REALTIME_POLL_MILLISECONDS: u64 = 5;
+    const FILE_AUDIO_LEAD_SECONDS: f64 = 0.100;
+    const REALTIME_AUDIO_LEAD_SECONDS: f64 = 0.750;
+    const SYNC_LOG_INTERVAL_SECONDS: f64 = 1.0;
+    const SYNC_WARN_THRESHOLD_SECONDS: f64 = 0.080;
+    const REALTIME_SYNC_COMPENSATION_GAIN: f64 = 0.12;
+    const REALTIME_SYNC_COMPENSATION_MAX_SEC: f64 = 0.150;
+    const REALTIME_SYNC_COMPENSATION_SNAP_SEC: f64 = 0.120;
+
+    fn ResetRealtimeSyncCompensation(compensation: &Arc<Mutex<f64>>) {
+        if let Ok(mut guard) = compensation.lock() {
+            *guard = 0.0;
+        }
+    }
+
+    fn UpdateRealtimeSyncCompensation(
+        compensation: &Arc<Mutex<f64>>,
+        sync_error_sec: f64,
+    ) -> f64 {
+        let mut guard = compensation
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+        let clamped_error = sync_error_sec.clamp(
+            -Self::REALTIME_SYNC_COMPENSATION_MAX_SEC,
+            Self::REALTIME_SYNC_COMPENSATION_MAX_SEC,
+        );
+
+        if clamped_error.abs() >= Self::REALTIME_SYNC_COMPENSATION_SNAP_SEC {
+            *guard = (*guard + clamped_error * 0.5).clamp(
+                -Self::REALTIME_SYNC_COMPENSATION_MAX_SEC,
+                Self::REALTIME_SYNC_COMPENSATION_MAX_SEC,
+            );
+        } else {
+            *guard = (*guard + clamped_error * Self::REALTIME_SYNC_COMPENSATION_GAIN).clamp(
+                -Self::REALTIME_SYNC_COMPENSATION_MAX_SEC,
+                Self::REALTIME_SYNC_COMPENSATION_MAX_SEC,
+            );
+        }
+
+        *guard
+    }
 
     fn ProcessWideInitialize() {
         PROCESS_WIDE_INIT.call_once(|| {
@@ -131,12 +178,52 @@ impl AVLibPlayer {
         stay_alive.load(Ordering::SeqCst)
     }
 
+    fn PumpAudioFrames(
+        audio_decoder: &Arc<AVLibAudioDecoder>,
+        clock: &Arc<Mutex<PlaybackClock>>,
+        due_time_sec: f64,
+        audio_export: &Option<SharedExportedAudioState>,
+    ) {
+        loop {
+            let frame_opt = audio_decoder.TryGetNext(due_time_sec);
+            let Some(frame) = frame_opt else {
+                break;
+            };
+
+            if frame.IsEOF() {
+                audio_decoder.Recycle(frame);
+                break;
+            }
+
+            let discontinuity = {
+                let mut guard = clock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                guard.ObserveAudioFrame(frame.Time(), frame.Duration())
+            };
+
+            if discontinuity {
+                Debug::Log(&format!(
+                    "[AVLibPlayer] audio_clock_reset pts={:.3} duration_ms={:.1}",
+                    frame.Time(),
+                    frame.Duration() * 1000.0
+                ));
+            }
+
+            if let Some(shared) = audio_export {
+                let mut export = shared.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                export.PushFrame(&frame);
+            }
+
+            audio_decoder.Recycle(frame);
+        }
+    }
+
     pub fn new(
         uri: String,
         target_width: i32,
         target_height: i32,
         target_format: PixelFormat,
         video_client: Box<dyn IVideoClient + Send>,
+        audio_export: Option<SharedExportedAudioState>,
     ) -> Option<Self> {
         Self::ProcessWideInitialize();
 
@@ -156,12 +243,14 @@ impl AVLibPlayer {
         let mut player = Self {
             _source: source.clone(),
             _decoders: Arc::new(Mutex::new(Vec::new())),
+            _audio_decoder: Arc::new(Mutex::new(None)),
+            _audio_export: audio_export.clone(),
             _video_client: Arc::new(Mutex::new(video_client)),
-            _time: Arc::new(Mutex::new(0)),
+            _clock: Arc::new(Mutex::new(PlaybackClock::new())),
+            _videoSyncCompensationSec: Arc::new(Mutex::new(0.0)),
             _playing: Arc::new(AtomicBool::new(false)),
             _looping: Arc::new(AtomicBool::new(false)),
             _stayAlive: Arc::new(AtomicBool::new(true)),
-            _lastTick: Arc::new(Mutex::new(Instant::now())),
             _killMutex: Arc::new(Mutex::new(())),
             _killCondition: Arc::new(Condvar::new()),
             _thread: None,
@@ -194,9 +283,11 @@ impl AVLibPlayer {
         let t_source = player._source.clone();
         let t_stay_alive = player._stayAlive.clone();
         let t_playing = player._playing.clone();
-        let t_time = player._time.clone();
-        let t_last_tick = player._lastTick.clone();
+        let t_clock = player._clock.clone();
         let t_decoders = player._decoders.clone();
+        let t_audio_decoder = player._audio_decoder.clone();
+        let t_audio_export = player._audio_export.clone();
+        let t_video_sync_compensation = player._videoSyncCompensationSec.clone();
         let t_looping = player._looping.clone();
         let t_video_client = player._video_client.clone();
         let t_kill_mutex = player._killMutex.clone();
@@ -231,6 +322,7 @@ impl AVLibPlayer {
             };
 
             let mut sleep_duration = Duration::from_millis(Self::REALTIME_POLL_MILLISECONDS);
+            let mut last_sync_log = Instant::now();
 
             while t_stay_alive.load(Ordering::SeqCst) {
                 let connected = Self::EnsureConnection(
@@ -252,7 +344,7 @@ impl AVLibPlayer {
                 };
 
                 if decoders_snapshot.is_empty() {
-                    let created = AVLibDecoder::Create(t_source.clone(), &target_desc);
+                    let created = AVLibDecoder::CreateVideo(t_source.clone(), &target_desc);
                     if created.is_empty() {
                         if !Self::WaitOrInterrupted(
                             &t_stay_alive,
@@ -284,24 +376,107 @@ impl AVLibPlayer {
                     };
                 }
 
-                if t_playing.load(Ordering::SeqCst) {
-                    let now = Instant::now();
-                    let current_time = {
-                        let mut last = t_last_tick.lock().unwrap_or_else(|p| p.into_inner());
-                        let d = now.duration_since(*last).as_micros() as i64;
-                        *last = now;
+                let audio_decoder_snapshot = {
+                    let mut guard = t_audio_decoder
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                    let should_recreate = guard
+                        .as_ref()
+                        .map(|decoder| decoder.NeedsRecreate())
+                        .unwrap_or(false);
 
-                        let mut clock = t_time.lock().unwrap_or_else(|p| p.into_inner());
-                        *clock += d;
-                        *clock as f64 / 1_000_000.0
+                    if should_recreate {
+                        Debug::Log(
+                            "[AVLibPlayer] recreate_audio_decoder source stream shape changed",
+                        );
+                        if let Some(audio_export) = t_audio_export.as_ref() {
+                            let mut export = audio_export
+                                .lock()
+                                .unwrap_or_else(|poisoned| poisoned.into_inner());
+                            export.Flush();
+                        }
+                        if let Ok(mut clock) = t_clock.lock() {
+                            clock.ResetAudioClock();
+                        }
+                        Self::ResetRealtimeSyncCompensation(&t_video_sync_compensation);
+                    }
+
+                    if guard.is_none() || should_recreate {
+                        *guard = AVLibDecoder::CreateAudio(t_source.clone());
+                    }
+                    guard.clone()
+                };
+
+                if t_playing.load(Ordering::SeqCst) {
+                    let (external_time, is_realtime) = {
+                        let mut clock = t_clock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                        let _ = clock.TickPlaying();
+                        let realtime = if let Ok(s) = t_source.lock() {
+                            s.IsRealtime()
+                        } else {
+                            false
+                        };
+                        (clock.ExternalTime(), realtime)
+                    };
+
+                    if let Some(audio_decoder) = audio_decoder_snapshot.as_ref() {
+                        let audio_due_time = external_time
+                            + if is_realtime {
+                                Self::REALTIME_AUDIO_LEAD_SECONDS
+                            } else {
+                                Self::FILE_AUDIO_LEAD_SECONDS
+                            };
+                        Self::PumpAudioFrames(
+                            audio_decoder,
+                            &t_clock,
+                            audio_due_time,
+                            &t_audio_export,
+                        );
+                    }
+
+                    let current_time = {
+                        let clock = t_clock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                        clock.MasterTime()
+                    };
+                    let effective_time = if is_realtime {
+                        let compensation = t_video_sync_compensation
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner());
+                        current_time + *compensation
+                    } else {
+                        current_time
                     };
 
                     let mut eof_hit = false;
                     for decoder in decoders_snapshot.iter() {
-                        if let Some(mut frame) = decoder.TryGetNext(current_time) {
+                        if let Some(mut frame) = decoder.TryGetNext(effective_time) {
                             if frame.IsEOF() {
                                 eof_hit = true;
                             } else {
+                                let should_log_sync = last_sync_log.elapsed().as_secs_f64()
+                                    >= Self::SYNC_LOG_INTERVAL_SECONDS;
+                                let sync_error_sec = frame.Time() - effective_time;
+                                let compensation_sec = if is_realtime {
+                                    Self::UpdateRealtimeSyncCompensation(
+                                        &t_video_sync_compensation,
+                                        sync_error_sec,
+                                    )
+                                } else {
+                                    0.0
+                                };
+                                if should_log_sync
+                                    || sync_error_sec.abs() >= Self::SYNC_WARN_THRESHOLD_SECONDS
+                                {
+                                    Debug::Log(&format!(
+                                        "[AVLibPlayer] av_sync current={:.3} video_pts={:.3} delta_ms={:.1} comp_ms={:.1}",
+                                        effective_time,
+                                        frame.Time(),
+                                        sync_error_sec * 1000.0,
+                                        compensation_sec * 1000.0
+                                    ));
+                                    last_sync_log = Instant::now();
+                                }
+
                                 struct VideoClientVisitor<'a> {
                                     client: &'a mut dyn IVideoClient,
                                 }
@@ -333,26 +508,26 @@ impl AVLibPlayer {
                     if eof_hit {
                         if t_looping.load(Ordering::SeqCst) {
                             let from = {
-                                if let Ok(clock) = t_time.lock() {
-                                    *clock as f64 / 1_000_000.0
-                                } else {
-                                    0.0
-                                }
+                                let clock = t_clock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                                clock.MasterTime()
                             };
 
                             if let Ok(mut s) = t_source.lock() {
                                 s.Seek(from, 0.0);
                             }
 
-                            if let Ok(mut clock) = t_time.lock() {
-                                *clock = 0;
+                            if let Ok(mut clock) = t_clock.lock() {
+                                clock.Seek(0.0);
                             }
                         } else {
                             t_playing.store(false, Ordering::SeqCst);
+                            if let Ok(mut clock) = t_clock.lock() {
+                                clock.OnPause();
+                            }
                         }
                     }
-                } else if let Ok(mut last) = t_last_tick.lock() {
-                    *last = Instant::now();
+                } else if let Ok(mut clock) = t_clock.lock() {
+                    clock.TickPaused();
                 }
 
                 if !Self::WaitOrInterrupted(
@@ -377,7 +552,7 @@ impl AVLibPlayer {
     }
 
     pub fn Play(&self) {
-        let was_playing = self._playing.swap(true, Ordering::SeqCst);
+                let was_playing = self._playing.swap(true, Ordering::SeqCst);
         if !was_playing {
             if self.IsRealtime() {
                 let decoders = if let Ok(decoders) = self._decoders.lock() {
@@ -389,16 +564,37 @@ impl AVLibPlayer {
                 for decoder in decoders.iter() {
                     decoder.FlushRealtimeFrames();
                 }
+
+                if let Ok(audio_guard) = self._audio_decoder.lock() {
+                    if let Some(audio_decoder) = audio_guard.as_ref() {
+                        audio_decoder.FlushFrames();
+                    }
+                }
+
+                if let Some(audio_export) = self._audio_export.as_ref() {
+                    let mut guard = audio_export
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                    guard.Flush();
+                }
+
+                if let Ok(mut clock) = self._clock.lock() {
+                    clock.ResetAudioClock();
+                }
+                Self::ResetRealtimeSyncCompensation(&self._videoSyncCompensationSec);
             }
 
-            if let Ok(mut last) = self._lastTick.lock() {
-                *last = Instant::now();
+            if let Ok(mut clock) = self._clock.lock() {
+                clock.OnPlay();
             }
         }
     }
 
     pub fn Stop(&self) {
         self._playing.store(false, Ordering::SeqCst);
+        if let Ok(mut clock) = self._clock.lock() {
+            clock.OnPause();
+        }
     }
 
     pub fn CanSeek(&self) -> bool {
@@ -426,8 +622,22 @@ impl AVLibPlayer {
             s.Seek(from, to);
         }
 
-        if let Ok(mut clock) = self._time.lock() {
-            *clock = (to * 1_000_000.0) as i64;
+        if let Ok(mut clock) = self._clock.lock() {
+            clock.Seek(to);
+        }
+        Self::ResetRealtimeSyncCompensation(&self._videoSyncCompensationSec);
+
+        if let Ok(audio_guard) = self._audio_decoder.lock() {
+            if let Some(audio_decoder) = audio_guard.as_ref() {
+                audio_decoder.FlushFrames();
+            }
+        }
+
+        if let Some(audio_export) = self._audio_export.as_ref() {
+            let mut guard = audio_export
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            guard.Flush();
         }
     }
 
@@ -455,10 +665,16 @@ impl AVLibPlayer {
     }
 
     pub fn CurrentTime(&self) -> f64 {
-        if let Ok(clock) = self._time.lock() {
-            *clock as f64 / 1_000_000.0
+        if let Ok(clock) = self._clock.lock() {
+            clock.MasterTime()
         } else {
             0.0
+        }
+    }
+
+    pub fn SetAudioSinkDelay(&self, delay_sec: f64) {
+        if let Ok(mut clock) = self._clock.lock() {
+            clock.SetAudioSinkDelay(delay_sec);
         }
     }
 
@@ -479,13 +695,8 @@ impl Drop for AVLibPlayer {
     fn drop(&mut self) {
         self._stayAlive.store(false, Ordering::SeqCst);
         self._killCondition.notify_all();
-
         if let Some(t) = self._thread.take() {
             let _ = t.join();
-        }
-
-        if let Ok(mut decoders) = self._decoders.lock() {
-            decoders.clear();
         }
     }
 }

@@ -10,6 +10,8 @@ pub struct AVLibStreamInfo {
     pub codec_type: AVMediaType,
     pub width: i32,
     pub height: i32,
+    pub sample_rate: i32,
+    pub channels: i32,
 }
 
 impl AVLibStreamInfo {
@@ -19,6 +21,8 @@ impl AVLibStreamInfo {
             codec_type: AVMediaType::AVMEDIA_TYPE_UNKNOWN,
             width: 0,
             height: 0,
+            sample_rate: 0,
+            channels: 0,
         }
     }
 }

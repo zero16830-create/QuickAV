@@ -10,8 +10,8 @@ use ffmpeg_next::ffi::{av_mallocz, AVMediaType, AV_CODEC_FLAG_LOW_DELAY, AV_INPU
 use ffmpeg_next::{Packet, Rational};
 use futures_util::StreamExt;
 use retina::client::{
-    PlayOptions, Session, SessionOptions, SetupOptions, TcpTransportOptions, Transport,
-    UdpTransportOptions,
+    InitialTimestampPolicy, PlayOptions, Session, SessionOptions, SetupOptions,
+    TcpTransportOptions, Transport, UdpTransportOptions,
 };
 use retina::codec::{CodecItem, ParametersRef};
 use std::ptr;
@@ -35,12 +35,23 @@ struct RetinaVideoConfig {
     extra_data: Vec<u8>,
 }
 
+#[derive(Clone, PartialEq)]
+struct RetinaAudioConfig {
+    codec_id: codec::Id,
+    sample_rate: i32,
+    channels: i32,
+    clock_rate_hz: u32,
+    time_base: f64,
+    extra_data: Vec<u8>,
+}
+
 pub struct AVLibRTSPSource {
     _uri: String,
     _packetQueues: Arc<Mutex<Vec<Arc<FixedSizeQueue<AVLibPacket>>>>>,
     _streamTypes: Arc<Mutex<Vec<AVMediaType>>>,
     _streams: Arc<Mutex<Vec<AVLibStreamInfo>>>,
     _videoConfig: Arc<Mutex<Option<RetinaVideoConfig>>>,
+    _audioConfig: Arc<Mutex<Option<RetinaAudioConfig>>>,
     _stayAlive: Arc<AtomicBool>,
     _thread: Option<thread::JoinHandle<()>>,
     _isConnected: Arc<AtomicBool>,
@@ -54,6 +65,7 @@ pub struct AVLibRTSPSource {
 
 impl AVLibRTSPSource {
     const REALTIME_VIDEO_PACKET_QUEUE_SIZE: usize = 3;
+    const REALTIME_AUDIO_PACKET_QUEUE_SIZE: usize = 96;
     const BEGIN_TIMEOUT_CHECK_SECONDS: u64 = 3;
     const TIMEOUT_SECONDS: u64 = 2;
     const CONNECT_RETRY_DELAY_MS: u64 = 200;
@@ -62,17 +74,34 @@ impl AVLibRTSPSource {
     pub fn new(uri: String) -> Self {
         let _ = ffmpeg_next::init();
 
-        let packet_queues = Arc::new(Mutex::new(vec![Arc::new(FixedSizeQueue::new(
-            Self::REALTIME_VIDEO_PACKET_QUEUE_SIZE,
-        ))]));
-        let stream_types = Arc::new(Mutex::new(vec![AVMediaType::AVMEDIA_TYPE_VIDEO]));
-        let streams = Arc::new(Mutex::new(vec![AVLibStreamInfo {
-            index: 0,
-            codec_type: AVMediaType::AVMEDIA_TYPE_VIDEO,
-            width: 0,
-            height: 0,
-        }]));
+        let packet_queues = Arc::new(Mutex::new(vec![
+            Arc::new(FixedSizeQueue::new(Self::REALTIME_VIDEO_PACKET_QUEUE_SIZE)),
+            Arc::new(FixedSizeQueue::new(Self::REALTIME_AUDIO_PACKET_QUEUE_SIZE)),
+        ]));
+        let stream_types = Arc::new(Mutex::new(vec![
+            AVMediaType::AVMEDIA_TYPE_VIDEO,
+            AVMediaType::AVMEDIA_TYPE_UNKNOWN,
+        ]));
+        let streams = Arc::new(Mutex::new(vec![
+            AVLibStreamInfo {
+                index: 0,
+                codec_type: AVMediaType::AVMEDIA_TYPE_VIDEO,
+                width: 0,
+                height: 0,
+                sample_rate: 0,
+                channels: 0,
+            },
+            AVLibStreamInfo {
+                index: 1,
+                codec_type: AVMediaType::AVMEDIA_TYPE_UNKNOWN,
+                width: 0,
+                height: 0,
+                sample_rate: 0,
+                channels: 0,
+            },
+        ]));
         let video_config = Arc::new(Mutex::new(None));
+        let audio_config = Arc::new(Mutex::new(None));
         let stay_alive = Arc::new(AtomicBool::new(true));
         let is_connected = Arc::new(AtomicBool::new(false));
         let last_activity_ticks = Arc::new(Mutex::new(None));
@@ -88,6 +117,7 @@ impl AVLibRTSPSource {
             _streamTypes: stream_types.clone(),
             _streams: streams.clone(),
             _videoConfig: video_config.clone(),
+            _audioConfig: audio_config.clone(),
             _stayAlive: stay_alive.clone(),
             _thread: None,
             _isConnected: is_connected.clone(),
@@ -124,6 +154,7 @@ impl AVLibRTSPSource {
                     stream_types.clone(),
                     streams.clone(),
                     video_config.clone(),
+                    audio_config.clone(),
                     is_connected.clone(),
                     last_activity_ticks.clone(),
                     packet_count.clone(),
@@ -172,10 +203,34 @@ impl AVLibRTSPSource {
         fallback_h265
     }
 
+    fn SelectAudioStreamIndex(streams: &[retina::client::Stream]) -> Option<usize> {
+        for (index, stream) in streams.iter().enumerate() {
+            if stream.media() != "audio" {
+                continue;
+            }
+
+            if Self::AudioCodecIdFromEncodingName(stream.encoding_name()).is_some() {
+                return Some(index);
+            }
+        }
+
+        None
+    }
+
     fn CodecIdFromEncodingName(encoding_name: &str) -> Option<codec::Id> {
         match encoding_name {
             "h264" => Some(codec::Id::H264),
             "h265" | "hevc" => Some(codec::Id::HEVC),
+            _ => None,
+        }
+    }
+
+    fn AudioCodecIdFromEncodingName(encoding_name: &str) -> Option<codec::Id> {
+        match encoding_name {
+            "mpeg4-generic" | "aac" => Some(codec::Id::AAC),
+            "pcma" => Some(codec::Id::PCM_ALAW),
+            "pcmu" => Some(codec::Id::PCM_MULAW),
+            "opus" => Some(codec::Id::OPUS),
             _ => None,
         }
     }
@@ -206,6 +261,36 @@ impl AVLibRTSPSource {
             time_base: 1.0 / clock_rate_hz as f64,
             frame_rate,
             extra_data: video_params.extra_data().to_vec(),
+        })
+    }
+
+    fn BuildAudioConfig(stream: &retina::client::Stream) -> Option<RetinaAudioConfig> {
+        let codec_id = Self::AudioCodecIdFromEncodingName(stream.encoding_name())?;
+        let clock_rate_hz = stream.clock_rate_hz();
+        if clock_rate_hz == 0 {
+            return None;
+        }
+
+        let (sample_rate, extra_data) = match stream.parameters()? {
+            ParametersRef::Audio(audio_params) => {
+                (audio_params.clock_rate() as i32, audio_params.extra_data().to_vec())
+            }
+            _ => return None,
+        };
+
+        let channels = stream.channels().map(|v| v.get() as i32).unwrap_or(0);
+
+        Some(RetinaAudioConfig {
+            codec_id,
+            sample_rate: if sample_rate > 0 {
+                sample_rate
+            } else {
+                clock_rate_hz as i32
+            },
+            channels,
+            clock_rate_hz,
+            time_base: 1.0 / clock_rate_hz as f64,
+            extra_data,
         })
     }
 
@@ -245,6 +330,43 @@ impl AVLibRTSPSource {
         }
 
         is_connected.store(true, Ordering::SeqCst);
+    }
+
+    fn PublishAudioConfig(
+        config: RetinaAudioConfig,
+        stream_types: &Arc<Mutex<Vec<AVMediaType>>>,
+        streams: &Arc<Mutex<Vec<AVLibStreamInfo>>>,
+        audio_config: &Arc<Mutex<Option<RetinaAudioConfig>>>,
+    ) {
+        {
+            let mut types_guard = stream_types
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if let Some(entry) = types_guard.get_mut(1) {
+                *entry = AVMediaType::AVMEDIA_TYPE_AUDIO;
+            }
+        }
+
+        {
+            let mut stream_guard = streams
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if let Some(entry) = stream_guard.get_mut(1) {
+                entry.index = 1;
+                entry.codec_type = AVMediaType::AVMEDIA_TYPE_AUDIO;
+                entry.width = 0;
+                entry.height = 0;
+                entry.sample_rate = config.sample_rate;
+                entry.channels = config.channels;
+            }
+        }
+
+        {
+            let mut config_guard = audio_config
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            *config_guard = Some(config);
+        }
     }
 
     fn UpdateVideoConfigIfAvailable(
@@ -287,8 +409,42 @@ impl AVLibRTSPSource {
         );
     }
 
+    fn UpdateAudioConfigIfAvailable(
+        stream_index: usize,
+        demuxed_streams: &[retina::client::Stream],
+        stream_types: &Arc<Mutex<Vec<AVMediaType>>>,
+        streams: &Arc<Mutex<Vec<AVLibStreamInfo>>>,
+        audio_config: &Arc<Mutex<Option<RetinaAudioConfig>>>,
+    ) {
+        let Some(stream) = demuxed_streams.get(stream_index) else {
+            return;
+        };
+        let Some(new_config) = Self::BuildAudioConfig(stream) else {
+            return;
+        };
+
+        let changed = {
+            let config_guard = audio_config
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            config_guard.as_ref() != Some(&new_config)
+        };
+
+        if changed {
+            Debug::Log(&format!(
+                "AVLibRTSPSource::UpdateAudioConfigIfAvailable - {} {}Hz ch={}",
+                stream.encoding_name(),
+                new_config.sample_rate,
+                new_config.channels
+            ));
+        }
+
+        Self::PublishAudioConfig(new_config, stream_types, streams, audio_config);
+    }
+
     fn BuildPacketFromVideoFrame(
         frame: &retina::codec::VideoFrame,
+        normalized_pts: i64,
         recycler: &Arc<Mutex<AVLibPacketRecycler>>,
     ) -> AVLibPacket {
         let mut wrapped_packet = recycler
@@ -299,14 +455,34 @@ impl AVLibRTSPSource {
         let mut packet = Packet::copy(frame.data());
         packet.set_stream(0);
 
-        let pts = frame.timestamp().elapsed();
-        packet.set_pts(Some(pts));
-        packet.set_dts(Some(pts));
+        packet.set_pts(Some(normalized_pts));
+        packet.set_dts(Some(normalized_pts));
         packet.set_duration(0);
 
         if frame.is_random_access_point() {
             packet.set_flags(PacketFlags::KEY);
         }
+
+        wrapped_packet.Packet = packet;
+        wrapped_packet
+    }
+
+    fn BuildPacketFromAudioFrame(
+        frame: &retina::codec::AudioFrame,
+        normalized_pts: i64,
+        recycler: &Arc<Mutex<AVLibPacketRecycler>>,
+    ) -> AVLibPacket {
+        let mut wrapped_packet = recycler
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .GetPacket();
+
+        let mut packet = Packet::copy(frame.data());
+        packet.set_stream(1);
+
+        packet.set_pts(Some(normalized_pts));
+        packet.set_dts(Some(normalized_pts));
+        packet.set_duration(frame.frame_length().get() as i64);
 
         wrapped_packet.Packet = packet;
         wrapped_packet
@@ -319,6 +495,7 @@ impl AVLibRTSPSource {
         stream_types: Arc<Mutex<Vec<AVMediaType>>>,
         streams: Arc<Mutex<Vec<AVLibStreamInfo>>>,
         video_config: Arc<Mutex<Option<RetinaVideoConfig>>>,
+        audio_config: Arc<Mutex<Option<RetinaAudioConfig>>>,
         is_connected: Arc<AtomicBool>,
         last_activity_ticks: Arc<Mutex<Option<Instant>>>,
         packet_count: Arc<Mutex<u64>>,
@@ -327,24 +504,43 @@ impl AVLibRTSPSource {
     ) -> Result<(), String> {
         let url = Url::parse(&uri).map_err(|e| format!("invalid RTSP uri {}: {}", uri, e))?;
 
-        let (described, stream_index) = {
+        let (described, video_stream_index, audio_stream_index) = {
             let mut udp_described = Session::describe(url.clone(), SessionOptions::default())
                 .await
                 .map_err(|e| format!("DESCRIBE failed: {}", e))?;
 
-            let udp_stream_index = Self::SelectVideoStreamIndex(udp_described.streams())
+            let udp_video_stream_index = Self::SelectVideoStreamIndex(udp_described.streams())
                 .ok_or_else(|| "no supported video stream (expected h264/h265)".to_string())?;
+            let udp_audio_stream_index = Self::SelectAudioStreamIndex(udp_described.streams());
 
-            match udp_described
-                .setup(
-                    udp_stream_index,
-                    SetupOptions::default().transport(Transport::Udp(UdpTransportOptions::default())),
-                )
-                .await
+            match async {
+                udp_described
+                    .setup(
+                        udp_video_stream_index,
+                        SetupOptions::default()
+                            .transport(Transport::Udp(UdpTransportOptions::default())),
+                    )
+                    .await
+                    .map_err(|e| format!("SETUP video failed: {}", e))?;
+
+                if let Some(audio_index) = udp_audio_stream_index {
+                    udp_described
+                        .setup(
+                            audio_index,
+                            SetupOptions::default()
+                                .transport(Transport::Udp(UdpTransportOptions::default())),
+                        )
+                        .await
+                        .map_err(|e| format!("SETUP audio failed: {}", e))?;
+                }
+
+                Ok::<(), String>(())
+            }
+            .await
             {
                 Ok(_) => {
                     Debug::Log("AVLibRTSPSource::RunRetinaLoop - transport=udp");
-                    (udp_described, udp_stream_index)
+                    (udp_described, udp_video_stream_index, udp_audio_stream_index)
                 }
                 Err(udp_err) => {
                     Debug::LogWarning(&format!(
@@ -357,41 +553,65 @@ impl AVLibRTSPSource {
                             .await
                             .map_err(|e| format!("DESCRIBE failed: {}", e))?;
 
-                    let tcp_stream_index = Self::SelectVideoStreamIndex(tcp_described.streams())
+                    let tcp_video_stream_index = Self::SelectVideoStreamIndex(tcp_described.streams())
                         .ok_or_else(|| {
                             "no supported video stream (expected h264/h265)".to_string()
                         })?;
+                    let tcp_audio_stream_index = Self::SelectAudioStreamIndex(tcp_described.streams());
 
                     tcp_described
                         .setup(
-                            tcp_stream_index,
+                            tcp_video_stream_index,
                             SetupOptions::default()
                                 .transport(Transport::Tcp(TcpTransportOptions::default())),
                         )
                         .await
-                        .map_err(|e| format!("SETUP failed: {}", e))?;
+                        .map_err(|e| format!("SETUP video failed: {}", e))?;
+
+                    if let Some(audio_index) = tcp_audio_stream_index {
+                        tcp_described
+                            .setup(
+                                audio_index,
+                                SetupOptions::default()
+                                    .transport(Transport::Tcp(TcpTransportOptions::default())),
+                            )
+                            .await
+                            .map_err(|e| format!("SETUP audio failed: {}", e))?;
+                    }
 
                     Debug::Log("AVLibRTSPSource::RunRetinaLoop - transport=tcp");
-                    (tcp_described, tcp_stream_index)
+                    (tcp_described, tcp_video_stream_index, tcp_audio_stream_index)
                 }
             }
         };
 
         let mut demuxed = described
-            .play(PlayOptions::default())
+            .play(PlayOptions::default().initial_timestamp(InitialTimestampPolicy::Permissive))
             .await
             .map_err(|e| format!("PLAY failed: {}", e))?
             .demuxed()
             .map_err(|e| format!("DEMUX init failed: {}", e))?;
 
         Self::UpdateVideoConfigIfAvailable(
-            stream_index,
+            video_stream_index,
             demuxed.streams(),
             &stream_types,
             &streams,
             &video_config,
             &is_connected,
         );
+        if let Some(audio_stream_index) = audio_stream_index {
+            Self::UpdateAudioConfigIfAvailable(
+                audio_stream_index,
+                demuxed.streams(),
+                &stream_types,
+                &streams,
+                &audio_config,
+            );
+        }
+
+        let mut video_timestamp_origin: Option<i64> = None;
+        let mut audio_timestamp_origin: Option<i64> = None;
 
         loop {
             if !stay_alive.load(Ordering::SeqCst) {
@@ -413,56 +633,108 @@ impl AVLibRTSPSource {
 
             let item = item_result.map_err(|e| format!("demux error: {}", e))?;
 
-            let video_frame = match item {
-                CodecItem::VideoFrame(frame) => frame,
+            match item {
+                CodecItem::VideoFrame(video_frame) => {
+                    if video_frame.stream_id() != video_stream_index {
+                        continue;
+                    }
+
+                    if video_frame.has_new_parameters() || !is_connected.load(Ordering::SeqCst) {
+                        Self::UpdateVideoConfigIfAvailable(
+                            video_stream_index,
+                            demuxed.streams(),
+                            &stream_types,
+                            &streams,
+                            &video_config,
+                            &is_connected,
+                        );
+                    }
+
+                    if !is_connected.load(Ordering::SeqCst) {
+                        continue;
+                    }
+
+                    let queue = {
+                        let queues_guard = packet_queues
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner());
+                        queues_guard.get(0).cloned()
+                    };
+
+                    let raw_pts = video_frame.timestamp().elapsed();
+                    let origin = video_timestamp_origin.get_or_insert(raw_pts);
+                    let normalized_pts = raw_pts.saturating_sub(*origin);
+
+                    let wrapped =
+                        Self::BuildPacketFromVideoFrame(&video_frame, normalized_pts, &recycler);
+
+                    if let Some(q) = queue {
+                        q.Push(wrapped);
+                    } else {
+                        recycler
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner())
+                            .Recycle(wrapped);
+                        continue;
+                    }
+
+                    if let Ok(mut count) = packet_count.lock() {
+                        *count += 1;
+                    }
+                    if let Ok(mut last) = last_activity_ticks.lock() {
+                        *last = Some(Instant::now());
+                    }
+                    checking_connection.store(false, Ordering::SeqCst);
+                }
+                CodecItem::AudioFrame(audio_frame) => {
+                    if Some(audio_frame.stream_id()) != audio_stream_index {
+                        continue;
+                    }
+
+                    if let Some(audio_stream_index) = audio_stream_index {
+                        Self::UpdateAudioConfigIfAvailable(
+                            audio_stream_index,
+                            demuxed.streams(),
+                            &stream_types,
+                            &streams,
+                            &audio_config,
+                        );
+                    }
+
+                    let queue = {
+                        let queues_guard = packet_queues
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner());
+                        queues_guard.get(1).cloned()
+                    };
+
+                    let raw_pts = audio_frame.timestamp().elapsed();
+                    let origin = audio_timestamp_origin.get_or_insert(raw_pts);
+                    let normalized_pts = raw_pts.saturating_sub(*origin);
+
+                    let wrapped =
+                        Self::BuildPacketFromAudioFrame(&audio_frame, normalized_pts, &recycler);
+
+                    if let Some(q) = queue {
+                        q.Push(wrapped);
+                    } else {
+                        recycler
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner())
+                            .Recycle(wrapped);
+                        continue;
+                    }
+
+                    if let Ok(mut count) = packet_count.lock() {
+                        *count += 1;
+                    }
+                    if let Ok(mut last) = last_activity_ticks.lock() {
+                        *last = Some(Instant::now());
+                    }
+                    checking_connection.store(false, Ordering::SeqCst);
+                }
                 _ => continue,
-            };
-
-            if video_frame.stream_id() != stream_index {
-                continue;
             }
-
-            if video_frame.has_new_parameters() || !is_connected.load(Ordering::SeqCst) {
-                Self::UpdateVideoConfigIfAvailable(
-                    stream_index,
-                    demuxed.streams(),
-                    &stream_types,
-                    &streams,
-                    &video_config,
-                    &is_connected,
-                );
-            }
-
-            if !is_connected.load(Ordering::SeqCst) {
-                continue;
-            }
-
-            let queue = {
-                let queues_guard = packet_queues
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner());
-                queues_guard.get(0).cloned()
-            };
-
-            let wrapped = Self::BuildPacketFromVideoFrame(&video_frame, &recycler);
-
-            if let Some(q) = queue {
-                q.Push(wrapped);
-            } else {
-                recycler
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner())
-                    .Recycle(wrapped);
-                continue;
-            }
-
-            if let Ok(mut count) = packet_count.lock() {
-                *count += 1;
-            }
-            if let Ok(mut last) = last_activity_ticks.lock() {
-                *last = Some(Instant::now());
-            }
-            checking_connection.store(false, Ordering::SeqCst);
         }
     }
 
@@ -508,6 +780,46 @@ impl AVLibRTSPSource {
         decoder.video().ok()
     }
 
+    fn CreateAudioDecoderFromConfig(
+        config: &RetinaAudioConfig,
+    ) -> Option<ffmpeg_next::decoder::Audio> {
+        let codec = ffmpeg_next::decoder::find(config.codec_id)?;
+        let mut context = ffmpeg_next::codec::context::Context::new_with_codec(codec);
+
+        let time_base = Rational::new(1, config.clock_rate_hz as i32);
+        context.set_time_base(time_base);
+
+        unsafe {
+            let ctx = context.as_mut_ptr();
+            (*ctx).codec_type = AVMediaType::AVMEDIA_TYPE_AUDIO;
+            (*ctx).codec_id = config.codec_id.into();
+            (*ctx).sample_rate = config.sample_rate;
+            (*ctx).thread_count = 1;
+            (*ctx).flags |= AV_CODEC_FLAG_LOW_DELAY as i32;
+
+            if !config.extra_data.is_empty() {
+                let extra_data_size = config.extra_data.len();
+                let padded_size = extra_data_size + AV_INPUT_BUFFER_PADDING_SIZE as usize;
+                let extra_ptr = av_mallocz(padded_size) as *mut u8;
+
+                if extra_ptr.is_null() {
+                    Debug::LogError(
+                        "AVLibRTSPSource::CreateAudioDecoderFromConfig - alloc extradata failed",
+                    );
+                    return None;
+                }
+
+                ptr::copy_nonoverlapping(config.extra_data.as_ptr(), extra_ptr, extra_data_size);
+                (*ctx).extradata = extra_ptr;
+                (*ctx).extradata_size = extra_data_size as i32;
+            }
+        }
+
+        let mut decoder = context.decoder();
+        decoder.set_packet_time_base(time_base);
+        decoder.audio().ok()
+    }
+
     pub fn VideoDecoder(&self, streamIndex: i32) -> Option<ffmpeg_next::decoder::Video> {
         let stream_info = self.Stream(streamIndex);
         if stream_info.index < 0 {
@@ -521,6 +833,16 @@ impl AVLibRTSPSource {
             .and_then(|g| g.as_ref().cloned())?;
 
         Self::CreateDecoderFromConfig(&config)
+    }
+
+    pub fn AudioDecoder(&self, _streamIndex: i32) -> Option<ffmpeg_next::decoder::Audio> {
+        let config = self
+            ._audioConfig
+            .lock()
+            .ok()
+            .and_then(|g| g.as_ref().cloned())?;
+
+        Self::CreateAudioDecoderFromConfig(&config)
     }
 }
 
@@ -585,29 +907,40 @@ impl IAVLibSource for AVLibRTSPSource {
     }
 
     fn TimeBase(&self, streamIndex: i32) -> f64 {
-        if streamIndex != 0 {
-            Debug::LogError("AVLibRTSPSource::TimeBase - streamIndex was out of range");
-            return -1.0;
+        match streamIndex {
+            0 => self
+                ._videoConfig
+                .lock()
+                .ok()
+                .and_then(|g| g.as_ref().map(|cfg| cfg.time_base))
+                .unwrap_or(-1.0),
+            1 => self
+                ._audioConfig
+                .lock()
+                .ok()
+                .and_then(|g| g.as_ref().map(|cfg| cfg.time_base))
+                .unwrap_or(-1.0),
+            _ => {
+                Debug::LogError("AVLibRTSPSource::TimeBase - streamIndex was out of range");
+                -1.0
+            }
         }
-
-        self._videoConfig
-            .lock()
-            .ok()
-            .and_then(|g| g.as_ref().map(|cfg| cfg.time_base))
-            .unwrap_or(-1.0)
     }
 
     fn FrameRate(&self, streamIndex: i32) -> f64 {
-        if streamIndex != 0 {
-            Debug::LogError("AVLibRTSPSource::FrameRate - streamIndex was out of range");
-            return -1.0;
+        match streamIndex {
+            0 => self
+                ._videoConfig
+                .lock()
+                .ok()
+                .and_then(|g| g.as_ref().map(|cfg| cfg.frame_rate))
+                .unwrap_or(-1.0),
+            1 => 0.0,
+            _ => {
+                Debug::LogError("AVLibRTSPSource::FrameRate - streamIndex was out of range");
+                -1.0
+            }
         }
-
-        self._videoConfig
-            .lock()
-            .ok()
-            .and_then(|g| g.as_ref().map(|cfg| cfg.frame_rate))
-            .unwrap_or(-1.0)
     }
 
     fn FrameDuration(&self, streamIndex: i32) -> f64 {

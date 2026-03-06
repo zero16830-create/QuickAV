@@ -1,5 +1,6 @@
 #![allow(non_snake_case)]
 
+use crate::AVLibAudioDecoder::AVLibAudioDecoder;
 use crate::AVLibFileSource::AVLibFileSource;
 use crate::AVLibRTMPSource::AVLibRTMPSource;
 use crate::AVLibRTSPSource::AVLibRTSPSource;
@@ -49,7 +50,28 @@ impl AVLibDecoder {
         None
     }
 
-    pub fn Create(
+    fn CreateAudioDecoder(
+        source: &dyn IAVLibSource,
+        stream_index: i32,
+    ) -> Option<ffmpeg_next::decoder::Audio> {
+        let any_source = source as &dyn Any;
+
+        if let Some(file_source) = any_source.downcast_ref::<AVLibFileSource>() {
+            return file_source.AudioDecoder(stream_index);
+        }
+
+        if let Some(rtsp_source) = any_source.downcast_ref::<AVLibRTSPSource>() {
+            return rtsp_source.AudioDecoder(stream_index);
+        }
+
+        if let Some(rtmp_source) = any_source.downcast_ref::<AVLibRTMPSource>() {
+            return rtmp_source.AudioDecoder(stream_index);
+        }
+
+        None
+    }
+
+    pub fn CreateVideo(
         source: Arc<Mutex<Box<dyn IAVLibSource + Send>>>,
         required_video_desc: &dyn IVideoDescription,
     ) -> Vec<Arc<AVLibDecoder>> {
@@ -102,6 +124,48 @@ impl AVLibDecoder {
         }
 
         decoders
+    }
+
+    pub fn Create(
+        source: Arc<Mutex<Box<dyn IAVLibSource + Send>>>,
+        required_video_desc: &dyn IVideoDescription,
+    ) -> Vec<Arc<AVLibDecoder>> {
+        Self::CreateVideo(source, required_video_desc)
+    }
+
+    pub fn CreateAudio(
+        source: Arc<Mutex<Box<dyn IAVLibSource + Send>>>,
+    ) -> Option<Arc<AVLibAudioDecoder>> {
+        let stream_index = if let Ok(s) = source.lock() {
+            let mut found: Option<i32> = None;
+            let count = s.StreamCount();
+            for i in 0..count {
+                if s.StreamType(i) == AVMediaType::AVMEDIA_TYPE_AUDIO {
+                    found = Some(i);
+                    break;
+                }
+            }
+            found
+        } else {
+            None
+        }?;
+
+        let (time_base, decoder_opt) = if let Ok(s) = source.lock() {
+            (
+                s.TimeBase(stream_index),
+                Self::CreateAudioDecoder(s.as_ref(), stream_index),
+            )
+        } else {
+            return None;
+        };
+
+        let audio_decoder = decoder_opt?;
+        Some(Arc::new(AVLibAudioDecoder::new(
+            source,
+            stream_index,
+            audio_decoder,
+            time_base,
+        )))
     }
 
     pub fn TryGetNext(&self, time: f64) -> Option<VideoFrame> {

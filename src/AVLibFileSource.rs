@@ -87,20 +87,38 @@ impl AVLibFileSource {
                     Type::Audio => AVMediaType::AVMEDIA_TYPE_AUDIO,
                     _ => AVMediaType::AVMEDIA_TYPE_UNKNOWN,
                 };
-                let (width, height) = if media_type == AVMediaType::AVMEDIA_TYPE_VIDEO {
+                let (width, height, sample_rate, channels) =
+                    if media_type == AVMediaType::AVMEDIA_TYPE_VIDEO {
                     if let Ok(ctx) =
                         ffmpeg_next::codec::context::Context::from_parameters(s.parameters())
                     {
                         if let Ok(video) = ctx.decoder().video() {
-                            (video.width() as i32, video.height() as i32)
+                            (video.width() as i32, video.height() as i32, 0, 0)
                         } else {
-                            (0, 0)
+                            (0, 0, 0, 0)
                         }
                     } else {
-                        (0, 0)
+                        (0, 0, 0, 0)
+                    }
+                } else if media_type == AVMediaType::AVMEDIA_TYPE_AUDIO {
+                    if let Ok(ctx) =
+                        ffmpeg_next::codec::context::Context::from_parameters(s.parameters())
+                    {
+                        if let Ok(audio) = ctx.decoder().audio() {
+                            (
+                                0,
+                                0,
+                                audio.rate() as i32,
+                                audio.channels() as i32,
+                            )
+                        } else {
+                            (0, 0, 0, 0)
+                        }
+                    } else {
+                        (0, 0, 0, 0)
                     }
                 } else {
-                    (0, 0)
+                    (0, 0, 0, 0)
                 };
 
                 if (media_type == AVMediaType::AVMEDIA_TYPE_VIDEO
@@ -118,6 +136,8 @@ impl AVLibFileSource {
                         codec_type: media_type,
                         width,
                         height,
+                        sample_rate,
+                        channels,
                     });
                     time_bases.push(f64::from(s.time_base()));
                     let fr = s.rate();
@@ -141,7 +161,7 @@ impl AVLibFileSource {
                         queues.push(Arc::new(FixedSizeQueue::new(
                             Self::DEFAULT_AUDIO_PACKET_QUEUE_SIZE,
                         )));
-                        active.push(false);
+                        active.push(true);
                         queue_thresholds.push(Self::DEFAULT_AUDIO_PACKET_QUEUE_SIZE / 2);
                     }
 
@@ -444,6 +464,23 @@ impl AVLibFileSource {
         let ctx =
             ffmpeg_next::codec::context::Context::from_parameters(stream.parameters()).ok()?;
         ctx.decoder().video().ok()
+    }
+
+    pub fn AudioDecoder(&self, streamIndex: i32) -> Option<ffmpeg_next::decoder::Audio> {
+        let stream_info = self.Stream(streamIndex);
+        if stream_info.index < 0 {
+            return None;
+        }
+
+        let opened = {
+            let _l = FFMPEG_OPEN_LOCK.lock().unwrap();
+            ffmpeg_next::format::input(&self._uri).ok()?
+        };
+
+        let stream = opened.stream(stream_info.index as usize)?;
+        let ctx =
+            ffmpeg_next::codec::context::Context::from_parameters(stream.parameters()).ok()?;
+        ctx.decoder().audio().ok()
     }
 }
 

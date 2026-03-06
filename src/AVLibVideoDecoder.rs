@@ -33,6 +33,7 @@ impl AVLibVideoDecoder {
     const DEFAULT_VIDEO_FRAME_QUEUE_SIZE: usize = 25;
     const REALTIME_VIDEO_FRAME_QUEUE_SIZE: usize = 3;
     const REALTIME_RESUME_THRESHOLD: usize = 1;
+    const REALTIME_EARLY_FRAME_TOLERANCE_SEC: f64 = 0.060;
 
     pub fn new(
         source: Arc<Mutex<Box<dyn IAVLibSource + Send>>>,
@@ -391,6 +392,27 @@ impl AVLibVideoDecoder {
         };
 
         if realtime_now {
+            let held_frame = {
+                let mut last = match self._lastFrame.lock() {
+                    Ok(g) => g,
+                    Err(poisoned) => poisoned.into_inner(),
+                };
+                last.take()
+            };
+
+            if let Some(frame) = held_frame {
+                if frame.IsEOF() || frame.Time() <= time + Self::REALTIME_EARLY_FRAME_TOLERANCE_SEC
+                {
+                    return Some(frame);
+                }
+
+                let mut last = match self._lastFrame.lock() {
+                    Ok(g) => g,
+                    Err(poisoned) => poisoned.into_inner(),
+                };
+                *last = Some(frame);
+            }
+
             let mut drained = self._parsedFrames.Drain();
             if drained.is_empty() {
                 return None;
@@ -403,7 +425,22 @@ impl AVLibVideoDecoder {
                 self.Recycle(stale);
             }
 
-            return latest;
+            let Some(frame) = latest else {
+                return None;
+            };
+
+            if !frame.IsEOF() && frame.Time() > time + Self::REALTIME_EARLY_FRAME_TOLERANCE_SEC {
+                let mut last = match self._lastFrame.lock() {
+                    Ok(g) => g,
+                    Err(poisoned) => poisoned.into_inner(),
+                };
+                if let Some(old_frame) = last.replace(frame) {
+                    self.Recycle(old_frame);
+                }
+                return None;
+            }
+
+            return Some(frame);
         }
 
         let seek_requested = !self._seekRequest.swap(true, Ordering::SeqCst);

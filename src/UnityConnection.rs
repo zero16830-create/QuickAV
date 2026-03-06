@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 #![allow(non_camel_case_types)]
 
+use crate::AudioExportState::{ExportedAudioMeta, SharedExportedAudioState};
 use crate::FrameExportClient::{ExportedFrameMeta, SharedExportedFrameState};
 use crate::Player::Player;
 use lazy_static::lazy_static;
@@ -12,6 +13,7 @@ use std::sync::{Arc, Mutex};
 pub struct PlayerEntry {
     pub player: Arc<Mutex<Player>>,
     pub frame_export: Option<SharedExportedFrameState>,
+    pub audio_export: Option<SharedExportedAudioState>,
 }
 
 #[repr(C)]
@@ -21,6 +23,17 @@ pub struct RustAVFrameMeta {
     pub format: i32,
     pub stride: i32,
     pub data_size: i32,
+    pub time_sec: c_double,
+    pub frame_index: i64,
+}
+
+#[repr(C)]
+pub struct RustAVAudioMeta {
+    pub sample_rate: i32,
+    pub channels: i32,
+    pub bytes_per_sample: i32,
+    pub sample_format: i32,
+    pub buffered_bytes: i32,
     pub time_sec: c_double,
     pub frame_index: i64,
 }
@@ -41,7 +54,11 @@ fn NormalizePath(path: *const c_char) -> Option<String> {
     )
 }
 
-fn StorePlayer(player: Option<Player>, frame_export: Option<SharedExportedFrameState>) -> c_int {
+fn StorePlayer(
+    player: Option<Player>,
+    frame_export: Option<SharedExportedFrameState>,
+    audio_export: Option<SharedExportedAudioState>,
+) -> c_int {
     let Some(player) = player else {
         return -1;
     };
@@ -54,6 +71,7 @@ fn StorePlayer(player: Option<Player>, frame_export: Option<SharedExportedFrameS
     let entry = Arc::new(PlayerEntry {
         player: Arc::new(Mutex::new(player)),
         frame_export,
+        audio_export,
     });
     players.push(Some(entry));
     (players.len() - 1) as c_int
@@ -70,7 +88,7 @@ pub extern "system" fn GetPlayer(path: *const c_char, targetTexture: *mut c_void
     };
 
     TryCleanPlayersCache();
-    StorePlayer(Player::CreateWithTexture(path_str, targetTexture), None)
+    StorePlayer(Player::CreateWithTexture(path_str, targetTexture), None, None)
 }
 
 #[no_mangle]
@@ -89,9 +107,11 @@ pub extern "system" fn CreatePlayerPullRGBA(
 
     TryCleanPlayersCache();
 
-    let created = Player::CreateWithFrameExport(path_str, targetWidth, targetHeight);
+    let created = Player::CreateWithFrameAndAudioExport(path_str, targetWidth, targetHeight);
     match created {
-        Some((player, shared)) => StorePlayer(Some(player), Some(shared)),
+        Some((player, frame_shared, audio_shared)) => {
+            StorePlayer(Some(player), Some(frame_shared), Some(audio_shared))
+        }
         None => -1,
     }
 }
@@ -193,6 +213,18 @@ pub extern "system" fn SetLoop(id: c_int, loop_value: bool) -> c_int {
 }
 
 #[no_mangle]
+pub extern "system" fn SetAudioSinkDelaySeconds(id: c_int, delay_sec: c_double) -> c_int {
+    if !delay_sec.is_finite() || delay_sec < 0.0 {
+        return -1;
+    }
+
+    with_player(id, -1, |player| {
+        player.SetAudioSinkDelay(delay_sec);
+        0
+    })
+}
+
+#[no_mangle]
 pub extern "system" fn GetFrameMetaRGBA(id: c_int, outMeta: *mut RustAVFrameMeta) -> c_int {
     if outMeta.is_null() {
         return -1;
@@ -243,6 +275,18 @@ fn ToCFrameMeta(meta: ExportedFrameMeta) -> RustAVFrameMeta {
         format: meta.Format as i32,
         stride: meta.Stride,
         data_size: meta.DataLength,
+        time_sec: meta.Time,
+        frame_index: meta.FrameIndex,
+    }
+}
+
+fn ToCAudioMeta(meta: ExportedAudioMeta) -> RustAVAudioMeta {
+    RustAVAudioMeta {
+        sample_rate: meta.SampleRate,
+        channels: meta.Channels,
+        bytes_per_sample: meta.BytesPerSample,
+        sample_format: meta.SampleFormat,
+        buffered_bytes: meta.BufferedBytes,
         time_sec: meta.Time,
         frame_index: meta.FrameIndex,
     }
@@ -321,6 +365,54 @@ fn snapshot_player(id: c_int) -> Option<Arc<Mutex<Player>>> {
 
 fn snapshot_frame_export(id: c_int) -> Option<SharedExportedFrameState> {
     snapshot_entry(id).and_then(|entry| entry.frame_export.clone())
+}
+
+fn snapshot_audio_export(id: c_int) -> Option<SharedExportedAudioState> {
+    snapshot_entry(id).and_then(|entry| entry.audio_export.clone())
+}
+
+#[no_mangle]
+pub extern "system" fn GetAudioMetaPCM(id: c_int, outMeta: *mut RustAVAudioMeta) -> c_int {
+    if outMeta.is_null() {
+        return -1;
+    }
+
+    let Some(shared) = snapshot_audio_export(id) else {
+        return -1;
+    };
+
+    let shared = shared.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let meta = shared.Meta();
+    unsafe {
+        *outMeta = ToCAudioMeta(meta);
+    }
+
+    if meta.HasAudio { 1 } else { 0 }
+}
+
+#[no_mangle]
+pub extern "system" fn CopyAudioPCM(
+    id: c_int,
+    destination: *mut u8,
+    destinationLength: c_int,
+) -> c_int {
+    if destination.is_null() || destinationLength <= 0 {
+        return -1;
+    }
+
+    let Some(shared) = snapshot_audio_export(id) else {
+        return -1;
+    };
+
+    let mut shared = shared.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let destination = unsafe { slice::from_raw_parts_mut(destination, destinationLength as usize) };
+    let copied = shared.CopyTo(destination);
+
+    if copied == 0 && shared.Meta().HasAudio {
+        -1
+    } else {
+        copied
+    }
 }
 
 pub fn TryCleanPlayersCache() {
