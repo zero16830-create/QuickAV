@@ -8,9 +8,6 @@ on:
       - 'include/**'
       - 'TestFiles/**'
       - 'UnityAVExample/**'
-      - 'UNITY_*.md'
-      - 'PRODUCTION_RELEASE_CHECKLIST.md'
-      - 'README.md'
   pull_request:
     paths:
       - '.github/workflows/rustav-matrix.yml'
@@ -18,9 +15,6 @@ on:
       - 'include/**'
       - 'TestFiles/**'
       - 'UnityAVExample/**'
-      - 'UNITY_*.md'
-      - 'PRODUCTION_RELEASE_CHECKLIST.md'
-      - 'README.md'
   workflow_dispatch:
     inputs:
       core_ref:

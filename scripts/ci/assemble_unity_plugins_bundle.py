@@ -24,6 +24,14 @@ def zip_directory(source_dir: pathlib.Path, zip_path: pathlib.Path) -> None:
             archive.write(path, path.relative_to(source_dir.parent))
 
 
+def write_bundle_readme(destination: pathlib.Path) -> None:
+    destination.write_text(
+        "RustAV Unity 插件包\n\n"
+        "将 Assets 目录内容复制到 Unity 工程中即可。\n",
+        encoding="utf-8",
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--public-root", default=".")
@@ -56,7 +64,7 @@ def main() -> int:
     copy_tree_contents(windows_artifact, bundle_root)
     copy_tree_contents(android_artifact, bundle_root)
     copy_tree_contents(ios_artifact, bundle_root)
-    copy_file(public_root / "UNITY_PLUGIN_PACKAGE_LAYOUT.md", bundle_root / "README.md")
+    write_bundle_readme(bundle_root / "README.md")
 
     if zip_output.exists():
         zip_output.unlink()

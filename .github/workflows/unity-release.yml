@@ -10,9 +10,6 @@ on:
       - 'include/**'
       - 'TestFiles/**'
       - 'UnityAVExample/**'
-      - 'UNITY_*.md'
-      - 'PRODUCTION_RELEASE_CHECKLIST.md'
-      - 'README.md'
   repository_dispatch:
     types:
       - rustav-core-updated
