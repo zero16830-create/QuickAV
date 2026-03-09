@@ -1,46 +1,44 @@
-#[allow(non_snake_case)]
-pub mod Logging {
-    pub mod Debug;
-}
-#[allow(non_snake_case)]
-pub mod Rendering {
-    #[cfg(windows)]
-    pub mod D3D11TextureWriter;
-    pub mod NullTextureWriter;
-    pub mod TextureWriter;
-}
-pub mod AVLibDecoder;
-pub mod AVLibAudioDecoder;
-pub mod AudioExportState;
-pub mod AVLibFileSource;
-pub mod AVLibFrame;
-pub mod AVLibPacket;
-pub mod AVLibPacketRecycler;
-pub mod AVLibPlayer;
-pub mod AVLibRTMPSource;
-pub mod AVLibRTSPSource;
-pub mod AVLibUtil;
-pub mod AVLibVideoDecoder;
-pub mod FixedSizeQueue;
-pub mod Frame;
-pub mod FrameExportClient;
-pub mod AudioFrame;
-pub mod IAVLibDecoderVisitor;
-pub mod IAVLibSource;
-pub mod IFrameVisitor;
-pub mod IVideoClient;
-pub mod IVideoDescription;
-pub mod OutputFactory;
-pub mod PixelFormat;
-pub mod Player;
-pub mod TextureClient;
-pub mod UnityConnection;
-pub mod VideoFrame;
-pub mod PlaybackClock;
-pub mod PlayerRegistry;
-pub mod SourceFactory;
-pub mod dllmain;
-pub mod stdafx;
+pub mod audio;
+pub mod decoder;
+pub mod ffi;
+pub mod logging;
+pub mod media;
+pub mod output;
+pub mod player;
+pub mod rendering;
+pub mod source;
+pub mod support;
 
-pub use dllmain::*;
-pub use UnityConnection::*;
+pub use audio::audio_export_state;
+pub use audio::audio_frame;
+pub use decoder::av_lib_audio_decoder;
+pub use decoder::av_lib_decoder;
+pub use decoder::av_lib_decoder_visitor;
+pub use decoder::av_lib_video_decoder;
+pub use ffi::dllmain;
+pub use ffi::dllmain::*;
+pub use ffi::unity_connection;
+pub use ffi::unity_connection::*;
+pub use media::av_lib_frame;
+pub use media::av_lib_packet;
+pub use media::av_lib_packet_recycler;
+pub use media::frame;
+pub use media::frame_visitor;
+pub use media::pixel_format;
+pub use media::video_frame;
+pub use output::frame_export_client;
+pub use output::output_factory;
+pub use output::texture_client;
+pub use output::video_client;
+pub use output::video_description;
+pub use player::av_lib_player;
+pub use player::playback_clock;
+pub use player::player_registry;
+pub use source::av_lib_file_source;
+pub use source::av_lib_rtmp_source;
+pub use source::av_lib_rtsp_source;
+pub use source::av_lib_source;
+pub use source::source_factory;
+pub use support::av_lib_util;
+pub use support::fixed_size_queue;
+pub use support::stdafx;

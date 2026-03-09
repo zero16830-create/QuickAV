@@ -107,3 +107,6 @@
 7. 已新增 `RustAV_PlayerGetStreamInfo`，用于导出主视频流原始宽高/音频流采样信息，ABI 升级到 `1.2.0`。
 8. 已新增 `scripts/qa/run_unity_validation.ps1`，统一执行 Unity 场景级构建、插件同步和文件/RTSP/RTMP 运行验证。
 9. Unity 场景级验证包已切到默认窗口模式，并支持 `-windowWidth/-windowHeight` 显式覆盖；未显式覆盖时按源视频尺寸开窗。
+10. `scripts/qa/run_unity_validation.ps1` 已补 `av_sync` 统计、阈值判定、完成前样本截断和 `runInBackground` 稳定化。
+11. Unity 示例工程已清理到最小运行集合，并复制进 `RustAV/UnityAVExample`。
+12. 已新增 Unity Release CI 基础设施：版本号计算、插件注入、版本化压缩打包、GameCI 发布工作流。

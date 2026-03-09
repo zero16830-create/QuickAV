@@ -7,6 +7,8 @@
 1. Windows 本地与云端可稳定编译
 2. Android / iOS 云端可稳定编译
 3. Unity 侧只依赖稳定的 `RustAV_*` 公共 ABI
+4. Unity 托管桥接层以源码随插件包分发，不再依赖 `UnityAV.dll`
+5. Unity 示例工程内部通过 `asmdef` 将 `Runtime` 与 `Editor` 隔离
 
 ## 三端统一 ABI
 
@@ -45,6 +47,7 @@ Windows 纹理专属接口：
 1. Rust target：`aarch64-linux-android`
 2. 产物：`librustav_native.so`
 3. Unity 插件目录：`Assets/Plugins/Android/arm64-v8a/librustav_native.so`
+4. 托管源码目录：`Assets/UnityAV/UnityAV.Runtime.asmdef + Assets/UnityAV/Runtime/*.cs`
 
 ### 云端构建
 
@@ -64,6 +67,7 @@ Windows 纹理专属接口：
 2. 产物：`RustAV.xcframework`
 3. Unity 插件目录：`Assets/Plugins/iOS/librustav_native.a + RustAV.h`
 4. 附加构建支持目录：`BuildSupport/iOS/RustAV.xcframework`
+5. 托管源码目录：`Assets/UnityAV/UnityAV.Runtime.asmdef + Assets/UnityAV/Runtime/*.cs`
 
 ### 云端构建
 
@@ -83,6 +87,7 @@ Windows 纹理专属接口：
 1. 产物：`rustav_native.dll`
 2. Unity 插件目录：`Assets/Plugins/x86_64/rustav_native.dll`
 3. 配套依赖 DLL 需放在同目录
+4. 托管源码目录：`Assets/UnityAV/UnityAV.Runtime.asmdef + Assets/UnityAV/Runtime/*.cs`
 
 ### 当前要求
 
@@ -108,3 +113,7 @@ Windows 纹理专属接口：
 3. Android / iOS / Windows 后续都以同一套头文件 `include/RustAV.h` 为准
 4. 三端最终统一打包为 `RustAV-UnityPlugins.zip`
 5. 本地 / CI / 发布构建统一通过 `scripts/ci/build_unity_plugins.py` 分发到各平台脚本
+6. Unity 示例工程已内置到 `RustAV/UnityAVExample`，发布链路不再依赖外部 `UnityAV` 仓库
+7. Unity 正式构建通过 `game-ci/unity-builder@v4 + UnityAV.Editor.RustAVReleaseBuild.BuildFromCi` 执行
+8. 插件包中的 Unity 托管层改为源码分发，`UnityAV.dll` 不再是运行或发布必需项
+9. `UnityAVExample/Assets/UnityAV` 当前按 `Runtime / Editor / Validation / Materials / Scenes` 分层

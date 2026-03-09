@@ -12,6 +12,7 @@
 4. `python scripts/ci/validate_ci_entrypoints.py`
 5. `powershell -ExecutionPolicy Bypass -File scripts/qa/run_production_gate.ps1`
 6. 若提供实时 AV 地址，`run_production_gate.ps1` 还应带上 `-RtspAvUri/-RtmpAvUri` 跑满 `run_av_soak.ps1`
+7. 若提供 Unity 实时 AV 地址，`run_production_gate.ps1` 还应带上 `-UnityRtspUri/-UnityRtmpUri -UnitySeconds 600 -UnityAvSyncThresholdMs 200 -UnityAvSyncWarmupSampleCount 5`
 
 ## Native ABI
 
@@ -30,6 +31,7 @@
 4. `test_player` 在 Windows 上能正常出画和出声
 5. 若提供 `mystream_av` 这类带音频实时流，`run_av_soak.ps1` 结束时 `final_health` 应满足 `timeouts=0 reconnects=0 vdrop=0 adrop=0`
 6. `scripts/qa/run_unity_validation.ps1` 能完成 Unity 场景级文件/RTSP/RTMP 验证
+7. Unity 场景级网络播放正式门槛：`ValidationSeconds=600`、`SkipFileCase`、`AvSyncWarmupSampleCount=5`、`av_sync_within_threshold=True` 且阈值为 `200ms`
 
 ## 同步与恢复
 
@@ -43,9 +45,19 @@
 1. Windows 构建产物位于 `Assets/Plugins/x86_64`
 2. Android 构建产物位于 `Assets/Plugins/Android/arm64-v8a`
 3. iOS 构建产物位于 `Assets/Plugins/iOS` 和 `BuildSupport/iOS`
-4. `RustAV-UnityPlugins.zip` 能由统一入口脚本组装
-5. CI 不再运行时修改 cargo registry 中的 `ffmpeg-sys-next`
-6. Unity 场景级验证包默认窗口模式，并支持 `-windowWidth/-windowHeight` 显式覆盖
+4. Unity 托管运行时源码位于 `Assets/UnityAV/UnityAV.Runtime.asmdef + Assets/UnityAV/Runtime`
+5. Unity 示例工程内必须存在 `Assets/UnityAV/Editor/UnityAV.Editor.asmdef`
+6. Unity 插件包不得再依赖预编译 `UnityAV.dll`
+7. `RustAV-UnityPlugins.zip` 能由统一入口脚本组装
+8. `UnityAVExample` 必须以内置工程存在于 `RustAV/UnityAVExample`
+9. GitHub Actions 必须先构建 `UnityPlugins`，再注入 `UnityAVExample`，最后构建 Unity 示例程序
+10. Release 资产必须至少包含：
+   - `RustAV-UnityPlugins-v<version>.zip`
+   - `RustAVExample-Windows64-v<version>.zip`
+   - `RustAVExample-Android-v<version>.zip`
+   - `RustAVExample-iOS-v<version>.zip`
+11. CI 不再运行时修改 cargo registry 中的 `ffmpeg-sys-next`
+12. Unity 场景级验证包默认窗口模式，并支持 `-windowWidth/-windowHeight` 显式覆盖
 
 ## 发布说明
 

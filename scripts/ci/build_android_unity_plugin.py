@@ -2,7 +2,14 @@
 
 import argparse
 import pathlib
-from common import copy_file, ensure_directory, resolve_path, run, write_lines
+from common import (
+    copy_file,
+    copy_unity_managed_runtime,
+    ensure_directory,
+    resolve_path,
+    run,
+    write_lines,
+)
 
 
 def main() -> int:
@@ -41,6 +48,7 @@ def main() -> int:
     if args.dry_run:
         return 0
 
+    copy_unity_managed_runtime(project_root, output_root)
     package_dir = output_root / "Assets" / "Plugins" / "Android" / args.abi
     ensure_directory(package_dir)
 

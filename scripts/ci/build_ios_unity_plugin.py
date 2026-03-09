@@ -3,7 +3,15 @@
 import argparse
 import os
 import pathlib
-from common import copy_file, ensure_directory, replace_tree, resolve_path, run, write_lines
+from common import (
+    copy_file,
+    copy_unity_managed_runtime,
+    ensure_directory,
+    replace_tree,
+    resolve_path,
+    run,
+    write_lines,
+)
 
 
 def main() -> int:
@@ -107,6 +115,7 @@ def main() -> int:
         dry_run=False,
     )
 
+    copy_unity_managed_runtime(project_root, output_root)
     unity_dir = output_root / "Assets" / "Plugins" / "iOS"
     support_dir = output_root / "BuildSupport" / "iOS"
     ensure_directory(unity_dir)

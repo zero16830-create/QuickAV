@@ -47,15 +47,17 @@ cargo check --lib --examples
 ### Unity 静态编译
 
 ```powershell
-dotnet msbuild D:/TestProject/Video/UnityAV/Solution/UnityAV/UnityAV.csproj `
-  /t:Build `
-  /p:Configuration=Debug `
-  /p:TargetFrameworkVersion=v4.8 `
-  /p:PostBuildEvent=
+python scripts/ci/build_unity_plugins.py --project-root D:/TestProject/Video/RustAV --platform windows
+powershell -ExecutionPolicy Bypass -File scripts/qa/run_unity_validation.ps1 `
+  -RustAVRoot D:/TestProject/Video/RustAV `
+  -UnityProjectRoot D:/TestProject/Video/RustAV/UnityAVExample `
+  -ValidationSeconds 4 `
+  -SkipRtspCase `
+  -SkipRtmpCase
 ```
 
 结果：通过  
-产物：`UnityAV/Solution/UnityAV/bin/Debug/UnityAV.dll`
+产物：`RustAV/UnityAVExample/Build/CodexPullValidation/CodexPullValidation.exe`
 
 ### 60 秒实时压力跑
 
@@ -157,11 +159,12 @@ cargo check --lib --examples
 cargo test --lib --tests
 cargo check --manifest-path ios-staticlib/Cargo.toml --lib
 python scripts/ci/validate_ci_entrypoints.py
-dotnet msbuild D:/TestProject/Video/UnityAV/Solution/UnityAV/UnityAV.csproj `
-  /t:Build `
-  /p:Configuration=Debug `
-  /p:TargetFrameworkVersion=v4.8 `
-  /p:PostBuildEvent=
+powershell -ExecutionPolicy Bypass -File scripts/qa/run_unity_validation.ps1 `
+  -RustAVRoot D:/TestProject/Video/RustAV `
+  -UnityProjectRoot D:/TestProject/Video/RustAV/UnityAVExample `
+  -ValidationSeconds 4 `
+  -SkipRtspCase `
+  -SkipRtmpCase
 ```
 
 结果：
@@ -170,7 +173,7 @@ dotnet msbuild D:/TestProject/Video/UnityAV/Solution/UnityAV/UnityAV.csproj `
 2. 单元测试与集成测试通过
 3. iOS staticlib manifest 检查通过
 4. CI 入口 dry-run 通过
-5. Unity 静态编译通过，产物仍为 `UnityAV.dll`
+5. Unity 场景级 Windows 验证包可成功构建
 
 ### 60 秒 RTSP / RTMP AV soak
 

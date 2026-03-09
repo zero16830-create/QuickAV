@@ -3,7 +3,26 @@
 import argparse
 import os
 import pathlib
-from common import copy_file, ensure_directory, resolve_path, run, write_lines
+
+from common import (
+    copy_file,
+    copy_unity_managed_runtime,
+    recreate_directory,
+    resolve_path,
+    run,
+    write_lines,
+)
+
+
+WINDOWS_RUNTIME_PATTERNS = (
+    "avcodec-*.dll",
+    "avdevice-*.dll",
+    "avfilter-*.dll",
+    "avformat-*.dll",
+    "avutil-*.dll",
+    "swresample-*.dll",
+    "swscale-*.dll",
+)
 
 
 def locate_vcpkg_root(project_root: pathlib.Path) -> pathlib.Path | None:
@@ -48,7 +67,8 @@ def main() -> int:
     if args.dry_run:
         return 0
 
-    ensure_directory(package_root)
+    copy_unity_managed_runtime(project_root, output_root)
+    recreate_directory(package_root)
     copy_file(artifact_dll, package_root / artifact_dll.name)
 
     runtime_dlls: list[pathlib.Path] = []
@@ -56,7 +76,13 @@ def main() -> int:
     if vcpkg_root:
         runtime_dir = vcpkg_root / "installed" / "x64-windows" / "bin"
         if runtime_dir.exists():
-            runtime_dlls = sorted(runtime_dir.glob("*.dll"))
+            seen_names: set[str] = set()
+            for pattern in WINDOWS_RUNTIME_PATTERNS:
+                for dll in sorted(runtime_dir.glob(pattern)):
+                    if dll.name in seen_names:
+                        continue
+                    runtime_dlls.append(dll)
+                    seen_names.add(dll.name)
             for dll in runtime_dlls:
                 copy_file(dll, package_root / dll.name)
 

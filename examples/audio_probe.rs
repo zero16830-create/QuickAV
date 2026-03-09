@@ -1,8 +1,8 @@
-use rustav_native::Logging::Debug::{Initialize, Teardown};
+use rustav_native::logging::debug::{initialize, teardown};
 use rustav_native::{
-    RustAV_PlayerCopyAudioPCM, RustAV_PlayerCreatePullRGBA, RustAV_PlayerGetAudioMetaPCM,
-    RustAV_PlayerGetFrameMetaRGBA, RustAV_PlayerGetHealthSnapshotV2, RustAV_PlayerPlay,
-    RustAV_PlayerRelease, RustAV_PlayerUpdate, RustAVAudioMeta, RustAVFrameMeta,
+    rustav_player_copy_audio_pcm, rustav_player_create_pull_rgba, rustav_player_get_audio_meta_pcm,
+    rustav_player_get_frame_meta_rgba, rustav_player_get_health_snapshot_v2, rustav_player_play,
+    rustav_player_release, rustav_player_update, RustAVAudioMeta, RustAVFrameMeta,
     RustAVPlayerHealthSnapshotV2, RUSTAV_PLAYER_HEALTH_SNAPSHOT_V2_SIZE,
     RUSTAV_PLAYER_HEALTH_SNAPSHOT_V2_VERSION,
 };
@@ -123,7 +123,7 @@ fn main() {
     let width: i32 = parse_arg(&args, 3, 1280);
     let height: i32 = parse_arg(&args, 4, 720);
 
-    Initialize(false);
+    initialize(false);
 
     let uri_c = match CString::new(uri.clone()) {
         Ok(v) => v,
@@ -133,14 +133,17 @@ fn main() {
         }
     };
 
-    let id = RustAV_PlayerCreatePullRGBA(uri_c.as_ptr(), width, height);
+    let id = rustav_player_create_pull_rgba(uri_c.as_ptr(), width, height);
     if id < 0 {
-        eprintln!("[FAIL] RustAV_PlayerCreatePullRGBA failed for uri={}", uri);
+        eprintln!(
+            "[FAIL] rustav_player_create_pull_rgba failed for uri={}",
+            uri
+        );
         std::process::exit(1);
     }
 
-    if RustAV_PlayerPlay(id) != 0 {
-        let _ = RustAV_PlayerRelease(id);
+    if rustav_player_play(id) != 0 {
+        let _ = rustav_player_release(id);
         eprintln!("[FAIL] Play failed for id={}", id);
         std::process::exit(1);
     }
@@ -155,11 +158,11 @@ fn main() {
     let mut first_audio_elapsed: Option<f64> = None;
 
     while start.elapsed().as_secs_f64() < run_seconds {
-        let _ = RustAV_PlayerUpdate(id);
+        let _ = rustav_player_update(id);
         thread::sleep(Duration::from_millis(20));
 
         let mut frame_meta = empty_frame_meta();
-        if RustAV_PlayerGetFrameMetaRGBA(id, &mut frame_meta as *mut RustAVFrameMeta) > 0
+        if rustav_player_get_frame_meta_rgba(id, &mut frame_meta as *mut RustAVFrameMeta) > 0
             && frame_meta.frame_index != last_frame_index
         {
             last_frame_index = frame_meta.frame_index;
@@ -177,12 +180,12 @@ fn main() {
         }
 
         let mut audio_meta = empty_audio_meta();
-        let audio_ready = RustAV_PlayerGetAudioMetaPCM(id, &mut audio_meta as *mut RustAVAudioMeta);
+        let audio_ready =
+            rustav_player_get_audio_meta_pcm(id, &mut audio_meta as *mut RustAVAudioMeta);
         if audio_ready > 0 && audio_meta.buffered_bytes > 0 {
             let read_len = (audio_meta.buffered_bytes as usize).min(64 * 1024);
             let mut buffer = vec![0u8; read_len];
-            let copied =
-                RustAV_PlayerCopyAudioPCM(id, buffer.as_mut_ptr(), buffer.len() as i32);
+            let copied = rustav_player_copy_audio_pcm(id, buffer.as_mut_ptr(), buffer.len() as i32);
             if copied > 0 {
                 audio_bytes += copied as usize;
                 audio_chunks += 1;
@@ -202,7 +205,7 @@ fn main() {
 
         if last_print.elapsed().as_secs_f64() >= 1.0 {
             let mut health = empty_health_snapshot_v2();
-            let _ = RustAV_PlayerGetHealthSnapshotV2(
+            let _ = rustav_player_get_health_snapshot_v2(
                 id,
                 &mut health as *mut RustAVPlayerHealthSnapshotV2,
             );
@@ -219,13 +222,13 @@ fn main() {
     }
 
     let mut final_health = empty_health_snapshot_v2();
-    let _ = RustAV_PlayerGetHealthSnapshotV2(
+    let _ = rustav_player_get_health_snapshot_v2(
         id,
         &mut final_health as *mut RustAVPlayerHealthSnapshotV2,
     );
 
-    let _ = RustAV_PlayerRelease(id);
-    Teardown();
+    let _ = rustav_player_release(id);
+    teardown();
 
     println!(
         "[audio_probe] done uri={} seconds={:.2} frames={} audio_bytes={} audio_chunks={}",

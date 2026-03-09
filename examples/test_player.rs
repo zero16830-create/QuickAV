@@ -6,11 +6,11 @@ fn main() {
 
 #[cfg(windows)]
 mod win32_player {
-    use rustav_native::AudioExportState::{ExportedAudioMeta, SharedExportedAudioState};
-    use rustav_native::AudioFrame::AudioSampleFormat;
-    use rustav_native::FrameExportClient::SharedExportedFrameState;
-    use rustav_native::Logging::Debug::{Initialize, Teardown};
-    use rustav_native::Player::Player;
+    use rustav_native::audio_export_state::{ExportedAudioMeta, SharedExportedAudioState};
+    use rustav_native::audio_frame::AudioSampleFormat;
+    use rustav_native::frame_export_client::SharedExportedFrameState;
+    use rustav_native::logging::debug::{initialize, teardown};
+    use rustav_native::player::Player;
     use std::ffi::c_void;
     use std::mem::size_of;
     use std::ptr::{addr_of, addr_of_mut};
@@ -28,12 +28,12 @@ mod win32_player {
     };
     use windows::Win32::Media::timeBeginPeriod;
     use windows::Win32::Media::timeEndPeriod;
-    use windows::Win32::Media::{MMTIME, TIME_MS, TIME_SAMPLES, TIMERR_NOERROR};
     use windows::Win32::Media::Audio::{
         waveOutClose, waveOutGetPosition, waveOutOpen, waveOutPause, waveOutPrepareHeader,
-        waveOutReset, waveOutRestart, waveOutUnprepareHeader, waveOutWrite, CALLBACK_NULL, HWAVEOUT,
-        WAVEFORMATEX, WAVEHDR, WAVE_FORMAT_PCM, WAVE_MAPPER, WHDR_DONE,
+        waveOutReset, waveOutRestart, waveOutUnprepareHeader, waveOutWrite, CALLBACK_NULL,
+        HWAVEOUT, WAVEFORMATEX, WAVEHDR, WAVE_FORMAT_PCM, WAVE_MAPPER, WHDR_DONE,
     };
+    use windows::Win32::Media::{MMTIME, TIMERR_NOERROR, TIME_MS, TIME_SAMPLES};
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows::Win32::System::Threading::{
         GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_HIGHEST,
@@ -41,8 +41,8 @@ mod win32_player {
     use windows::Win32::UI::WindowsAndMessaging::{
         AdjustWindowRectEx, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW,
         GetClientRect, LoadCursorW, PeekMessageW, PostQuitMessage, RegisterClassW, ShowWindow,
-        TranslateMessage, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, HMENU, IDC_ARROW, MSG,
-        PM_REMOVE, SW_SHOW, WINDOW_EX_STYLE, WM_CLOSE, WM_DESTROY, WM_PAINT, WM_QUIT, WNDCLASSW,
+        TranslateMessage, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, HMENU, IDC_ARROW, MSG, PM_REMOVE,
+        SW_SHOW, WINDOW_EX_STYLE, WM_CLOSE, WM_DESTROY, WM_PAINT, WM_QUIT, WNDCLASSW,
         WS_OVERLAPPEDWINDOW, WS_VISIBLE,
     };
 
@@ -54,6 +54,9 @@ mod win32_player {
         height: i32,
         max_seconds: Option<f64>,
         loop_player: bool,
+        validate: bool,
+        require_audio: bool,
+        min_playback_seconds: f64,
     }
 
     struct ViewerState {
@@ -83,6 +86,14 @@ mod win32_player {
                 title,
             }
         }
+    }
+
+    #[derive(Clone, Default)]
+    struct AudioValidationState {
+        meta_seen: bool,
+        device_opened: bool,
+        started: bool,
+        last_buffered_delay_sec: f64,
     }
 
     const AUDIO_THREAD_POLL_MILLISECONDS: u64 = 1;
@@ -137,34 +148,35 @@ mod win32_player {
 
     impl WaveOutAudioDevice {
         fn open(meta: ExportedAudioMeta) -> Result<Self, String> {
-            if meta.SampleRate <= 0
-                || meta.Channels <= 0
-                || meta.BytesPerSample != 4
-                || meta.SampleFormat != AudioSampleFormat::F32 as i32
+            if meta.sample_rate <= 0
+                || meta.channels <= 0
+                || meta.bytes_per_sample != 4
+                || meta.sample_format != AudioSampleFormat::F32 as i32
             {
                 return Err(format!(
                     "unsupported audio format rate={} channels={} bytes_per_sample={} sample_format={}",
-                    meta.SampleRate, meta.Channels, meta.BytesPerSample, meta.SampleFormat
+                    meta.sample_rate, meta.channels, meta.bytes_per_sample, meta.sample_format
                 ));
             }
 
-            let block_align = (meta.Channels as usize * std::mem::size_of::<i16>()) as u16;
+            let block_align = (meta.channels as usize * std::mem::size_of::<i16>()) as u16;
             let format = WAVEFORMATEX {
                 wFormatTag: WAVE_FORMAT_PCM as u16,
-                nChannels: meta.Channels as u16,
-                nSamplesPerSec: meta.SampleRate as u32,
-                nAvgBytesPerSec: meta.SampleRate as u32 * block_align as u32,
+                nChannels: meta.channels as u16,
+                nSamplesPerSec: meta.sample_rate as u32,
+                nAvgBytesPerSec: meta.sample_rate as u32 * block_align as u32,
                 nBlockAlign: block_align,
                 wBitsPerSample: 16,
                 cbSize: 0,
             };
 
             let chunk_frames =
-                ((meta.SampleRate as usize * AUDIO_CHUNK_MILLISECONDS) / 1000).max(1);
-            let chunk_output_bytes = chunk_frames * meta.Channels as usize * std::mem::size_of::<i16>();
-            let chunk_input_bytes = chunk_frames * meta.Channels as usize * meta.BytesPerSample as usize;
-            let start_chunks =
-                (AUDIO_START_BUFFER_MILLISECONDS / AUDIO_CHUNK_MILLISECONDS).max(1);
+                ((meta.sample_rate as usize * AUDIO_CHUNK_MILLISECONDS) / 1000).max(1);
+            let chunk_output_bytes =
+                chunk_frames * meta.channels as usize * std::mem::size_of::<i16>();
+            let chunk_input_bytes =
+                chunk_frames * meta.channels as usize * meta.bytes_per_sample as usize;
+            let start_chunks = (AUDIO_START_BUFFER_MILLISECONDS / AUDIO_CHUNK_MILLISECONDS).max(1);
             let start_threshold_bytes = chunk_output_bytes * start_chunks;
             let target_chunks =
                 (AUDIO_TARGET_BUFFER_MILLISECONDS / AUDIO_CHUNK_MILLISECONDS).max(start_chunks);
@@ -188,16 +200,16 @@ mod win32_player {
 
             println!(
                 "[test_player audio] device_open rate={}Hz channels={} chunk_ms={} start_buffer_ms={}",
-                meta.SampleRate,
-                meta.Channels,
+                meta.sample_rate,
+                meta.channels,
                 AUDIO_CHUNK_MILLISECONDS,
                 AUDIO_START_BUFFER_MILLISECONDS
             );
 
             Ok(Self {
                 handle,
-                sample_rate: meta.SampleRate,
-                channels: meta.Channels,
+                sample_rate: meta.sample_rate,
+                channels: meta.channels,
                 chunk_input_bytes,
                 chunk_output_bytes,
                 start_threshold_bytes,
@@ -210,16 +222,16 @@ mod win32_player {
                 starving_since: None,
                 underflow_logged: false,
                 submitted_frames: 0,
-                last_source_time: meta.Time,
+                last_source_time: meta.time,
                 last_log: Instant::now(),
             })
         }
 
         fn same_format(&self, meta: &ExportedAudioMeta) -> bool {
-            self.sample_rate == meta.SampleRate
-                && self.channels == meta.Channels
-                && meta.BytesPerSample == 4
-                && meta.SampleFormat == AudioSampleFormat::F32 as i32
+            self.sample_rate == meta.sample_rate
+                && self.channels == meta.channels
+                && meta.bytes_per_sample == 4
+                && meta.sample_format == AudioSampleFormat::F32 as i32
         }
 
         fn shutdown(&mut self) {
@@ -288,7 +300,7 @@ mod win32_player {
                     self.bytes_to_ms(self.pending_pcm.len()),
                     self.bytes_to_ms(total_buffered_bytes),
                     self.started,
-                    meta.HasAudio
+                    meta.has_audio
                 );
                 self.last_log = Instant::now();
             }
@@ -349,11 +361,7 @@ mod win32_player {
                         .expect("pending pcm should contain enough bytes");
                 }
 
-                set_wavehdr_layout(
-                    &mut buffer.header,
-                    buffer.data.as_mut_ptr(),
-                    bytes_to_queue,
-                );
+                set_wavehdr_layout(&mut buffer.header, buffer.data.as_mut_ptr(), bytes_to_queue);
 
                 mm_check(
                     unsafe {
@@ -369,11 +377,7 @@ mod win32_player {
 
                 mm_check(
                     unsafe {
-                        waveOutWrite(
-                            self.handle,
-                            &mut buffer.header,
-                            size_of::<WAVEHDR>() as u32,
-                        )
+                        waveOutWrite(self.handle, &mut buffer.header, size_of::<WAVEHDR>() as u32)
                     },
                     "waveOutWrite",
                 )?;
@@ -413,14 +417,14 @@ mod win32_player {
                 set_wavehdr_layout(&mut buffer.header, buffer.data.as_mut_ptr(), 0);
             }
 
-            mm_check(unsafe { waveOutPause(self.handle) }, "waveOutPause after reset")?;
+            mm_check(
+                unsafe { waveOutPause(self.handle) },
+                "waveOutPause after reset",
+            )?;
             Ok(())
         }
 
-        fn append_converted_pcm16(
-            pending_pcm: &mut std::collections::VecDeque<u8>,
-            source: &[u8],
-        ) {
+        fn append_converted_pcm16(pending_pcm: &mut std::collections::VecDeque<u8>, source: &[u8]) {
             for chunk in source.chunks_exact(4) {
                 let sample = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
                 let pcm = if sample >= 1.0 {
@@ -459,9 +463,8 @@ mod win32_player {
         }
 
         fn bytes_to_frames(&self, bytes: usize) -> usize {
-            let bytes_per_second = self.sample_rate as usize
-                * self.channels as usize
-                * std::mem::size_of::<i16>();
+            let bytes_per_second =
+                self.sample_rate as usize * self.channels as usize * std::mem::size_of::<i16>();
             let bytes_per_frame = self.channels as usize * std::mem::size_of::<i16>();
             if bytes_per_second == 0 || bytes_per_frame == 0 {
                 0
@@ -484,8 +487,7 @@ mod win32_player {
             match position.wType {
                 TIME_SAMPLES => Some(unsafe { position.u.sample as u64 }),
                 TIME_MS => Some(
-                    (unsafe { position.u.ms as u64 })
-                        .saturating_mul(self.sample_rate as u64)
+                    (unsafe { position.u.ms as u64 }).saturating_mul(self.sample_rate as u64)
                         / 1000,
                 ),
                 _ => None,
@@ -499,14 +501,14 @@ mod win32_player {
         ) -> Result<(ExportedAudioMeta, usize), String> {
             let mut total_read_bytes = 0usize;
             let mut last_meta = ExportedAudioMeta {
-                SampleRate: self.sample_rate,
-                Channels: self.channels,
-                BytesPerSample: 4,
-                SampleFormat: AudioSampleFormat::F32 as i32,
-                BufferedBytes: 0,
-                Time: self.last_source_time,
-                FrameIndex: 0,
-                HasAudio: false,
+                sample_rate: self.sample_rate,
+                channels: self.channels,
+                bytes_per_sample: 4,
+                sample_format: AudioSampleFormat::F32 as i32,
+                buffered_bytes: 0,
+                time: self.last_source_time,
+                frame_index: 0,
+                has_audio: false,
             };
 
             loop {
@@ -524,26 +526,33 @@ mod win32_player {
 
                 let mut copied = 0usize;
                 {
-                    let mut export = shared.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-                    let meta = export.Meta();
+                    let mut export = shared
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                    let meta = export.meta();
                     last_meta = meta;
 
-                    if !meta.HasAudio || meta.BufferedBytes <= 0 {
+                    if !meta.has_audio || meta.buffered_bytes <= 0 {
                         break;
                     }
 
-                    if meta.Time + 0.250 < self.last_source_time {
+                    if meta.time + 0.250 < self.last_source_time {
                         println!(
                             "[test_player audio] timeline_reset old_pts={:.3} new_pts={:.3}",
-                            self.last_source_time, meta.Time
+                            self.last_source_time, meta.time
                         );
                         self.reset_stream_state()?;
                     }
 
-                    let need_output_bytes = desired_buffer_bytes.saturating_sub(total_buffered_bytes);
-                    let mut target_read = meta.BufferedBytes as usize;
+                    let need_output_bytes =
+                        desired_buffer_bytes.saturating_sub(total_buffered_bytes);
+                    let mut target_read = meta.buffered_bytes as usize;
                     target_read = target_read.min(MAX_AUDIO_READ_BYTES);
-                    target_read = target_read.min(need_output_bytes.saturating_mul(2).max(self.chunk_input_bytes));
+                    target_read = target_read.min(
+                        need_output_bytes
+                            .saturating_mul(2)
+                            .max(self.chunk_input_bytes),
+                    );
                     target_read -= target_read % std::mem::size_of::<f32>();
                     if target_read < std::mem::size_of::<f32>() {
                         break;
@@ -553,7 +562,7 @@ mod win32_player {
                         self.float_scratch.resize(target_read, 0);
                     }
 
-                    let copied_now = export.CopyTo(&mut self.float_scratch[..target_read]);
+                    let copied_now = export.copy_to(&mut self.float_scratch[..target_read]);
                     if copied_now > 0 {
                         copied = copied_now as usize;
                     }
@@ -565,7 +574,7 @@ mod win32_player {
 
                 total_read_bytes += copied;
                 Self::append_converted_pcm16(&mut self.pending_pcm, &self.float_scratch[..copied]);
-                self.last_source_time = last_meta.Time;
+                self.last_source_time = last_meta.time;
 
                 if copied < self.chunk_input_bytes {
                     break;
@@ -579,12 +588,15 @@ mod win32_player {
     struct WaveOutAudioOutput {
         stop: Arc<AtomicBool>,
         thread: Option<thread::JoinHandle<()>>,
+        validation: Arc<Mutex<AudioValidationState>>,
     }
 
     impl WaveOutAudioOutput {
         fn new(shared: SharedExportedAudioState, player: Arc<Mutex<Player>>) -> Self {
             let stop = Arc::new(AtomicBool::new(false));
             let thread_stop = stop.clone();
+            let validation = Arc::new(Mutex::new(AudioValidationState::default()));
+            let thread_validation = validation.clone();
 
             let thread = thread::spawn(move || {
                 let _timer_resolution = TimerResolutionGuard::new(1);
@@ -594,11 +606,17 @@ mod win32_player {
 
                 while !thread_stop.load(Ordering::SeqCst) {
                     let meta = {
-                        let export = shared.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-                        export.Meta()
+                        let export = shared
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner());
+                        export.meta()
                     };
 
-                    if meta.HasAudio && meta.SampleRate > 0 && meta.Channels > 0 {
+                    if meta.has_audio && meta.sample_rate > 0 && meta.channels > 0 {
+                        if let Ok(mut validation_state) = thread_validation.lock() {
+                            validation_state.meta_seen = true;
+                        }
+
                         let need_reopen = match device.as_ref() {
                             Some(existing) => !existing.same_format(&meta),
                             None => true,
@@ -611,6 +629,9 @@ mod win32_player {
 
                             match WaveOutAudioDevice::open(meta) {
                                 Ok(new_device) => {
+                                    if let Ok(mut validation_state) = thread_validation.lock() {
+                                        validation_state.device_opened = true;
+                                    }
                                     with_player_audio_sink_delay(
                                         &player,
                                         AUDIO_START_BUFFER_MILLISECONDS as f64 / 1000.0,
@@ -634,7 +655,14 @@ mod win32_player {
                             with_player_audio_sink_delay(&player, 0.0);
                             device = None;
                         } else {
-                            with_player_audio_sink_delay(&player, existing.buffered_delay_seconds());
+                            let buffered_delay_sec = existing.buffered_delay_seconds();
+                            with_player_audio_sink_delay(&player, buffered_delay_sec);
+                            if let Ok(mut validation_state) = thread_validation.lock() {
+                                validation_state.last_buffered_delay_sec = buffered_delay_sec;
+                                if existing.started {
+                                    validation_state.started = true;
+                                }
+                            }
                         }
                     } else {
                         with_player_audio_sink_delay(&player, 0.0);
@@ -652,7 +680,15 @@ mod win32_player {
             Self {
                 stop,
                 thread: Some(thread),
+                validation,
             }
+        }
+
+        fn snapshot(&self) -> AudioValidationState {
+            self.validation
+                .lock()
+                .map(|state| state.clone())
+                .unwrap_or_default()
         }
     }
 
@@ -695,7 +731,7 @@ mod win32_player {
 
     fn with_player_audio_sink_delay(player: &Arc<Mutex<Player>>, delay_sec: f64) {
         if let Ok(guard) = player.lock() {
-            guard.SetAudioSinkDelay(delay_sec);
+            guard.set_audio_sink_delay(delay_sec);
         }
     }
 
@@ -722,6 +758,9 @@ mod win32_player {
         let mut height = 720;
         let mut max_seconds = None;
         let mut loop_player = false;
+        let mut validate = false;
+        let mut require_audio = false;
+        let mut min_playback_seconds = 1.0;
 
         for arg in std::env::args().skip(1) {
             if arg == "--help" || arg == "-h" {
@@ -731,6 +770,16 @@ mod win32_player {
 
             if arg == "--loop" {
                 loop_player = true;
+                continue;
+            }
+
+            if arg == "--validate" {
+                validate = true;
+                continue;
+            }
+
+            if arg == "--require-audio" {
+                require_audio = true;
                 continue;
             }
 
@@ -761,11 +810,22 @@ mod win32_player {
                 continue;
             }
 
+            if let Some(v) = arg.strip_prefix("--min-playback-seconds=") {
+                min_playback_seconds = v
+                    .parse::<f64>()
+                    .map_err(|_| format!("无效的 --min-playback-seconds 参数: {v}"))?;
+                continue;
+            }
+
             return Err(format!("未知参数: {arg}"));
         }
 
         if width <= 0 || height <= 0 {
             return Err("width 和 height 必须大于 0".to_string());
+        }
+
+        if min_playback_seconds < 0.0 {
+            return Err("min_playback_seconds 不能小于 0".to_string());
         }
 
         Ok(Config {
@@ -774,28 +834,57 @@ mod win32_player {
             height,
             max_seconds,
             loop_player,
+            validate,
+            require_audio,
+            min_playback_seconds,
         })
     }
 
     fn print_usage() {
-        println!("Usage: test_player [--uri=<uri>] [--width=<w>] [--height=<h>] [--max-seconds=<n>] [--loop]");
+        println!(
+            "Usage: test_player [--uri=<uri>] [--width=<w>] [--height=<h>] [--max-seconds=<n>] [--loop] [--validate] [--require-audio] [--min-playback-seconds=<n>]"
+        );
         println!("默认使用 TestFiles 里的 sample video；也可直接传 rtsp:// 或 rtmp://");
     }
 
     fn sample_video_uri() -> String {
-        let candidates = [
-            "../TestFiles/SampleVideo_1280x720_10mb.mp4",
+        let relative_candidates = [
             "TestFiles/SampleVideo_1280x720_10mb.mp4",
+            "../TestFiles/SampleVideo_1280x720_10mb.mp4",
             "./TestFiles/SampleVideo_1280x720_10mb.mp4",
         ];
 
-        for candidate in candidates {
-            if std::path::Path::new(candidate).exists() {
-                return candidate.to_string();
+        let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+        candidates.extend(relative_candidates.iter().map(std::path::PathBuf::from));
+        candidates.push(
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("TestFiles")
+                .join("SampleVideo_1280x720_10mb.mp4"),
+        );
+
+        if let Ok(exe_path) = std::env::current_exe() {
+            if let Some(exe_dir) = exe_path.parent() {
+                candidates.push(
+                    exe_dir
+                        .join("..")
+                        .join("..")
+                        .join("TestFiles")
+                        .join("SampleVideo_1280x720_10mb.mp4"),
+                );
             }
         }
 
-        candidates[0].to_string()
+        for candidate in candidates {
+            if candidate.exists() {
+                return candidate.to_string_lossy().into_owned();
+            }
+        }
+
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("TestFiles")
+            .join("SampleVideo_1280x720_10mb.mp4")
+            .to_string_lossy()
+            .into_owned()
     }
 
     fn to_wstring(value: &str) -> Vec<u16> {
@@ -806,24 +895,26 @@ mod win32_player {
         shared: &SharedExportedFrameState,
         viewer_state: &Arc<Mutex<ViewerState>>,
     ) -> bool {
-        let shared = shared.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        let meta = shared.Meta();
-        if !meta.HasFrame {
+        let shared = shared
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let meta = shared.meta();
+        if !meta.has_frame {
             return false;
         }
 
         let mut viewer = viewer_state
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if meta.FrameIndex == viewer.last_frame_index {
+        if meta.frame_index == viewer.last_frame_index {
             return false;
         }
 
-        if meta.Width <= 0 || meta.Height <= 0 || meta.DataLength <= 0 {
+        if meta.width <= 0 || meta.height <= 0 || meta.data_len <= 0 {
             return false;
         }
 
-        let data_len = meta.DataLength as usize;
+        let data_len = meta.data_len as usize;
         if viewer.rgba_buffer.len() != data_len {
             viewer.rgba_buffer.resize(data_len, 0);
         }
@@ -831,7 +922,7 @@ mod win32_player {
             viewer.bgra_buffer.resize(data_len, 0);
         }
 
-        let copied = shared.CopyTo(&mut viewer.rgba_buffer);
+        let copied = shared.copy_to(&mut viewer.rgba_buffer);
         if copied <= 0 {
             return false;
         }
@@ -845,12 +936,12 @@ mod win32_player {
             viewer.bgra_buffer[offset + 3] = viewer.rgba_buffer[offset + 3];
         }
 
-        viewer.source_width = meta.Width;
-        viewer.source_height = meta.Height;
-        viewer.stride = meta.Stride;
+        viewer.source_width = meta.width;
+        viewer.source_height = meta.height;
+        viewer.stride = meta.stride;
         viewer.has_frame = true;
-        viewer.last_frame_index = meta.FrameIndex;
-        viewer.last_time_sec = meta.Time;
+        viewer.last_frame_index = meta.frame_index;
+        viewer.last_time_sec = meta.time;
         true
     }
 
@@ -921,11 +1012,13 @@ mod win32_player {
     }
 
     unsafe fn create_window(title: &str, width: i32, height: i32) -> Result<HWND, String> {
-        let instance = GetModuleHandleW(None).map_err(|e| format!("GetModuleHandleW failed: {e}"))?;
+        let instance =
+            GetModuleHandleW(None).map_err(|e| format!("GetModuleHandleW failed: {e}"))?;
         let class_name = to_wstring("RustAVTestPlayerWindow");
         let title_w = to_wstring(title);
 
-        let cursor = LoadCursorW(None, IDC_ARROW).map_err(|e| format!("LoadCursorW failed: {e}"))?;
+        let cursor =
+            LoadCursorW(None, IDC_ARROW).map_err(|e| format!("LoadCursorW failed: {e}"))?;
         let window_class = WNDCLASSW {
             style: CS_HREDRAW | CS_VREDRAW,
             lpfnWndProc: Some(window_proc),
@@ -999,22 +1092,25 @@ mod win32_player {
         let config = parse_args()?;
         let title = format!("RustAV Test Player - {}", config.uri);
 
-        Initialize(false);
+        initialize(false);
 
-        let (player, shared, audio_shared) =
-            Player::CreateWithFrameAndAudioExport(config.uri.clone(), config.width, config.height)
-                .ok_or_else(|| format!("创建播放器失败: {}", config.uri))?;
+        let (player, shared, audio_shared) = Player::create_with_frame_and_audio_export(
+            config.uri.clone(),
+            config.width,
+            config.height,
+        )
+        .ok_or_else(|| format!("创建播放器失败: {}", config.uri))?;
 
         let player = Arc::new(Mutex::new(player));
         let audio_output = WaveOutAudioOutput::new(audio_shared, player.clone());
 
         if config.loop_player {
             if let Ok(guard) = player.lock() {
-                guard.SetLoop(true);
+                guard.set_loop(true);
             }
         }
         if let Ok(guard) = player.lock() {
-            guard.Play();
+            guard.play();
         }
 
         let viewer_state = Arc::new(Mutex::new(ViewerState::new(
@@ -1069,9 +1165,64 @@ mod win32_player {
             thread::sleep(Duration::from_millis(15));
         }
 
+        let (has_frame, last_frame_index, last_time_sec) = {
+            let viewer = viewer_state
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            (
+                viewer.has_frame,
+                viewer.last_frame_index,
+                viewer.last_time_sec,
+            )
+        };
+        let audio_validation = audio_output.snapshot();
+
+        println!(
+            "[test_player summary] uri={} has_frame={} last_frame_index={} last_time_sec={:.3} audio_meta_seen={} audio_device_opened={} audio_started={} audio_buffer_delay_ms={:.1}",
+            config.uri,
+            has_frame,
+            last_frame_index,
+            last_time_sec,
+            audio_validation.meta_seen,
+            audio_validation.device_opened,
+            audio_validation.started,
+            audio_validation.last_buffered_delay_sec * 1000.0
+        );
+
+        let validation_error = if config.validate {
+            if !has_frame || last_frame_index < 0 {
+                Some(format!("验证失败: 未拉到任何视频帧 uri={}", config.uri))
+            } else if last_time_sec < config.min_playback_seconds {
+                Some(format!(
+                    "验证失败: 播放时间推进不足 uri={} last_time_sec={:.3} min_required={:.3}",
+                    config.uri, last_time_sec, config.min_playback_seconds
+                ))
+            } else if config.require_audio
+                && (!audio_validation.meta_seen
+                    || !audio_validation.device_opened
+                    || !audio_validation.started)
+            {
+                Some(format!(
+                    "验证失败: 音频未完成启动 uri={} meta_seen={} device_opened={} audio_started={}",
+                    config.uri,
+                    audio_validation.meta_seen,
+                    audio_validation.device_opened,
+                    audio_validation.started
+                ))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         drop(audio_output);
         drop(player);
-        Teardown();
+        teardown();
+        if let Some(error) = validation_error {
+            return Err(error);
+        }
+
         Ok(())
     }
 }

@@ -11,3 +11,14 @@ implement_ffmpeg_logic.py
 rollback_stable.py
 sync_all_logic.py
 write_supplemental_logic.py
+/UnityAVExample/[Ll]ibrary/
+/UnityAVExample/[Tt]emp/
+/UnityAVExample/[Oo]bj/
+/UnityAVExample/[Bb]uild/
+/UnityAVExample/[Bb]uilds/
+/UnityAVExample/[Ll]ogs/
+/UnityAVExample/[Uu]ser[Ss]ettings/
+/UnityAVExample/*.csproj
+/UnityAVExample/*.sln
+/UnityAVExample/*.user
+/UnityAVExample/*.userprefs

@@ -21,7 +21,10 @@ def main() -> int:
         script_dir / "build_ios_unity_plugin.py",
         script_dir / "build_unity_plugins.py",
         script_dir / "assemble_unity_plugins_bundle.py",
+        script_dir / "compute_release_version.py",
+        script_dir / "sync_unity_plugins_to_project.py",
         script_dir / "validate_ci_entrypoints.py",
+        script_dir / "zip_directory.py",
     ]
 
     run(
@@ -68,6 +71,12 @@ def main() -> int:
             "--platform",
             "all",
             "--dry-run",
+        ],
+        [
+            sys.executable,
+            str(script_dir / "compute_release_version.py"),
+            "--project-root",
+            str(project_root),
         ],
     ]
 

@@ -37,7 +37,10 @@ fn push_frame_updates_meta_and_copy_to_consumes_buffer() {
 
     let after_copy = state.Meta();
     assert!(after_copy.HasAudio);
-    assert_eq!(after_copy.BufferedBytes as usize, total_len - destination.len());
+    assert_eq!(
+        after_copy.BufferedBytes as usize,
+        total_len - destination.len()
+    );
     assert!(after_copy.Time > 1.25);
 }
 

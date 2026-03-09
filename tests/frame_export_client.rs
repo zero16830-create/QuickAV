@@ -6,7 +6,9 @@ use rustav_native::VideoFrame::VideoFrame;
 #[test]
 fn exported_frame_state_returns_zero_when_no_frame_is_available() {
     let (_, shared) = FrameExportClient::new(4, 2, PixelFormat::PIXEL_FORMAT_RGBA32);
-    let shared = shared.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let shared = shared
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let meta = shared.Meta();
 
     assert!(!meta.HasFrame);
@@ -31,7 +33,9 @@ fn frame_export_client_copies_rgba_frame_and_updates_meta() {
 
     client.OnFrameReady(&mut frame);
 
-    let shared = shared.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let shared = shared
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let meta = shared.Meta();
     assert!(meta.HasFrame);
     assert_eq!(meta.Width, 2);

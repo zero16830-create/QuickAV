@@ -1,8 +1,8 @@
-use rustav_native::IVideoClient::IVideoClient;
-use rustav_native::IVideoDescription::IVideoDescription;
-use rustav_native::PixelFormat::PixelFormat;
-use rustav_native::Player::Player;
-use rustav_native::VideoFrame::VideoFrame;
+use rustav_native::pixel_format::PixelFormat;
+use rustav_native::player::Player;
+use rustav_native::video_client::VideoClient;
+use rustav_native::video_description::VideoDescription;
+use rustav_native::video_frame::VideoFrame;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
@@ -10,7 +10,7 @@ use std::sync::{
 use std::thread;
 use std::time::{Duration, Instant};
 
-fn print_health(prefix: &str, snapshot: rustav_native::AVLibPlayer::AVLibPlayerHealthSnapshot) {
+fn print_health(prefix: &str, snapshot: rustav_native::av_lib_player::AvLibPlayerHealthSnapshot) {
     println!(
         "{} state={} runtime={} intent={} stop_reason={} source_conn={} connected={} playing={} packets={} timeouts={} reconnects={} vdrop={} adrop={} source_checking={} last_activity={:.3}s",
         prefix,
@@ -38,26 +38,26 @@ struct ProbeVideoClient {
     frames: Arc<AtomicUsize>,
 }
 
-impl IVideoDescription for ProbeVideoClient {
-    fn Width(&self) -> i32 {
+impl VideoDescription for ProbeVideoClient {
+    fn width(&self) -> i32 {
         self.width
     }
 
-    fn Height(&self) -> i32 {
+    fn height(&self) -> i32 {
         self.height
     }
 
-    fn Format(&self) -> PixelFormat {
+    fn format(&self) -> PixelFormat {
         self.format
     }
 }
 
-impl IVideoClient for ProbeVideoClient {
-    fn OnFrameReady(&mut self, _frame: &mut VideoFrame) {
+impl VideoClient for ProbeVideoClient {
+    fn on_frame_ready(&mut self, _frame: &mut VideoFrame) {
         self.frames.fetch_add(1, Ordering::Relaxed);
     }
 
-    fn Write(&mut self) {}
+    fn write(&mut self) {}
 }
 
 fn parse_arg<T: std::str::FromStr>(args: &[String], index: usize, default: T) -> T {
@@ -85,25 +85,25 @@ fn main() {
     let client = ProbeVideoClient {
         width,
         height,
-        format: PixelFormat::PIXEL_FORMAT_RGBA32,
+        format: PixelFormat::Rgba32,
         frames: frames.clone(),
     };
 
-    let mut player = match Player::Create(uri.clone(), Box::new(client)) {
+    let mut player = match Player::create(uri.clone(), Box::new(client)) {
         Some(p) => p,
         None => {
-            eprintln!("[FAIL] Player::Create failed for uri={}", uri);
+            eprintln!("[FAIL] Player::create failed for uri={}", uri);
             std::process::exit(1);
         }
     };
 
-    player.Play();
+    player.play();
     let start = Instant::now();
     let mut last_print = Instant::now();
     let mut first_frame_elapsed: Option<f64> = None;
 
     while start.elapsed().as_secs_f64() < run_seconds {
-        player.Write();
+        player.write();
         thread::sleep(Duration::from_millis(20));
 
         let count = frames.load(Ordering::Relaxed);
@@ -122,7 +122,7 @@ fn main() {
                 start.elapsed().as_secs_f64(),
                 count
             );
-            print_health("[rtsp_probe] health", player.HealthSnapshot());
+            print_health("[rtsp_probe] health", player.health_snapshot());
             last_print = Instant::now();
         }
     }
@@ -135,7 +135,7 @@ fn main() {
     if let Some(first_frame) = first_frame_elapsed {
         println!("[rtsp_probe] first_frame_final={:.3}s", first_frame);
     }
-    print_health("[rtsp_probe] final_health", player.HealthSnapshot());
+    print_health("[rtsp_probe] final_health", player.health_snapshot());
 
     if frame_count == 0 {
         eprintln!("[FAIL] no frame received");

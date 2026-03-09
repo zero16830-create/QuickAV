@@ -17,7 +17,17 @@ param(
 
     [string]$RtmpAvUri = "",
 
-    [int]$AvSeconds = 60
+    [int]$AvSeconds = 60,
+
+    [string]$UnityRtspUri = "",
+
+    [string]$UnityRtmpUri = "",
+
+    [int]$UnitySeconds = 600,
+
+    [double]$UnityAvSyncThresholdMs = 200,
+
+    [int]$UnityAvSyncWarmupSampleCount = 5
 )
 
 $ErrorActionPreference = "Stop"
@@ -137,6 +147,17 @@ if ($hasAvUris) {
     $summary.Add("av-soak=ok")
 } else {
     $summary.Add("av-soak=skipped")
+}
+
+$hasUnityUris = -not [string]::IsNullOrWhiteSpace($UnityRtspUri) -and -not [string]::IsNullOrWhiteSpace($UnityRtmpUri)
+if ($hasUnityUris) {
+    $null = Invoke-Step `
+        -Name "unity-soak" `
+        -Command "powershell -ExecutionPolicy Bypass -File scripts/qa/run_unity_validation.ps1 -RustAVRoot `"$resolvedRoot`" -UnityProjectRoot `"$resolvedRoot\UnityAVExample`" -RtspUri `"$UnityRtspUri`" -RtmpUri `"$UnityRtmpUri`" -ValidationSeconds $UnitySeconds -SkipFileCase -AvSyncThresholdMs $UnityAvSyncThresholdMs -AvSyncWarmupSampleCount $UnityAvSyncWarmupSampleCount -FailOnAvSyncThresholdExceeded -LogDir `"$resolvedLogDir\unity-soak`"" `
+        -LogPath (Join-Path $resolvedLogDir "unity-soak.log")
+    $summary.Add("unity-soak=ok")
+} else {
+    $summary.Add("unity-soak=skipped")
 }
 
 $summaryPath = Join-Path $resolvedLogDir "summary.txt"
