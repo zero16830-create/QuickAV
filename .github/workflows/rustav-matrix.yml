@@ -56,7 +56,8 @@ jobs:
           }
           "core_ref=$coreRef" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
-      - name: Validate RustAV-Core checkout credentials
+      - name: Resolve RustAV-Core auth mode
+        id: core-auth
         shell: pwsh
         run: |
           $hasApp = (-not [string]::IsNullOrWhiteSpace("${{ vars.RUSTAV_CORE_APP_ID }}")) -and (-not [string]::IsNullOrWhiteSpace("${{ secrets.RUSTAV_CORE_APP_PRIVATE_KEY }}"))
@@ -64,9 +65,14 @@ jobs:
           if (-not $hasApp -and -not $hasPat) {
             throw 'Configure vars.RUSTAV_CORE_APP_ID + secrets.RUSTAV_CORE_APP_PRIVATE_KEY, or secrets.RUSTAV_CORE_CLONE_TOKEN.'
           }
+          if ($hasApp) {
+            'mode=app' | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          } else {
+            'mode=pat' | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          }
 
       - name: Create RustAV-Core app token
-        if: ${{ vars.RUSTAV_CORE_APP_ID != '' && secrets.RUSTAV_CORE_APP_PRIVATE_KEY != '' }}
+        if: ${{ steps.core-auth.outputs.mode == 'app' }}
         id: core-app-token
         uses: actions/create-github-app-token@v2
         with:
@@ -76,13 +82,24 @@ jobs:
           repositories: |
             RustAV-Core
 
-      - name: Checkout RustAV-Core
+      - name: Checkout RustAV-Core with app token
+        if: ${{ steps.core-auth.outputs.mode == 'app' }}
         uses: actions/checkout@v4
         with:
           repository: ${{ env.CORE_REPOSITORY }}
           ref: ${{ steps.core-ref.outputs.core_ref }}
           path: RustAV-Core
-          token: ${{ steps.core-app-token.outputs.token != '' && steps.core-app-token.outputs.token || secrets.RUSTAV_CORE_CLONE_TOKEN }}
+          token: ${{ steps.core-app-token.outputs.token }}
+          persist-credentials: false
+
+      - name: Checkout RustAV-Core with PAT
+        if: ${{ steps.core-auth.outputs.mode == 'pat' }}
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.CORE_REPOSITORY }}
+          ref: ${{ steps.core-ref.outputs.core_ref }}
+          path: RustAV-Core
+          token: ${{ secrets.RUSTAV_CORE_CLONE_TOKEN }}
           persist-credentials: false
 
       - name: Setup Python
@@ -370,7 +387,8 @@ jobs:
           }
           "core_ref=$coreRef" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
-      - name: Validate RustAV-Core checkout credentials
+      - name: Resolve RustAV-Core auth mode
+        id: core-auth
         shell: pwsh
         run: |
           $hasApp = (-not [string]::IsNullOrWhiteSpace("${{ vars.RUSTAV_CORE_APP_ID }}")) -and (-not [string]::IsNullOrWhiteSpace("${{ secrets.RUSTAV_CORE_APP_PRIVATE_KEY }}"))
@@ -378,9 +396,14 @@ jobs:
           if (-not $hasApp -and -not $hasPat) {
             throw 'Configure vars.RUSTAV_CORE_APP_ID + secrets.RUSTAV_CORE_APP_PRIVATE_KEY, or secrets.RUSTAV_CORE_CLONE_TOKEN.'
           }
+          if ($hasApp) {
+            'mode=app' | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          } else {
+            'mode=pat' | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          }
 
       - name: Create RustAV-Core app token
-        if: ${{ vars.RUSTAV_CORE_APP_ID != '' && secrets.RUSTAV_CORE_APP_PRIVATE_KEY != '' }}
+        if: ${{ steps.core-auth.outputs.mode == 'app' }}
         id: core-app-token
         uses: actions/create-github-app-token@v2
         with:
@@ -390,13 +413,24 @@ jobs:
           repositories: |
             RustAV-Core
 
-      - name: Checkout RustAV-Core
+      - name: Checkout RustAV-Core with app token
+        if: ${{ steps.core-auth.outputs.mode == 'app' }}
         uses: actions/checkout@v4
         with:
           repository: ${{ env.CORE_REPOSITORY }}
           ref: ${{ steps.core-ref.outputs.core_ref }}
           path: RustAV-Core
-          token: ${{ steps.core-app-token.outputs.token != '' && steps.core-app-token.outputs.token || secrets.RUSTAV_CORE_CLONE_TOKEN }}
+          token: ${{ steps.core-app-token.outputs.token }}
+          persist-credentials: false
+
+      - name: Checkout RustAV-Core with PAT
+        if: ${{ steps.core-auth.outputs.mode == 'pat' }}
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.CORE_REPOSITORY }}
+          ref: ${{ steps.core-ref.outputs.core_ref }}
+          path: RustAV-Core
+          token: ${{ secrets.RUSTAV_CORE_CLONE_TOKEN }}
           persist-credentials: false
 
       - name: Setup Rust
@@ -466,7 +500,8 @@ jobs:
           }
           "core_ref=$coreRef" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
-      - name: Validate RustAV-Core checkout credentials
+      - name: Resolve RustAV-Core auth mode
+        id: core-auth
         shell: pwsh
         run: |
           $hasApp = (-not [string]::IsNullOrWhiteSpace("${{ vars.RUSTAV_CORE_APP_ID }}")) -and (-not [string]::IsNullOrWhiteSpace("${{ secrets.RUSTAV_CORE_APP_PRIVATE_KEY }}"))
@@ -474,9 +509,14 @@ jobs:
           if (-not $hasApp -and -not $hasPat) {
             throw 'Configure vars.RUSTAV_CORE_APP_ID + secrets.RUSTAV_CORE_APP_PRIVATE_KEY, or secrets.RUSTAV_CORE_CLONE_TOKEN.'
           }
+          if ($hasApp) {
+            'mode=app' | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          } else {
+            'mode=pat' | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          }
 
       - name: Create RustAV-Core app token
-        if: ${{ vars.RUSTAV_CORE_APP_ID != '' && secrets.RUSTAV_CORE_APP_PRIVATE_KEY != '' }}
+        if: ${{ steps.core-auth.outputs.mode == 'app' }}
         id: core-app-token
         uses: actions/create-github-app-token@v2
         with:
@@ -486,13 +526,24 @@ jobs:
           repositories: |
             RustAV-Core
 
-      - name: Checkout RustAV-Core
+      - name: Checkout RustAV-Core with app token
+        if: ${{ steps.core-auth.outputs.mode == 'app' }}
         uses: actions/checkout@v4
         with:
           repository: ${{ env.CORE_REPOSITORY }}
           ref: ${{ steps.core-ref.outputs.core_ref }}
           path: RustAV-Core
-          token: ${{ steps.core-app-token.outputs.token != '' && steps.core-app-token.outputs.token || secrets.RUSTAV_CORE_CLONE_TOKEN }}
+          token: ${{ steps.core-app-token.outputs.token }}
+          persist-credentials: false
+
+      - name: Checkout RustAV-Core with PAT
+        if: ${{ steps.core-auth.outputs.mode == 'pat' }}
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.CORE_REPOSITORY }}
+          ref: ${{ steps.core-ref.outputs.core_ref }}
+          path: RustAV-Core
+          token: ${{ secrets.RUSTAV_CORE_CLONE_TOKEN }}
           persist-credentials: false
 
       - name: Setup Rust
