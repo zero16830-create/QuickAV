@@ -40,14 +40,17 @@ fn state() -> &'static Mutex<DebugState> {
     DEBUG_STATE.get_or_init(|| Mutex::new(DebugState::default()))
 }
 
-#[no_mangle]
-pub extern "C" fn Initialize(cache_logs: bool) {
+pub fn Initialize(cache_logs: bool) {
     let mut s = state().lock().unwrap_or_else(|p| p.into_inner());
     s.cache_logs = cache_logs;
 }
 
 #[no_mangle]
-pub extern "C" fn Teardown() {
+pub extern "system" fn RustAV_DebugInitialize(cache_logs: bool) {
+    Initialize(cache_logs);
+}
+
+pub fn Teardown() {
     let mut s = state().lock().unwrap_or_else(|p| p.into_inner());
     s.log_callback = None;
     s.warning_callback = None;
@@ -58,7 +61,11 @@ pub extern "C" fn Teardown() {
 }
 
 #[no_mangle]
-pub extern "C" fn DeregisterAllCallbacks() {
+pub extern "system" fn RustAV_DebugTeardown() {
+    Teardown();
+}
+
+pub fn DeregisterAllCallbacks() {
     let mut s = state().lock().unwrap_or_else(|p| p.into_inner());
     s.log_callback = None;
     s.warning_callback = None;
@@ -66,7 +73,11 @@ pub extern "C" fn DeregisterAllCallbacks() {
 }
 
 #[no_mangle]
-pub extern "C" fn RegisterLogCallback(callback: DebugCallback) {
+pub extern "system" fn RustAV_DebugClearCallbacks() {
+    DeregisterAllCallbacks();
+}
+
+pub fn RegisterLogCallback(callback: DebugCallback) {
     let mut s = state().lock().unwrap_or_else(|p| p.into_inner());
 
     if callback as usize == 0 {
@@ -86,7 +97,11 @@ pub extern "C" fn RegisterLogCallback(callback: DebugCallback) {
 }
 
 #[no_mangle]
-pub extern "C" fn RegisterWarningCallback(callback: DebugCallback) {
+pub extern "system" fn RustAV_DebugRegisterLogCallback(callback: DebugCallback) {
+    RegisterLogCallback(callback);
+}
+
+pub fn RegisterWarningCallback(callback: DebugCallback) {
     let mut s = state().lock().unwrap_or_else(|p| p.into_inner());
 
     if callback as usize == 0 {
@@ -106,7 +121,11 @@ pub extern "C" fn RegisterWarningCallback(callback: DebugCallback) {
 }
 
 #[no_mangle]
-pub extern "C" fn RegisterErrorCallback(callback: DebugCallback) {
+pub extern "system" fn RustAV_DebugRegisterWarningCallback(callback: DebugCallback) {
+    RegisterWarningCallback(callback);
+}
+
+pub fn RegisterErrorCallback(callback: DebugCallback) {
     let mut s = state().lock().unwrap_or_else(|p| p.into_inner());
 
     if callback as usize == 0 {
@@ -123,6 +142,11 @@ pub extern "C" fn RegisterErrorCallback(callback: DebugCallback) {
             }
         }
     }
+}
+
+#[no_mangle]
+pub extern "system" fn RustAV_DebugRegisterErrorCallback(callback: DebugCallback) {
+    RegisterErrorCallback(callback);
 }
 
 pub struct Debug;

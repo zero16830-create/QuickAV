@@ -1,16 +1,12 @@
 #![allow(non_snake_case)]
 
 use crate::AVLibAudioDecoder::AVLibAudioDecoder;
-use crate::AVLibFileSource::AVLibFileSource;
-use crate::AVLibRTMPSource::AVLibRTMPSource;
-use crate::AVLibRTSPSource::AVLibRTSPSource;
 use crate::AVLibVideoDecoder::AVLibVideoDecoder;
 use crate::IAVLibDecoderVisitor::IAVLibDecoderVisitor;
 use crate::IAVLibSource::IAVLibSource;
 use crate::IVideoDescription::IVideoDescription;
 use crate::VideoFrame::VideoFrame;
 use ffmpeg_next::ffi::AVMediaType;
-use std::any::Any;
 use std::sync::{Arc, Mutex};
 
 pub trait AVLibDecoderTrait {
@@ -29,48 +25,6 @@ pub struct AVLibDecoder {
 }
 
 impl AVLibDecoder {
-    fn CreateVideoDecoder(
-        source: &dyn IAVLibSource,
-        stream_index: i32,
-    ) -> Option<ffmpeg_next::decoder::Video> {
-        let any_source = source as &dyn Any;
-
-        if let Some(file_source) = any_source.downcast_ref::<AVLibFileSource>() {
-            return file_source.VideoDecoder(stream_index);
-        }
-
-        if let Some(rtsp_source) = any_source.downcast_ref::<AVLibRTSPSource>() {
-            return rtsp_source.VideoDecoder(stream_index);
-        }
-
-        if let Some(rtmp_source) = any_source.downcast_ref::<AVLibRTMPSource>() {
-            return rtmp_source.VideoDecoder(stream_index);
-        }
-
-        None
-    }
-
-    fn CreateAudioDecoder(
-        source: &dyn IAVLibSource,
-        stream_index: i32,
-    ) -> Option<ffmpeg_next::decoder::Audio> {
-        let any_source = source as &dyn Any;
-
-        if let Some(file_source) = any_source.downcast_ref::<AVLibFileSource>() {
-            return file_source.AudioDecoder(stream_index);
-        }
-
-        if let Some(rtsp_source) = any_source.downcast_ref::<AVLibRTSPSource>() {
-            return rtsp_source.AudioDecoder(stream_index);
-        }
-
-        if let Some(rtmp_source) = any_source.downcast_ref::<AVLibRTMPSource>() {
-            return rtmp_source.AudioDecoder(stream_index);
-        }
-
-        None
-    }
-
     pub fn CreateVideo(
         source: Arc<Mutex<Box<dyn IAVLibSource + Send>>>,
         required_video_desc: &dyn IVideoDescription,
@@ -96,7 +50,7 @@ impl AVLibDecoder {
                     s.TimeBase(stream_index),
                     s.FrameRate(stream_index),
                     s.FrameDuration(stream_index),
-                    Self::CreateVideoDecoder(s.as_ref(), stream_index),
+                    s.CreateVideoDecoder(stream_index),
                 )
             } else {
                 continue;
@@ -151,10 +105,7 @@ impl AVLibDecoder {
         }?;
 
         let (time_base, decoder_opt) = if let Ok(s) = source.lock() {
-            (
-                s.TimeBase(stream_index),
-                Self::CreateAudioDecoder(s.as_ref(), stream_index),
-            )
+            (s.TimeBase(stream_index), s.CreateAudioDecoder(stream_index))
         } else {
             return None;
         };
@@ -182,9 +133,39 @@ impl AVLibDecoder {
         }
     }
 
+    pub fn NeedsRecreate(&self) -> bool {
+        if let Ok(decoder) = self._decoder.lock() {
+            decoder.NeedsRecreate()
+        } else {
+            false
+        }
+    }
+
     pub fn FlushRealtimeFrames(&self) {
         if let Ok(decoder) = self._decoder.lock() {
             decoder.FlushRealtimeFrames();
+        }
+    }
+
+    pub fn FlushFrames(&self) {
+        if let Ok(decoder) = self._decoder.lock() {
+            decoder.FlushFrames();
+        }
+    }
+
+    pub fn DroppedFrameCount(&self) -> u64 {
+        if let Ok(decoder) = self._decoder.lock() {
+            decoder.DroppedFrameCount()
+        } else {
+            0
+        }
+    }
+
+    pub fn ActualSourceVideoSize(&self) -> Option<(i32, i32)> {
+        if let Ok(decoder) = self._decoder.lock() {
+            decoder.ActualSourceVideoSize()
+        } else {
+            None
         }
     }
 

@@ -53,17 +53,6 @@ fn TypeToAVMediaType(media_type: Type) -> AVMediaType {
     }
 }
 
-fn AVMediaTypeToType(media_type: AVMediaType) -> Type {
-    match media_type {
-        AVMediaType::AVMEDIA_TYPE_VIDEO => Type::Video,
-        AVMediaType::AVMEDIA_TYPE_AUDIO => Type::Audio,
-        AVMediaType::AVMEDIA_TYPE_DATA => Type::Data,
-        AVMediaType::AVMEDIA_TYPE_SUBTITLE => Type::Subtitle,
-        AVMediaType::AVMEDIA_TYPE_ATTACHMENT => Type::Attachment,
-        _ => Type::Unknown,
-    }
-}
-
 pub fn BestStreamIndexEx(
     input: &Input,
     media_type: AVMediaType,

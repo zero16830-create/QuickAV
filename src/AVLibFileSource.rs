@@ -7,7 +7,9 @@ use crate::AVLibUtil::{
     FFMPEG_OPEN_LOCK,
 };
 use crate::FixedSizeQueue::FixedSizeQueue;
-use crate::IAVLibSource::{AVLibStreamInfo, IAVLibSource};
+use crate::IAVLibSource::{
+    AVLibSourceConnectionState, AVLibSourceRuntimeStats, AVLibStreamInfo, IAVLibSource,
+};
 use ffmpeg_next::ffi::AVMediaType;
 use ffmpeg_next::media::Type;
 use std::sync::{
@@ -489,8 +491,8 @@ impl IAVLibSource for AVLibFileSource {
         // File source connects in constructor.
     }
 
-    fn IsConnected(&self) -> bool {
-        true
+    fn ConnectionState(&self) -> AVLibSourceConnectionState {
+        AVLibSourceConnectionState::Connected
     }
 
     fn Duration(&self) -> f64 {
@@ -555,6 +557,20 @@ impl IAVLibSource for AVLibFileSource {
 
     fn Recycle(&mut self, packet: AVLibPacket) {
         self._recycler.lock().unwrap().Recycle(packet);
+    }
+
+    fn CreateVideoDecoder(&self, streamIndex: i32) -> Option<ffmpeg_next::decoder::Video> {
+        self.VideoDecoder(streamIndex)
+    }
+
+    fn CreateAudioDecoder(&self, streamIndex: i32) -> Option<ffmpeg_next::decoder::Audio> {
+        self.AudioDecoder(streamIndex)
+    }
+
+    fn RuntimeStats(&self) -> AVLibSourceRuntimeStats {
+        let mut stats = AVLibSourceRuntimeStats::empty();
+        stats.connection_state = self.ConnectionState();
+        stats
     }
 }
 

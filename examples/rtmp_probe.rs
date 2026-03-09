@@ -10,6 +10,27 @@ use std::sync::{
 use std::thread;
 use std::time::{Duration, Instant};
 
+fn print_health(prefix: &str, snapshot: rustav_native::AVLibPlayer::AVLibPlayerHealthSnapshot) {
+    println!(
+        "{} state={} runtime={} intent={} stop_reason={} source_conn={} connected={} playing={} packets={} timeouts={} reconnects={} vdrop={} adrop={} source_checking={} last_activity={:.3}s",
+        prefix,
+        snapshot.state,
+        snapshot.runtime_state,
+        snapshot.playback_intent,
+        snapshot.stop_reason,
+        snapshot.source_connection_state,
+        snapshot.is_connected,
+        snapshot.is_playing,
+        snapshot.source_packet_count,
+        snapshot.source_timeout_count,
+        snapshot.source_reconnect_count,
+        snapshot.video_frame_drop_count,
+        snapshot.audio_frame_drop_count,
+        snapshot.source_is_checking_connection,
+        snapshot.source_last_activity_age_sec
+    );
+}
+
 struct ProbeVideoClient {
     width: i32,
     height: i32,
@@ -101,6 +122,7 @@ fn main() {
                 start.elapsed().as_secs_f64(),
                 count
             );
+            print_health("[rtmp_probe] health", player.HealthSnapshot());
             last_print = Instant::now();
         }
     }
@@ -113,6 +135,7 @@ fn main() {
     if let Some(first_frame) = first_frame_elapsed {
         println!("[rtmp_probe] first_frame_final={:.3}s", first_frame);
     }
+    print_health("[rtmp_probe] final_health", player.HealthSnapshot());
 
     if frame_count == 0 {
         eprintln!("[FAIL] no frame received");

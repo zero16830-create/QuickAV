@@ -1,4 +1,9 @@
 /target
+/artifacts/
+/_tmp_ios_manifest_test/
+/ios-staticlib/target/
+/scripts/ci/__pycache__/
+*.pyc
 fix_*.py
 inject_*.py
 generate_rust_skeleton.py

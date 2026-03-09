@@ -146,6 +146,80 @@ cargo run --example test_player -- --uri=rtmp://127.0.0.1:1935/mystream_av --wid
 3. 稳态同步偏差已压到 `±60ms` 级别
 4. 该结果足以作为后续 Unity / iOS / Android 真机验证的基线版本
 
+## 2026-03-09 补充验收
+
+### 静态回归
+
+执行：
+
+```powershell
+cargo check --lib --examples
+cargo test --lib --tests
+cargo check --manifest-path ios-staticlib/Cargo.toml --lib
+python scripts/ci/validate_ci_entrypoints.py
+dotnet msbuild D:/TestProject/Video/UnityAV/Solution/UnityAV/UnityAV.csproj `
+  /t:Build `
+  /p:Configuration=Debug `
+  /p:TargetFrameworkVersion=v4.8 `
+  /p:PostBuildEvent=
+```
+
+结果：
+
+1. Rust 库 / 示例编译通过
+2. 单元测试与集成测试通过
+3. iOS staticlib manifest 检查通过
+4. CI 入口 dry-run 通过
+5. Unity 静态编译通过，产物仍为 `UnityAV.dll`
+
+### 60 秒 RTSP / RTMP AV soak
+
+为了保证本地 AV 地址稳定存在，本轮先使用本机 `mediamtx + ffmpeg` 重新推送：
+
+1. `rtsp://127.0.0.1:8554/mystream_av`
+2. `rtmp://127.0.0.1:1935/mystream_av`
+
+执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/qa/run_av_soak.ps1 `
+  -RtspUri rtsp://127.0.0.1:8554/mystream_av `
+  -RtmpUri rtmp://127.0.0.1:1935/mystream_av `
+  -Seconds 60 `
+  -LogDir artifacts/av-soak-60s-live
+```
+
+结果：
+
+1. RTSP
+   - `first_video_final = 0.467s`
+   - `first_audio_final = 0.244s`
+   - `frames = 1126`
+   - `audio_bytes = 19873792`
+   - `packets = 3667`
+   - `timeouts = 0`
+   - `reconnects = 0`
+   - `vdrop = 0`
+   - `adrop = 0`
+2. RTMP
+   - `first_video_final = 1.257s`
+   - `first_audio_final = 0.244s`
+   - `frames = 1049`
+   - `audio_bytes = 19136512`
+   - `packets = 3534`
+   - `timeouts = 0`
+   - `reconnects = 0`
+   - `vdrop = 0`
+   - `adrop = 0`
+
+### 更新结论
+
+补充验收完成后，在本报告覆盖的范围内，判断更新为：
+
+1. ABI、供应链、运行时状态机和 QA 门槛已经形成闭环
+2. Windows native 播放主链、Unity 静态绑定、RTSP/RTMP AV 实时链路都具备稳定发布基线
+3. 在当前约束范围内，可以将 RustAV 定义为“达到企业生产级工程基线”
+
 ## 风险与边界
 
 当前仍保留以下边界：

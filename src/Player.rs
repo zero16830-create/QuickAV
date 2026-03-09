@@ -1,13 +1,15 @@
 #![allow(non_snake_case)]
 #![allow(non_camel_case_types)]
 
-use crate::AVLibPlayer::AVLibPlayer;
-use crate::AudioExportState::{ExportedAudioState, SharedExportedAudioState};
-use crate::FrameExportClient::{FrameExportClient, SharedExportedFrameState};
+use crate::AVLibPlayer::{AVLibPlayer, AVLibPlayerControlError, AVLibPlayerHealthSnapshot};
+use crate::AudioExportState::SharedExportedAudioState;
+use crate::FrameExportClient::SharedExportedFrameState;
+use crate::IAVLibSource::AVLibStreamInfo;
 use crate::IVideoClient::IVideoClient;
 use crate::Logging::Debug::Debug;
+use crate::OutputFactory::{OutputFactory, PlayerOutputBundle};
 use crate::PixelFormat::PixelFormat;
-use crate::TextureClient::TextureClient;
+use crate::SourceFactory::SourceFactory;
 use std::os::raw::c_void;
 
 pub struct Player {
@@ -16,11 +18,8 @@ pub struct Player {
 }
 
 impl Player {
-    pub const RTSP_PREFIX: &'static str = "rtsp://";
-    pub const RTMP_PREFIX: &'static str = "rtmp://";
-
     fn ValidateUri(uri: &str) -> bool {
-        if !uri.contains(Self::RTSP_PREFIX) && !uri.contains(Self::RTMP_PREFIX) {
+        if !SourceFactory::IsRemoteUri(uri) {
             if std::fs::File::open(uri).is_err() {
                 Debug::LogError(&format!("File does not exist at given uri: {}", uri));
                 return false;
@@ -32,6 +31,21 @@ impl Player {
 
     pub fn Create(uri: String, video_client: Box<dyn IVideoClient + Send>) -> Option<Self> {
         Self::CreateWithOptionalAudioExport(uri, video_client, None)
+    }
+
+    fn CreateWithOutputBundle(
+        uri: String,
+        output: PlayerOutputBundle,
+    ) -> Option<(
+        Self,
+        Option<SharedExportedFrameState>,
+        Option<SharedExportedAudioState>,
+    )> {
+        let frame_export = output.frame_export.clone();
+        let audio_export = output.audio_export.clone();
+        let player =
+            Self::CreateWithOptionalAudioExport(uri, output.video_client, audio_export.clone())?;
+        Some((player, frame_export, audio_export))
     }
 
     fn CreateWithOptionalAudioExport(
@@ -50,8 +64,9 @@ impl Player {
             f => f,
         };
 
+        let source = SourceFactory::Create(uri.clone());
         let av_player = AVLibPlayer::new(
-            uri.clone(),
+            source,
             target_width,
             target_height,
             target_format,
@@ -66,8 +81,8 @@ impl Player {
     }
 
     pub fn CreateWithTexture(uri: String, target_texture: *mut c_void) -> Option<Self> {
-        let client = TextureClient::new(target_texture)?;
-        Self::Create(uri, Box::new(client))
+        let (player, _, _) = Self::CreateWithOutputBundle(uri, OutputFactory::CreateTexture(target_texture)?)?;
+        Some(player)
     }
 
     pub fn CreateWithFrameExport(
@@ -76,8 +91,8 @@ impl Player {
         target_height: i32,
     ) -> Option<(Self, SharedExportedFrameState)> {
         let (player, frame_shared, _) =
-            Self::CreateWithFrameAndAudioExport(uri, target_width, target_height)?;
-        Some((player, frame_shared))
+            Self::CreateWithOutputBundle(uri, OutputFactory::CreateFrameExport(target_width, target_height)?)?;
+        Some((player, frame_shared?,))
     }
 
     pub fn CreateWithFrameAndAudioExport(
@@ -85,19 +100,11 @@ impl Player {
         target_width: i32,
         target_height: i32,
     ) -> Option<(Self, SharedExportedFrameState, SharedExportedAudioState)> {
-        if target_width <= 0 || target_height <= 0 {
-            Debug::LogError("Player::CreateWithFrameAndAudioExport - target size must be positive");
-            return None;
-        }
-
-        let (client, shared) = FrameExportClient::new(
-            target_width,
-            target_height,
-            PixelFormat::PIXEL_FORMAT_RGBA32,
-        );
-        let audio_shared = ExportedAudioState::Shared();
-        let player = Self::CreateWithOptionalAudioExport(uri, Box::new(client), Some(audio_shared.clone()))?;
-        Some((player, shared, audio_shared))
+        let (player, frame_shared, audio_shared) = Self::CreateWithOutputBundle(
+            uri,
+            OutputFactory::CreateFrameAndAudioExport(target_width, target_height)?,
+        )?;
+        Some((player, frame_shared?, audio_shared?))
     }
 
     pub fn Write(&mut self) {
@@ -116,8 +123,8 @@ impl Player {
         self._avlib_player.CanSeek()
     }
 
-    pub fn Seek(&self, time: f64) {
-        self._avlib_player.Seek(time);
+    pub fn Seek(&self, time: f64) -> Result<(), AVLibPlayerControlError> {
+        self._avlib_player.Seek(time)
     }
 
     pub fn CanLoop(&self) -> bool {
@@ -150,5 +157,13 @@ impl Player {
 
     pub fn SetAudioSinkDelay(&self, delay_sec: f64) {
         self._avlib_player.SetAudioSinkDelay(delay_sec);
+    }
+
+    pub fn HealthSnapshot(&self) -> AVLibPlayerHealthSnapshot {
+        self._avlib_player.HealthSnapshot()
+    }
+
+    pub fn StreamInfo(&self, stream_index: i32) -> Option<AVLibStreamInfo> {
+        self._avlib_player.StreamInfo(stream_index)
     }
 }

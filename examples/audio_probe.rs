@@ -1,7 +1,10 @@
 use rustav_native::Logging::Debug::{Initialize, Teardown};
 use rustav_native::{
-    CopyAudioPCM, CreatePlayerPullRGBA, GetAudioMetaPCM, GetFrameMetaRGBA, Play, ReleasePlayer,
-    RustAVAudioMeta, RustAVFrameMeta, UpdatePlayer,
+    RustAV_PlayerCopyAudioPCM, RustAV_PlayerCreatePullRGBA, RustAV_PlayerGetAudioMetaPCM,
+    RustAV_PlayerGetFrameMetaRGBA, RustAV_PlayerGetHealthSnapshotV2, RustAV_PlayerPlay,
+    RustAV_PlayerRelease, RustAV_PlayerUpdate, RustAVAudioMeta, RustAVFrameMeta,
+    RustAVPlayerHealthSnapshotV2, RUSTAV_PLAYER_HEALTH_SNAPSHOT_V2_SIZE,
+    RUSTAV_PLAYER_HEALTH_SNAPSHOT_V2_VERSION,
 };
 use std::ffi::CString;
 use std::thread;
@@ -56,6 +59,63 @@ fn empty_audio_meta() -> RustAVAudioMeta {
     }
 }
 
+fn empty_health_snapshot_v2() -> RustAVPlayerHealthSnapshotV2 {
+    RustAVPlayerHealthSnapshotV2 {
+        struct_size: RUSTAV_PLAYER_HEALTH_SNAPSHOT_V2_SIZE,
+        struct_version: RUSTAV_PLAYER_HEALTH_SNAPSHOT_V2_VERSION,
+        state: 0,
+        runtime_state: 0,
+        playback_intent: 0,
+        stop_reason: 0,
+        source_connection_state: 0,
+        is_connected: 0,
+        is_playing: 0,
+        is_realtime: 0,
+        can_seek: 0,
+        is_looping: 0,
+        stream_count: 0,
+        video_decoder_count: 0,
+        has_audio_decoder: 0,
+        duration_sec: 0.0,
+        current_time_sec: 0.0,
+        external_time_sec: 0.0,
+        audio_time_sec: 0.0,
+        audio_presented_time_sec: 0.0,
+        audio_sink_delay_sec: 0.0,
+        video_sync_compensation_sec: 0.0,
+        connect_attempt_count: 0,
+        video_decoder_recreate_count: 0,
+        audio_decoder_recreate_count: 0,
+        video_frame_drop_count: 0,
+        audio_frame_drop_count: 0,
+        source_packet_count: 0,
+        source_timeout_count: 0,
+        source_reconnect_count: 0,
+        source_is_checking_connection: 0,
+        source_last_activity_age_sec: 0.0,
+    }
+}
+
+fn print_health(prefix: &str, snapshot: &RustAVPlayerHealthSnapshotV2) {
+    println!(
+        "{} state={} runtime={} intent={} stop_reason={} source_conn={} connected={} packets={} timeouts={} reconnects={} vdrop={} adrop={} check={} last_activity={:.3}s",
+        prefix,
+        snapshot.state,
+        snapshot.runtime_state,
+        snapshot.playback_intent,
+        snapshot.stop_reason,
+        snapshot.source_connection_state,
+        snapshot.is_connected,
+        snapshot.source_packet_count,
+        snapshot.source_timeout_count,
+        snapshot.source_reconnect_count,
+        snapshot.video_frame_drop_count,
+        snapshot.audio_frame_drop_count,
+        snapshot.source_is_checking_connection,
+        snapshot.source_last_activity_age_sec
+    );
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let uri = args.get(1).cloned().unwrap_or_else(sample_video_uri);
@@ -73,14 +133,14 @@ fn main() {
         }
     };
 
-    let id = CreatePlayerPullRGBA(uri_c.as_ptr(), width, height);
+    let id = RustAV_PlayerCreatePullRGBA(uri_c.as_ptr(), width, height);
     if id < 0 {
-        eprintln!("[FAIL] CreatePlayerPullRGBA failed for uri={}", uri);
+        eprintln!("[FAIL] RustAV_PlayerCreatePullRGBA failed for uri={}", uri);
         std::process::exit(1);
     }
 
-    if Play(id) != 0 {
-        let _ = ReleasePlayer(id);
+    if RustAV_PlayerPlay(id) != 0 {
+        let _ = RustAV_PlayerRelease(id);
         eprintln!("[FAIL] Play failed for id={}", id);
         std::process::exit(1);
     }
@@ -95,11 +155,11 @@ fn main() {
     let mut first_audio_elapsed: Option<f64> = None;
 
     while start.elapsed().as_secs_f64() < run_seconds {
-        let _ = UpdatePlayer(id);
+        let _ = RustAV_PlayerUpdate(id);
         thread::sleep(Duration::from_millis(20));
 
         let mut frame_meta = empty_frame_meta();
-        if GetFrameMetaRGBA(id, &mut frame_meta as *mut RustAVFrameMeta) > 0
+        if RustAV_PlayerGetFrameMetaRGBA(id, &mut frame_meta as *mut RustAVFrameMeta) > 0
             && frame_meta.frame_index != last_frame_index
         {
             last_frame_index = frame_meta.frame_index;
@@ -117,11 +177,12 @@ fn main() {
         }
 
         let mut audio_meta = empty_audio_meta();
-        let audio_ready = GetAudioMetaPCM(id, &mut audio_meta as *mut RustAVAudioMeta);
+        let audio_ready = RustAV_PlayerGetAudioMetaPCM(id, &mut audio_meta as *mut RustAVAudioMeta);
         if audio_ready > 0 && audio_meta.buffered_bytes > 0 {
             let read_len = (audio_meta.buffered_bytes as usize).min(64 * 1024);
             let mut buffer = vec![0u8; read_len];
-            let copied = CopyAudioPCM(id, buffer.as_mut_ptr(), buffer.len() as i32);
+            let copied =
+                RustAV_PlayerCopyAudioPCM(id, buffer.as_mut_ptr(), buffer.len() as i32);
             if copied > 0 {
                 audio_bytes += copied as usize;
                 audio_chunks += 1;
@@ -140,6 +201,11 @@ fn main() {
         }
 
         if last_print.elapsed().as_secs_f64() >= 1.0 {
+            let mut health = empty_health_snapshot_v2();
+            let _ = RustAV_PlayerGetHealthSnapshotV2(
+                id,
+                &mut health as *mut RustAVPlayerHealthSnapshotV2,
+            );
             println!(
                 "[audio_probe] elapsed={:.2}s frames={} audio_bytes={} audio_chunks={}",
                 start.elapsed().as_secs_f64(),
@@ -147,11 +213,18 @@ fn main() {
                 audio_bytes,
                 audio_chunks
             );
+            print_health("[audio_probe] health", &health);
             last_print = Instant::now();
         }
     }
 
-    let _ = ReleasePlayer(id);
+    let mut final_health = empty_health_snapshot_v2();
+    let _ = RustAV_PlayerGetHealthSnapshotV2(
+        id,
+        &mut final_health as *mut RustAVPlayerHealthSnapshotV2,
+    );
+
+    let _ = RustAV_PlayerRelease(id);
     Teardown();
 
     println!(
@@ -164,6 +237,7 @@ fn main() {
     if let Some(first_audio) = first_audio_elapsed {
         println!("[audio_probe] first_audio_final={:.3}s", first_audio);
     }
+    print_health("[audio_probe] final_health", &final_health);
 
     if frame_count == 0 || audio_bytes == 0 {
         eprintln!(

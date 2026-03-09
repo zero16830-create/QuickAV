@@ -3,10 +3,7 @@
 use crate::AudioExportState::SharedExportedAudioState;
 use crate::AVLibAudioDecoder::AVLibAudioDecoder;
 use crate::AVLibDecoder::AVLibDecoder;
-use crate::AVLibFileSource::AVLibFileSource;
-use crate::AVLibRTMPSource::AVLibRTMPSource;
-use crate::AVLibRTSPSource::AVLibRTSPSource;
-use crate::IAVLibSource::IAVLibSource;
+use crate::IAVLibSource::{AVLibSourceConnectionState, AVLibStreamInfo, IAVLibSource};
 use crate::IFrameVisitor::IFrameVisitor;
 use crate::IVideoClient::IVideoClient;
 use crate::Logging::Debug::Debug;
@@ -14,13 +11,80 @@ use crate::PixelFormat::PixelFormat;
 use crate::PlaybackClock::PlaybackClock;
 use crate::VideoFrame::VideoFrame;
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering},
     Arc, Condvar, Mutex, Once,
 };
 use std::thread;
 use std::time::{Duration, Instant};
 
 static PROCESS_WIDE_INIT: Once = Once::new();
+
+#[repr(i32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AVLibPlayerState {
+    Idle = 0,
+    Connecting = 1,
+    Ready = 2,
+    Playing = 3,
+    Paused = 4,
+    Shutdown = 5,
+    Ended = 6,
+}
+
+#[repr(i32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AVLibPlayerPlaybackIntent {
+    Stopped = 0,
+    PlayRequested = 1,
+}
+
+#[repr(i32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AVLibPlayerStopReason {
+    None = 0,
+    UserStop = 1,
+    EndOfStream = 2,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AVLibPlayerControlError {
+    InvalidState,
+    UnsupportedOperation,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct AVLibPlayerHealthSnapshot {
+    pub state: i32,
+    pub runtime_state: i32,
+    pub playback_intent: i32,
+    pub stop_reason: i32,
+    pub source_connection_state: i32,
+    pub is_connected: bool,
+    pub is_playing: bool,
+    pub is_realtime: bool,
+    pub can_seek: bool,
+    pub is_looping: bool,
+    pub stream_count: i32,
+    pub video_decoder_count: i32,
+    pub has_audio_decoder: bool,
+    pub duration_sec: f64,
+    pub current_time_sec: f64,
+    pub external_time_sec: f64,
+    pub audio_time_sec: f64,
+    pub audio_presented_time_sec: f64,
+    pub audio_sink_delay_sec: f64,
+    pub video_sync_compensation_sec: f64,
+    pub connect_attempt_count: u64,
+    pub video_decoder_recreate_count: u64,
+    pub audio_decoder_recreate_count: u64,
+    pub video_frame_drop_count: u64,
+    pub audio_frame_drop_count: u64,
+    pub source_packet_count: u64,
+    pub source_timeout_count: u64,
+    pub source_reconnect_count: u64,
+    pub source_is_checking_connection: bool,
+    pub source_last_activity_age_sec: f64,
+}
 
 pub struct AVLibPlayer {
     pub _source: Arc<Mutex<Box<dyn IAVLibSource + Send>>>,
@@ -30,8 +94,13 @@ pub struct AVLibPlayer {
     _video_client: Arc<Mutex<Box<dyn IVideoClient + Send>>>,
     _clock: Arc<Mutex<PlaybackClock>>,
     _videoSyncCompensationSec: Arc<Mutex<f64>>,
+    _state: Arc<AtomicI32>,
     _playing: Arc<AtomicBool>,
+    _stopReason: Arc<AtomicI32>,
     _looping: Arc<AtomicBool>,
+    _connectAttemptCount: Arc<AtomicU64>,
+    _videoDecoderRecreateCount: Arc<AtomicU64>,
+    _audioDecoderRecreateCount: Arc<AtomicU64>,
     _stayAlive: Arc<AtomicBool>,
     _killMutex: Arc<Mutex<()>>,
     _killCondition: Arc<Condvar>,
@@ -39,8 +108,6 @@ pub struct AVLibPlayer {
 }
 
 impl AVLibPlayer {
-    const RTSP_PREFIX: &'static str = "rtsp://";
-    const RTMP_PREFIX: &'static str = "rtmp://";
     const CONNECT_RETRY_MILLISECONDS: u64 = 200;
     const REALTIME_POLL_MILLISECONDS: u64 = 5;
     const FILE_AUDIO_LEAD_SECONDS: f64 = 0.100;
@@ -50,6 +117,84 @@ impl AVLibPlayer {
     const REALTIME_SYNC_COMPENSATION_GAIN: f64 = 0.12;
     const REALTIME_SYNC_COMPENSATION_MAX_SEC: f64 = 0.150;
     const REALTIME_SYNC_COMPENSATION_SNAP_SEC: f64 = 0.120;
+
+    fn DecodeState(raw: i32) -> AVLibPlayerState {
+        match raw {
+            x if x == AVLibPlayerState::Connecting as i32 => AVLibPlayerState::Connecting,
+            x if x == AVLibPlayerState::Ready as i32 => AVLibPlayerState::Ready,
+            x if x == AVLibPlayerState::Playing as i32 => AVLibPlayerState::Playing,
+            x if x == AVLibPlayerState::Paused as i32 => AVLibPlayerState::Paused,
+            x if x == AVLibPlayerState::Shutdown as i32 => AVLibPlayerState::Shutdown,
+            x if x == AVLibPlayerState::Ended as i32 => AVLibPlayerState::Ended,
+            _ => AVLibPlayerState::Idle,
+        }
+    }
+
+    fn LoadState(state: &Arc<AtomicI32>) -> AVLibPlayerState {
+        Self::DecodeState(state.load(Ordering::SeqCst))
+    }
+
+    fn StoreState(state: &Arc<AtomicI32>, next: AVLibPlayerState) {
+        if Self::LoadState(state) != AVLibPlayerState::Shutdown {
+            state.store(next as i32, Ordering::SeqCst);
+        }
+    }
+
+    fn LoadPlaybackIntent(playing: &Arc<AtomicBool>) -> AVLibPlayerPlaybackIntent {
+        if playing.load(Ordering::SeqCst) {
+            AVLibPlayerPlaybackIntent::PlayRequested
+        } else {
+            AVLibPlayerPlaybackIntent::Stopped
+        }
+    }
+
+    fn LoadStopReason(stop_reason: &Arc<AtomicI32>) -> AVLibPlayerStopReason {
+        match stop_reason.load(Ordering::SeqCst) {
+            x if x == AVLibPlayerStopReason::UserStop as i32 => AVLibPlayerStopReason::UserStop,
+            x if x == AVLibPlayerStopReason::EndOfStream as i32 => {
+                AVLibPlayerStopReason::EndOfStream
+            }
+            _ => AVLibPlayerStopReason::None,
+        }
+    }
+
+    fn StoreStopReason(
+        stop_reason: &Arc<AtomicI32>,
+        next: AVLibPlayerStopReason,
+        state: &Arc<AtomicI32>,
+    ) {
+        if Self::LoadState(state) != AVLibPlayerState::Shutdown {
+            stop_reason.store(next as i32, Ordering::SeqCst);
+        }
+    }
+
+    fn ResolvePublicState(
+        runtime_state: AVLibPlayerState,
+        playback_intent: AVLibPlayerPlaybackIntent,
+        stop_reason: AVLibPlayerStopReason,
+    ) -> AVLibPlayerState {
+        match runtime_state {
+            AVLibPlayerState::Shutdown => AVLibPlayerState::Shutdown,
+            AVLibPlayerState::Connecting => AVLibPlayerState::Connecting,
+            AVLibPlayerState::Idle => AVLibPlayerState::Idle,
+            AVLibPlayerState::Ready | AVLibPlayerState::Paused | AVLibPlayerState::Playing => {
+                if playback_intent == AVLibPlayerPlaybackIntent::PlayRequested {
+                    AVLibPlayerState::Playing
+                } else if stop_reason == AVLibPlayerStopReason::EndOfStream {
+                    AVLibPlayerState::Ended
+                } else if stop_reason == AVLibPlayerStopReason::UserStop {
+                    AVLibPlayerState::Paused
+                } else {
+                    AVLibPlayerState::Ready
+                }
+            }
+            AVLibPlayerState::Ended => AVLibPlayerState::Ended,
+        }
+    }
+
+    fn CanAcceptSeek(runtime_state: AVLibPlayerState, can_seek: bool) -> bool {
+        can_seek && matches!(runtime_state, AVLibPlayerState::Ready | AVLibPlayerState::Paused | AVLibPlayerState::Playing | AVLibPlayerState::Ended)
+    }
 
     fn ResetRealtimeSyncCompensation(compensation: &Arc<Mutex<f64>>) {
         if let Ok(mut guard) = compensation.lock() {
@@ -128,21 +273,33 @@ impl AVLibPlayer {
 
     fn EnsureConnection(
         source: &Arc<Mutex<Box<dyn IAVLibSource + Send>>>,
+        state: &Arc<AtomicI32>,
+        connect_attempt_count: &Arc<AtomicU64>,
         stay_alive: &Arc<AtomicBool>,
         kill_mutex: &Arc<Mutex<()>>,
         kill_condition: &Arc<Condvar>,
     ) -> bool {
         while stay_alive.load(Ordering::SeqCst) {
-            let connected = if let Ok(mut s) = source.lock() {
-                if !s.IsConnected() {
+            let connection_state = if let Ok(mut s) = source.lock() {
+                let current_state = s.ConnectionState();
+                if !current_state.IsConnected() {
+                    Self::StoreState(state, AVLibPlayerState::Connecting);
+                    if !matches!(
+                        current_state,
+                        AVLibSourceConnectionState::Connecting
+                            | AVLibSourceConnectionState::Reconnecting
+                    ) {
+                        connect_attempt_count.fetch_add(1, Ordering::SeqCst);
+                    }
                     s.Connect();
                 }
-                s.IsConnected()
+                s.ConnectionState()
             } else {
-                false
+                AVLibSourceConnectionState::Disconnected
             };
 
-            if connected {
+            if connection_state.IsConnected() {
+                Self::StoreState(state, AVLibPlayerState::Ready);
                 return true;
             }
 
@@ -218,7 +375,7 @@ impl AVLibPlayer {
     }
 
     pub fn new(
-        uri: String,
+        source_box: Box<dyn IAVLibSource + Send>,
         target_width: i32,
         target_height: i32,
         target_format: PixelFormat,
@@ -227,18 +384,19 @@ impl AVLibPlayer {
     ) -> Option<Self> {
         Self::ProcessWideInitialize();
 
-        let source_box: Box<dyn IAVLibSource + Send> = if uri.contains(Self::RTSP_PREFIX) {
-            Box::new(AVLibRTSPSource::new(uri.clone()))
-        } else if uri.contains(Self::RTMP_PREFIX) {
-            Box::new(AVLibRTMPSource::new(uri.clone()))
-        } else {
-            Box::new(AVLibFileSource::new(uri.clone()))
-        };
-
         let source = Arc::new(Mutex::new(source_box));
         if let Ok(mut s) = source.lock() {
             s.Connect();
         }
+        let initial_state = if let Ok(s) = source.lock() {
+            if s.IsConnected() {
+                AVLibPlayerState::Ready
+            } else {
+                AVLibPlayerState::Connecting
+            }
+        } else {
+            AVLibPlayerState::Idle
+        };
 
         let mut player = Self {
             _source: source.clone(),
@@ -248,8 +406,13 @@ impl AVLibPlayer {
             _video_client: Arc::new(Mutex::new(video_client)),
             _clock: Arc::new(Mutex::new(PlaybackClock::new())),
             _videoSyncCompensationSec: Arc::new(Mutex::new(0.0)),
+            _state: Arc::new(AtomicI32::new(initial_state as i32)),
             _playing: Arc::new(AtomicBool::new(false)),
+            _stopReason: Arc::new(AtomicI32::new(AVLibPlayerStopReason::None as i32)),
             _looping: Arc::new(AtomicBool::new(false)),
+            _connectAttemptCount: Arc::new(AtomicU64::new(0)),
+            _videoDecoderRecreateCount: Arc::new(AtomicU64::new(0)),
+            _audioDecoderRecreateCount: Arc::new(AtomicU64::new(0)),
             _stayAlive: Arc::new(AtomicBool::new(true)),
             _killMutex: Arc::new(Mutex::new(())),
             _killCondition: Arc::new(Condvar::new()),
@@ -288,7 +451,12 @@ impl AVLibPlayer {
         let t_audio_decoder = player._audio_decoder.clone();
         let t_audio_export = player._audio_export.clone();
         let t_video_sync_compensation = player._videoSyncCompensationSec.clone();
+        let t_state = player._state.clone();
         let t_looping = player._looping.clone();
+        let t_stop_reason = player._stopReason.clone();
+        let t_connect_attempt_count = player._connectAttemptCount.clone();
+        let t_video_decoder_recreate_count = player._videoDecoderRecreateCount.clone();
+        let t_audio_decoder_recreate_count = player._audioDecoderRecreateCount.clone();
         let t_video_client = player._video_client.clone();
         let t_kill_mutex = player._killMutex.clone();
         let t_kill_condition = player._killCondition.clone();
@@ -327,6 +495,8 @@ impl AVLibPlayer {
             while t_stay_alive.load(Ordering::SeqCst) {
                 let connected = Self::EnsureConnection(
                     &t_source,
+                    &t_state,
+                    &t_connect_attempt_count,
                     &t_stay_alive,
                     &t_kill_mutex,
                     &t_kill_condition,
@@ -343,7 +513,21 @@ impl AVLibPlayer {
                     }
                 };
 
-                if decoders_snapshot.is_empty() {
+                let should_recreate_video =
+                    decoders_snapshot.iter().any(|decoder| decoder.NeedsRecreate());
+
+                if decoders_snapshot.is_empty() || should_recreate_video {
+                    if should_recreate_video {
+                        t_video_decoder_recreate_count.fetch_add(1, Ordering::SeqCst);
+                        Debug::Log(
+                            "[AVLibPlayer] recreate_video_decoders source stream shape changed",
+                        );
+                        for decoder in decoders_snapshot.iter() {
+                            decoder.FlushFrames();
+                        }
+                        Self::ResetRealtimeSyncCompensation(&t_video_sync_compensation);
+                    }
+
                     let created = AVLibDecoder::CreateVideo(t_source.clone(), &target_desc);
                     if created.is_empty() {
                         if !Self::WaitOrInterrupted(
@@ -386,6 +570,7 @@ impl AVLibPlayer {
                         .unwrap_or(false);
 
                     if should_recreate {
+                        t_audio_decoder_recreate_count.fetch_add(1, Ordering::SeqCst);
                         Debug::Log(
                             "[AVLibPlayer] recreate_audio_decoder source stream shape changed",
                         );
@@ -521,6 +706,11 @@ impl AVLibPlayer {
                             }
                         } else {
                             t_playing.store(false, Ordering::SeqCst);
+                            Self::StoreStopReason(
+                                &t_stop_reason,
+                                AVLibPlayerStopReason::EndOfStream,
+                                &t_state,
+                            );
                             if let Ok(mut clock) = t_clock.lock() {
                                 clock.OnPause();
                             }
@@ -552,7 +742,12 @@ impl AVLibPlayer {
     }
 
     pub fn Play(&self) {
-                let was_playing = self._playing.swap(true, Ordering::SeqCst);
+        Self::StoreStopReason(
+            &self._stopReason,
+            AVLibPlayerStopReason::None,
+            &self._state,
+        );
+        let was_playing = self._playing.swap(true, Ordering::SeqCst);
         if !was_playing {
             if self.IsRealtime() {
                 let decoders = if let Ok(decoders) = self._decoders.lock() {
@@ -592,6 +787,11 @@ impl AVLibPlayer {
 
     pub fn Stop(&self) {
         self._playing.store(false, Ordering::SeqCst);
+        Self::StoreStopReason(
+            &self._stopReason,
+            AVLibPlayerStopReason::UserStop,
+            &self._state,
+        );
         if let Ok(mut clock) = self._clock.lock() {
             clock.OnPause();
         }
@@ -605,13 +805,19 @@ impl AVLibPlayer {
         }
     }
 
-    pub fn Seek(&self, mut to: f64) {
-        if !self._playing.load(Ordering::SeqCst) || !self.CanSeek() {
-            return;
+    pub fn Seek(&self, mut to: f64) -> Result<(), AVLibPlayerControlError> {
+        let can_seek = self.CanSeek();
+        let runtime_state = Self::LoadState(&self._state);
+        if !Self::CanAcceptSeek(runtime_state, can_seek) {
+            return if can_seek {
+                Err(AVLibPlayerControlError::InvalidState)
+            } else {
+                Err(AVLibPlayerControlError::UnsupportedOperation)
+            };
         }
 
         let duration = self.Duration();
-        if to > duration {
+        if duration >= 0.0 && to > duration {
             to = duration;
         } else if to < 0.0 {
             to = 0.0;
@@ -625,7 +831,18 @@ impl AVLibPlayer {
         if let Ok(mut clock) = self._clock.lock() {
             clock.Seek(to);
         }
+        Self::StoreStopReason(
+            &self._stopReason,
+            AVLibPlayerStopReason::None,
+            &self._state,
+        );
         Self::ResetRealtimeSyncCompensation(&self._videoSyncCompensationSec);
+
+        if let Ok(decoders) = self._decoders.lock() {
+            for decoder in decoders.iter() {
+                decoder.FlushFrames();
+            }
+        }
 
         if let Ok(audio_guard) = self._audio_decoder.lock() {
             if let Some(audio_decoder) = audio_guard.as_ref() {
@@ -639,6 +856,8 @@ impl AVLibPlayer {
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
             guard.Flush();
         }
+
+        Ok(())
     }
 
     pub fn CanLoop(&self) -> bool {
@@ -678,6 +897,172 @@ impl AVLibPlayer {
         }
     }
 
+    pub fn HealthSnapshot(&self) -> AVLibPlayerHealthSnapshot {
+        let (
+            is_connected,
+            stream_count,
+            is_realtime,
+            can_seek,
+            duration_sec,
+            source_packet_count,
+            source_timeout_count,
+            source_reconnect_count,
+            source_is_checking_connection,
+            source_connection_state,
+            source_last_activity_age_sec,
+        ) =
+            if let Ok(source) = self._source.lock() {
+                let source_stats = source.RuntimeStats();
+                (
+                    source_stats.connection_state.IsConnected(),
+                    source.StreamCount(),
+                    source.IsRealtime(),
+                    source.CanSeek(),
+                    source.Duration(),
+                    source_stats.packet_count,
+                    source_stats.timeout_count,
+                    source_stats.reconnect_count,
+                    source_stats.is_checking_connection,
+                    source_stats.connection_state as i32,
+                    source_stats.last_activity_age_sec,
+                )
+            } else {
+                (
+                    false,
+                    0,
+                    false,
+                    false,
+                    -1.0,
+                    0,
+                    0,
+                    0,
+                    false,
+                    AVLibSourceConnectionState::Disconnected as i32,
+                    -1.0,
+                )
+            };
+
+        let video_decoder_count = self
+            ._decoders
+            .lock()
+            .map(|decoders| decoders.len() as i32)
+            .unwrap_or(0);
+
+        let has_audio_decoder = self
+            ._audio_decoder
+            .lock()
+            .map(|decoder| decoder.is_some())
+            .unwrap_or(false);
+        let audio_frame_drop_count = self
+            ._audio_decoder
+            .lock()
+            .map(|decoder| {
+                decoder
+                    .as_ref()
+                    .map(|audio_decoder| audio_decoder.DroppedFrameCount())
+                    .unwrap_or(0)
+            })
+            .unwrap_or(0);
+        let video_frame_drop_count = self
+            ._decoders
+            .lock()
+            .map(|decoders| decoders.iter().map(|decoder| decoder.DroppedFrameCount()).sum())
+            .unwrap_or(0);
+
+        let (
+            current_time_sec,
+            external_time_sec,
+            audio_time_sec,
+            audio_presented_time_sec,
+            audio_sink_delay_sec,
+        ) = if let Ok(clock) = self._clock.lock() {
+            (
+                clock.MasterTime(),
+                clock.ExternalTime(),
+                clock.AudioTime().unwrap_or(-1.0),
+                clock.AudioPresentedTime().unwrap_or(-1.0),
+                clock.AudioSinkDelay(),
+            )
+        } else {
+            (0.0, 0.0, -1.0, -1.0, 0.0)
+        };
+
+        let video_sync_compensation_sec = self
+            ._videoSyncCompensationSec
+            .lock()
+            .map(|value| *value)
+            .unwrap_or(0.0);
+
+        let runtime_state = Self::LoadState(&self._state);
+        let playback_intent = Self::LoadPlaybackIntent(&self._playing);
+        let stop_reason = Self::LoadStopReason(&self._stopReason);
+        let public_state = Self::ResolvePublicState(runtime_state, playback_intent, stop_reason);
+
+        AVLibPlayerHealthSnapshot {
+            state: public_state as i32,
+            runtime_state: runtime_state as i32,
+            playback_intent: playback_intent as i32,
+            stop_reason: stop_reason as i32,
+            source_connection_state,
+            is_connected,
+            is_playing: self.IsPlaying(),
+            is_realtime,
+            can_seek,
+            is_looping: self.IsLooping(),
+            stream_count,
+            video_decoder_count,
+            has_audio_decoder,
+            duration_sec,
+            current_time_sec,
+            external_time_sec,
+            audio_time_sec,
+            audio_presented_time_sec,
+            audio_sink_delay_sec,
+            video_sync_compensation_sec,
+            connect_attempt_count: self._connectAttemptCount.load(Ordering::SeqCst),
+            video_decoder_recreate_count: self._videoDecoderRecreateCount.load(Ordering::SeqCst),
+            audio_decoder_recreate_count: self._audioDecoderRecreateCount.load(Ordering::SeqCst),
+            video_frame_drop_count,
+            audio_frame_drop_count,
+            source_packet_count,
+            source_timeout_count,
+            source_reconnect_count,
+            source_is_checking_connection,
+            source_last_activity_age_sec,
+        }
+    }
+
+    pub fn StreamInfo(&self, stream_index: i32) -> Option<AVLibStreamInfo> {
+        let Ok(source) = self._source.lock() else {
+            return None;
+        };
+
+        if stream_index < 0 || stream_index >= source.StreamCount() {
+            return None;
+        }
+
+        let mut info = source.Stream(stream_index);
+        drop(source);
+
+        if info.codec_type == ffmpeg_next::ffi::AVMediaType::AVMEDIA_TYPE_VIDEO
+            && (info.width <= 0 || info.height <= 0)
+        {
+            if let Ok(decoders) = self._decoders.lock() {
+                for decoder in decoders.iter() {
+                    if decoder._streamIndex == stream_index {
+                        if let Some((width, height)) = decoder.ActualSourceVideoSize() {
+                            info.width = width;
+                            info.height = height;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        Some(info)
+    }
+
     pub fn IsPlaying(&self) -> bool {
         self._playing.load(Ordering::SeqCst)
     }
@@ -693,10 +1078,71 @@ impl AVLibPlayer {
 
 impl Drop for AVLibPlayer {
     fn drop(&mut self) {
+        self._state
+            .store(AVLibPlayerState::Shutdown as i32, Ordering::SeqCst);
         self._stayAlive.store(false, Ordering::SeqCst);
         self._killCondition.notify_all();
         if let Some(t) = self._thread.take() {
             let _ = t.join();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        AVLibPlayer, AVLibPlayerPlaybackIntent, AVLibPlayerState, AVLibPlayerStopReason,
+    };
+    use std::sync::{
+        atomic::{AtomicI32, Ordering},
+        Arc,
+    };
+
+    #[test]
+    fn StoreState_does_not_override_shutdown() {
+        let state = Arc::new(AtomicI32::new(AVLibPlayerState::Shutdown as i32));
+        AVLibPlayer::StoreState(&state, AVLibPlayerState::Ready);
+        assert_eq!(
+            state.load(Ordering::SeqCst),
+            AVLibPlayerState::Shutdown as i32
+        );
+    }
+
+    #[test]
+    fn ResolvePublicState_returns_ended_after_eof() {
+        let resolved = AVLibPlayer::ResolvePublicState(
+            AVLibPlayerState::Ready,
+            AVLibPlayerPlaybackIntent::Stopped,
+            AVLibPlayerStopReason::EndOfStream,
+        );
+        assert_eq!(resolved, AVLibPlayerState::Ended);
+    }
+
+    #[test]
+    fn ResolvePublicState_returns_paused_after_user_stop() {
+        let resolved = AVLibPlayer::ResolvePublicState(
+            AVLibPlayerState::Ready,
+            AVLibPlayerPlaybackIntent::Stopped,
+            AVLibPlayerStopReason::UserStop,
+        );
+        assert_eq!(resolved, AVLibPlayerState::Paused);
+    }
+
+    #[test]
+    fn ResolvePublicState_returns_playing_while_play_requested() {
+        let resolved = AVLibPlayer::ResolvePublicState(
+            AVLibPlayerState::Ready,
+            AVLibPlayerPlaybackIntent::PlayRequested,
+            AVLibPlayerStopReason::None,
+        );
+        assert_eq!(resolved, AVLibPlayerState::Playing);
+    }
+
+    #[test]
+    fn CanAcceptSeek_allows_ready_and_ended_states() {
+        assert!(AVLibPlayer::CanAcceptSeek(AVLibPlayerState::Ready, true));
+        assert!(AVLibPlayer::CanAcceptSeek(AVLibPlayerState::Ended, true));
+        assert!(!AVLibPlayer::CanAcceptSeek(AVLibPlayerState::Connecting, true));
+        assert!(!AVLibPlayer::CanAcceptSeek(AVLibPlayerState::Ready, false));
     }
 }

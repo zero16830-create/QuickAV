@@ -3,7 +3,9 @@
 use crate::AVLibPacket::AVLibPacket;
 use crate::AVLibPacketRecycler::AVLibPacketRecycler;
 use crate::FixedSizeQueue::FixedSizeQueue;
-use crate::IAVLibSource::{AVLibStreamInfo, IAVLibSource};
+use crate::IAVLibSource::{
+    AVLibSourceConnectionState, AVLibSourceRuntimeStats, AVLibStreamInfo, IAVLibSource,
+};
 use crate::Logging::Debug::Debug;
 use ffmpeg_next::codec::{self, packet::Flags as PacketFlags};
 use ffmpeg_next::ffi::{av_mallocz, AVMediaType, AV_CODEC_FLAG_LOW_DELAY, AV_INPUT_BUFFER_PADDING_SIZE};
@@ -16,7 +18,7 @@ use retina::client::{
 use retina::codec::{CodecItem, ParametersRef};
 use std::ptr;
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicU64, Ordering},
     Arc, Mutex,
 };
 use std::thread;
@@ -58,7 +60,9 @@ pub struct AVLibRTSPSource {
     _lastActivityTicks: Arc<Mutex<Option<Instant>>>,
     _checkingConnection: Arc<AtomicBool>,
     _checkStartTicks: Arc<Mutex<Option<Instant>>>,
-    _packetCount: Arc<Mutex<u64>>,
+    _packetCount: Arc<AtomicU64>,
+    _timeoutCount: Arc<AtomicU64>,
+    _reconnectCount: Arc<AtomicU64>,
     _connectRequested: Arc<AtomicBool>,
     _recycler: Arc<Mutex<AVLibPacketRecycler>>,
 }
@@ -107,7 +111,9 @@ impl AVLibRTSPSource {
         let last_activity_ticks = Arc::new(Mutex::new(None));
         let checking_connection = Arc::new(AtomicBool::new(false));
         let check_start_ticks = Arc::new(Mutex::new(None));
-        let packet_count = Arc::new(Mutex::new(0_u64));
+        let packet_count = Arc::new(AtomicU64::new(0));
+        let timeout_count = Arc::new(AtomicU64::new(0));
+        let reconnect_count = Arc::new(AtomicU64::new(0));
         let connect_requested = Arc::new(AtomicBool::new(true));
         let recycler = Arc::new(Mutex::new(AVLibPacketRecycler::new(30)));
 
@@ -125,6 +131,8 @@ impl AVLibRTSPSource {
             _checkingConnection: checking_connection.clone(),
             _checkStartTicks: check_start_ticks.clone(),
             _packetCount: packet_count.clone(),
+            _timeoutCount: timeout_count.clone(),
+            _reconnectCount: reconnect_count.clone(),
             _connectRequested: connect_requested.clone(),
             _recycler: recycler.clone(),
         };
@@ -158,11 +166,13 @@ impl AVLibRTSPSource {
                     is_connected.clone(),
                     last_activity_ticks.clone(),
                     packet_count.clone(),
+                    timeout_count.clone(),
                     checking_connection.clone(),
                     recycler.clone(),
                 ));
 
                 if let Err(err) = run_result {
+                    reconnect_count.fetch_add(1, Ordering::SeqCst);
                     Debug::LogWarning(&format!("AVLibRTSPSource::RunRetinaLoop - {}", err));
                 }
 
@@ -498,7 +508,8 @@ impl AVLibRTSPSource {
         audio_config: Arc<Mutex<Option<RetinaAudioConfig>>>,
         is_connected: Arc<AtomicBool>,
         last_activity_ticks: Arc<Mutex<Option<Instant>>>,
-        packet_count: Arc<Mutex<u64>>,
+        packet_count: Arc<AtomicU64>,
+        _timeout_count: Arc<AtomicU64>,
         checking_connection: Arc<AtomicBool>,
         recycler: Arc<Mutex<AVLibPacketRecycler>>,
     ) -> Result<(), String> {
@@ -678,9 +689,7 @@ impl AVLibRTSPSource {
                         continue;
                     }
 
-                    if let Ok(mut count) = packet_count.lock() {
-                        *count += 1;
-                    }
+                    packet_count.fetch_add(1, Ordering::SeqCst);
                     if let Ok(mut last) = last_activity_ticks.lock() {
                         *last = Some(Instant::now());
                     }
@@ -725,9 +734,7 @@ impl AVLibRTSPSource {
                         continue;
                     }
 
-                    if let Ok(mut count) = packet_count.lock() {
-                        *count += 1;
-                    }
+                    packet_count.fetch_add(1, Ordering::SeqCst);
                     if let Ok(mut last) = last_activity_ticks.lock() {
                         *last = Some(Instant::now());
                     }
@@ -853,12 +860,31 @@ impl IAVLibSource for AVLibRTSPSource {
         }
     }
 
-    fn IsConnected(&self) -> bool {
-        self._isConnected.load(Ordering::SeqCst)
+    fn ConnectionState(&self) -> AVLibSourceConnectionState {
+        if self._isConnected.load(Ordering::SeqCst) {
+            if self._checkingConnection.load(Ordering::SeqCst) {
+                AVLibSourceConnectionState::Checking
+            } else {
+                AVLibSourceConnectionState::Connected
+            }
+        } else if self._connectRequested.load(Ordering::SeqCst) {
+            if self._reconnectCount.load(Ordering::SeqCst) > 0
+                || self._timeoutCount.load(Ordering::SeqCst) > 0
+            {
+                AVLibSourceConnectionState::Reconnecting
+            } else {
+                AVLibSourceConnectionState::Connecting
+            }
+        } else if self._reconnectCount.load(Ordering::SeqCst) > 0
+            || self._timeoutCount.load(Ordering::SeqCst) > 0
+        {
+            AVLibSourceConnectionState::Reconnecting
+        } else {
+            AVLibSourceConnectionState::Disconnected
+        }
     }
 
     fn Duration(&self) -> f64 {
-        Debug::LogWarning("AVLibRTSPSource::Duration - realtime source has no known duration");
         -1.0
     }
 
@@ -986,7 +1012,7 @@ impl IAVLibSource for AVLibRTSPSource {
 
         let packet = queue.and_then(|q| q.TryPop());
         if packet.is_none() {
-            let count = self._packetCount.lock().map(|c| *c).unwrap_or(0);
+            let count = self._packetCount.load(Ordering::SeqCst);
             if count > 0 {
                 if !self._checkingConnection.load(Ordering::SeqCst) {
                     let last = self._lastActivityTicks.lock().ok().and_then(|v| *v);
@@ -1002,6 +1028,7 @@ impl IAVLibSource for AVLibRTSPSource {
                     let started = self._checkStartTicks.lock().ok().and_then(|v| *v);
                     if let Some(start_time) = started {
                         if start_time.elapsed().as_secs() > Self::TIMEOUT_SECONDS {
+                            self._timeoutCount.fetch_add(1, Ordering::SeqCst);
                             self._isConnected.store(false, Ordering::SeqCst);
                             self._checkingConnection.store(false, Ordering::SeqCst);
                         }
@@ -1021,6 +1048,33 @@ impl IAVLibSource for AVLibRTSPSource {
 
     fn Recycle(&mut self, packet: AVLibPacket) {
         self._recycler.lock().unwrap().Recycle(packet);
+    }
+
+    fn CreateVideoDecoder(&self, streamIndex: i32) -> Option<ffmpeg_next::decoder::Video> {
+        self.VideoDecoder(streamIndex)
+    }
+
+    fn CreateAudioDecoder(&self, streamIndex: i32) -> Option<ffmpeg_next::decoder::Audio> {
+        self.AudioDecoder(streamIndex)
+    }
+
+    fn RuntimeStats(&self) -> AVLibSourceRuntimeStats {
+        let last_activity_age_sec = self
+            ._lastActivityTicks
+            .lock()
+            .ok()
+            .and_then(|last| *last)
+            .map(|last| last.elapsed().as_secs_f64())
+            .unwrap_or(-1.0);
+
+        AVLibSourceRuntimeStats {
+            connection_state: self.ConnectionState(),
+            packet_count: self._packetCount.load(Ordering::SeqCst),
+            timeout_count: self._timeoutCount.load(Ordering::SeqCst),
+            reconnect_count: self._reconnectCount.load(Ordering::SeqCst),
+            is_checking_connection: self._checkingConnection.load(Ordering::SeqCst),
+            last_activity_age_sec,
+        }
     }
 }
 

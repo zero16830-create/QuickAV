@@ -3,7 +3,9 @@
 use crate::AVLibPacket::AVLibPacket;
 use crate::AVLibPacketRecycler::AVLibPacketRecycler;
 use crate::FixedSizeQueue::FixedSizeQueue;
-use crate::IAVLibSource::{AVLibStreamInfo, IAVLibSource};
+use crate::IAVLibSource::{
+    AVLibSourceConnectionState, AVLibSourceRuntimeStats, AVLibStreamInfo, IAVLibSource,
+};
 use crate::Logging::Debug::Debug;
 use bytes::Bytes;
 use ffmpeg_next::codec::{self, packet::Flags as PacketFlags};
@@ -19,7 +21,7 @@ use std::io::{ErrorKind, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::ptr;
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicU64, Ordering},
     Arc, Mutex,
 };
 use std::thread;
@@ -67,7 +69,9 @@ pub struct AVLibRTMPSource {
     _lastActivityTicks: Arc<Mutex<Option<Instant>>>,
     _checkingConnection: Arc<AtomicBool>,
     _checkStartTicks: Arc<Mutex<Option<Instant>>>,
-    _packetCount: Arc<Mutex<u64>>,
+    _packetCount: Arc<AtomicU64>,
+    _timeoutCount: Arc<AtomicU64>,
+    _reconnectCount: Arc<AtomicU64>,
     _connectRequested: Arc<AtomicBool>,
     _videoTimestampOrigin: Arc<Mutex<Option<i64>>>,
     _audioTimestampOrigin: Arc<Mutex<Option<i64>>>,
@@ -121,7 +125,9 @@ impl AVLibRTMPSource {
         let last_activity_ticks = Arc::new(Mutex::new(None));
         let checking_connection = Arc::new(AtomicBool::new(false));
         let check_start_ticks = Arc::new(Mutex::new(None));
-        let packet_count = Arc::new(Mutex::new(0_u64));
+        let packet_count = Arc::new(AtomicU64::new(0));
+        let timeout_count = Arc::new(AtomicU64::new(0));
+        let reconnect_count = Arc::new(AtomicU64::new(0));
         let connect_requested = Arc::new(AtomicBool::new(true));
         let video_timestamp_origin = Arc::new(Mutex::new(None));
         let audio_timestamp_origin = video_timestamp_origin.clone();
@@ -141,6 +147,8 @@ impl AVLibRTMPSource {
             _checkingConnection: checking_connection.clone(),
             _checkStartTicks: check_start_ticks.clone(),
             _packetCount: packet_count.clone(),
+            _timeoutCount: timeout_count.clone(),
+            _reconnectCount: reconnect_count.clone(),
             _connectRequested: connect_requested.clone(),
             _videoTimestampOrigin: video_timestamp_origin.clone(),
             _audioTimestampOrigin: audio_timestamp_origin.clone(),
@@ -165,6 +173,7 @@ impl AVLibRTMPSource {
                     is_connected.clone(),
                     last_activity_ticks.clone(),
                     packet_count.clone(),
+                    timeout_count.clone(),
                     checking_connection.clone(),
                     video_timestamp_origin.clone(),
                     audio_timestamp_origin.clone(),
@@ -172,6 +181,7 @@ impl AVLibRTMPSource {
                 );
 
                 if let Err(err) = run_result {
+                    reconnect_count.fetch_add(1, Ordering::SeqCst);
                     Debug::LogWarning(&format!("AVLibRTMPSource::RunRtmpLoop - {}", err));
                 }
 
@@ -475,6 +485,17 @@ impl AVLibRTMPSource {
             let mut cfg = cfg_guard.clone().unwrap_or_else(Self::DefaultVideoConfig);
             cfg.extra_data = extra_data;
 
+            if (cfg.width <= 0 || cfg.height <= 0)
+                && !cfg.extra_data.is_empty()
+            {
+                if let Some((detected_width, detected_height)) =
+                    Self::DetectVideoShapeFromConfig(&cfg)
+                {
+                    cfg.width = detected_width;
+                    cfg.height = detected_height;
+                }
+            }
+
             let width = cfg.width;
             let height = cfg.height;
             *cfg_guard = Some(cfg);
@@ -483,6 +504,17 @@ impl AVLibRTMPSource {
 
         Self::PublishVideoStreamShape(width, height, stream_types, streams);
         is_connected.store(true, Ordering::SeqCst);
+    }
+
+    fn DetectVideoShapeFromConfig(config: &RtmpVideoConfig) -> Option<(i32, i32)> {
+        let decoder = Self::CreateDecoderFromConfig(config)?;
+        let width = decoder.width() as i32;
+        let height = decoder.height() as i32;
+        if width > 0 && height > 0 {
+            Some((width, height))
+        } else {
+            None
+        }
     }
 
     fn HasDecoderConfig(video_config: &Arc<Mutex<Option<RtmpVideoConfig>>>) -> bool {
@@ -568,7 +600,7 @@ impl AVLibRTMPSource {
         video_config: &Arc<Mutex<Option<RtmpVideoConfig>>>,
         is_connected: &Arc<AtomicBool>,
         last_activity_ticks: &Arc<Mutex<Option<Instant>>>,
-        packet_count: &Arc<Mutex<u64>>,
+        packet_count: &Arc<AtomicU64>,
         checking_connection: &Arc<AtomicBool>,
         video_timestamp_origin: &Arc<Mutex<Option<i64>>>,
         recycler: &Arc<Mutex<AVLibPacketRecycler>>,
@@ -639,9 +671,7 @@ impl AVLibRTMPSource {
                     return;
                 }
 
-                if let Ok(mut count) = packet_count.lock() {
-                    *count += 1;
-                }
+                packet_count.fetch_add(1, Ordering::SeqCst);
                 if let Ok(mut last) = last_activity_ticks.lock() {
                     *last = Some(Instant::now());
                 }
@@ -660,7 +690,7 @@ impl AVLibRTMPSource {
         streams: &Arc<Mutex<Vec<AVLibStreamInfo>>>,
         audio_config: &Arc<Mutex<Option<RtmpAudioConfig>>>,
         last_activity_ticks: &Arc<Mutex<Option<Instant>>>,
-        packet_count: &Arc<Mutex<u64>>,
+        packet_count: &Arc<AtomicU64>,
         checking_connection: &Arc<AtomicBool>,
         audio_timestamp_origin: &Arc<Mutex<Option<i64>>>,
         recycler: &Arc<Mutex<AVLibPacketRecycler>>,
@@ -741,9 +771,7 @@ impl AVLibRTMPSource {
                             return;
                         }
 
-                        if let Ok(mut count) = packet_count.lock() {
-                            *count += 1;
-                        }
+                        packet_count.fetch_add(1, Ordering::SeqCst);
                         if let Ok(mut last) = last_activity_ticks.lock() {
                             *last = Some(Instant::now());
                         }
@@ -811,9 +839,7 @@ impl AVLibRTMPSource {
                     return;
                 }
 
-                if let Ok(mut count) = packet_count.lock() {
-                    *count += 1;
-                }
+                packet_count.fetch_add(1, Ordering::SeqCst);
                 if let Ok(mut last) = last_activity_ticks.lock() {
                     *last = Some(Instant::now());
                 }
@@ -845,7 +871,7 @@ impl AVLibRTMPSource {
         audio_config: &Arc<Mutex<Option<RtmpAudioConfig>>>,
         is_connected: &Arc<AtomicBool>,
         last_activity_ticks: &Arc<Mutex<Option<Instant>>>,
-        packet_count: &Arc<Mutex<u64>>,
+        packet_count: &Arc<AtomicU64>,
         checking_connection: &Arc<AtomicBool>,
         video_timestamp_origin: &Arc<Mutex<Option<i64>>>,
         audio_timestamp_origin: &Arc<Mutex<Option<i64>>>,
@@ -969,7 +995,8 @@ impl AVLibRTMPSource {
         audio_config: Arc<Mutex<Option<RtmpAudioConfig>>>,
         is_connected: Arc<AtomicBool>,
         last_activity_ticks: Arc<Mutex<Option<Instant>>>,
-        packet_count: Arc<Mutex<u64>>,
+        packet_count: Arc<AtomicU64>,
+        _timeout_count: Arc<AtomicU64>,
         checking_connection: Arc<AtomicBool>,
         video_timestamp_origin: Arc<Mutex<Option<i64>>>,
         audio_timestamp_origin: Arc<Mutex<Option<i64>>>,
@@ -1232,12 +1259,31 @@ impl IAVLibSource for AVLibRTMPSource {
         }
     }
 
-    fn IsConnected(&self) -> bool {
-        self._isConnected.load(Ordering::SeqCst)
+    fn ConnectionState(&self) -> AVLibSourceConnectionState {
+        if self._isConnected.load(Ordering::SeqCst) {
+            if self._checkingConnection.load(Ordering::SeqCst) {
+                AVLibSourceConnectionState::Checking
+            } else {
+                AVLibSourceConnectionState::Connected
+            }
+        } else if self._connectRequested.load(Ordering::SeqCst) {
+            if self._reconnectCount.load(Ordering::SeqCst) > 0
+                || self._timeoutCount.load(Ordering::SeqCst) > 0
+            {
+                AVLibSourceConnectionState::Reconnecting
+            } else {
+                AVLibSourceConnectionState::Connecting
+            }
+        } else if self._reconnectCount.load(Ordering::SeqCst) > 0
+            || self._timeoutCount.load(Ordering::SeqCst) > 0
+        {
+            AVLibSourceConnectionState::Reconnecting
+        } else {
+            AVLibSourceConnectionState::Disconnected
+        }
     }
 
     fn Duration(&self) -> f64 {
-        Debug::LogWarning("AVLibRTMPSource::Duration - realtime source has no known duration");
         -1.0
     }
 
@@ -1365,7 +1411,7 @@ impl IAVLibSource for AVLibRTMPSource {
 
         let packet = queue.and_then(|q| q.TryPop());
         if packet.is_none() {
-            let count = self._packetCount.lock().map(|c| *c).unwrap_or(0);
+            let count = self._packetCount.load(Ordering::SeqCst);
             if count > 0 {
                 if !self._checkingConnection.load(Ordering::SeqCst) {
                     let last = self._lastActivityTicks.lock().ok().and_then(|v| *v);
@@ -1381,6 +1427,7 @@ impl IAVLibSource for AVLibRTMPSource {
                     let started = self._checkStartTicks.lock().ok().and_then(|v| *v);
                     if let Some(start_time) = started {
                         if start_time.elapsed().as_secs() > Self::TIMEOUT_SECONDS {
+                            self._timeoutCount.fetch_add(1, Ordering::SeqCst);
                             self._isConnected.store(false, Ordering::SeqCst);
                             self._checkingConnection.store(false, Ordering::SeqCst);
                         }
@@ -1400,6 +1447,33 @@ impl IAVLibSource for AVLibRTMPSource {
 
     fn Recycle(&mut self, packet: AVLibPacket) {
         self._recycler.lock().unwrap().Recycle(packet);
+    }
+
+    fn CreateVideoDecoder(&self, streamIndex: i32) -> Option<ffmpeg_next::decoder::Video> {
+        self.VideoDecoder(streamIndex)
+    }
+
+    fn CreateAudioDecoder(&self, streamIndex: i32) -> Option<ffmpeg_next::decoder::Audio> {
+        self.AudioDecoder(streamIndex)
+    }
+
+    fn RuntimeStats(&self) -> AVLibSourceRuntimeStats {
+        let last_activity_age_sec = self
+            ._lastActivityTicks
+            .lock()
+            .ok()
+            .and_then(|last| *last)
+            .map(|last| last.elapsed().as_secs_f64())
+            .unwrap_or(-1.0);
+
+        AVLibSourceRuntimeStats {
+            connection_state: self.ConnectionState(),
+            packet_count: self._packetCount.load(Ordering::SeqCst),
+            timeout_count: self._timeoutCount.load(Ordering::SeqCst),
+            reconnect_count: self._reconnectCount.load(Ordering::SeqCst),
+            is_checking_connection: self._checkingConnection.load(Ordering::SeqCst),
+            last_activity_age_sec,
+        }
     }
 }
 

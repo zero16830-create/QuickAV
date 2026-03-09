@@ -12,6 +12,9 @@ on:
       - "UNITY_PLUGIN_ABI.md"
       - "UNITY_PLUGIN_PACKAGE_LAYOUT.md"
       - "UNITY_WIN_IOS_ANDROID_PLAN.md"
+      - "ios-staticlib/**"
+      - "third_party/**"
+      - "scripts/**"
       - ".github/workflows/rustav-matrix.yml"
   pull_request:
     paths:
@@ -24,6 +27,9 @@ on:
       - "UNITY_PLUGIN_ABI.md"
       - "UNITY_PLUGIN_PACKAGE_LAYOUT.md"
       - "UNITY_WIN_IOS_ANDROID_PLAN.md"
+      - "ios-staticlib/**"
+      - "third_party/**"
+      - "scripts/**"
       - ".github/workflows/rustav-matrix.yml"
   workflow_dispatch:
 
@@ -83,34 +89,10 @@ jobs:
           "$vcpkgRoot\installed\x64-windows\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           "$vcpkgRoot\installed\x64-windows\tools\ffmpeg" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Build Windows Library
-        run: cargo build --release --lib --locked
-
-      - name: Stage Windows Unity Plugin
+      - name: Build Windows Unity Plugin
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
-          $packageRoot = Join-Path $env:GITHUB_WORKSPACE "target\unity-package\windows\Assets\Plugins\x86_64"
-          New-Item -ItemType Directory -Force -Path $packageRoot | Out-Null
-
-          Copy-Item -LiteralPath "target\release\rustav_native.dll" -Destination $packageRoot -Force
-
-          $runtimeDlls = Get-ChildItem -Path "$env:GITHUB_WORKSPACE\.vcpkg\installed\x64-windows\bin\*.dll" | Sort-Object Name
-          foreach ($dll in $runtimeDlls) {
-            Copy-Item -LiteralPath $dll.FullName -Destination $packageRoot -Force
-          }
-
-          $dependencyFile = Join-Path $packageRoot "DEPENDENCIES.txt"
-          @(
-            "Windows Unity 插件目录：Assets/Plugins/x86_64",
-            "",
-            "运行时文件：",
-            "  - rustav_native.dll"
-          ) | Set-Content -Path $dependencyFile -Encoding utf8
-
-          foreach ($dll in $runtimeDlls) {
-            Add-Content -Path $dependencyFile -Value ("  - " + $dll.Name) -Encoding utf8
-          }
+          python scripts/ci/build_unity_plugins.py --project-root "$env:GITHUB_WORKSPACE" --platform windows --output-root "target/unity-package/windows"
 
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
@@ -154,67 +136,12 @@ jobs:
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
 
-      - name: Patch ffmpeg-sys-next Android tool lookup
-        shell: bash
-        run: |
-          cargo fetch --locked --target aarch64-linux-android
-          python3 <<'PY'
-          import os
-          import pathlib
-          import re
-          import sys
-
-          cargo_home = pathlib.Path(os.environ.get("CARGO_HOME", pathlib.Path.home() / ".cargo"))
-          matches = sorted(cargo_home.glob("registry/src/*/ffmpeg-sys-next-*/build.rs"))
-          if not matches:
-              print("ffmpeg-sys-next build.rs not found", file=sys.stderr)
-              sys.exit(1)
-
-          path = matches[-1]
-          text = path.read_text(encoding="utf-8")
-          old = (
-              'android_cc_path\n'
-              '                    .join("..")\n'
-              '                    .join(format!("llvm-{tool}"))\n'
-              '                    .canonicalize()'
-          )
-          new = (
-              'android_cc_path\n'
-              '                    .parent()\n'
-              '                    .expect("android compiler path must have parent")\n'
-              '                    .join(format!("llvm-{tool}"))\n'
-              '                    .canonicalize()'
-          )
-
-          if old not in text:
-              print(f"expected ffmpeg-sys-next snippet not found in {path}", file=sys.stderr)
-              sys.exit(1)
-
-          path.write_text(text.replace(old, new, 1), encoding="utf-8")
-          print(f"patched {path}")
-          PY
-
-      - name: Build Android arm64 Library
+      - name: Build Android Unity Plugin
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
-          cargo ndk -t arm64-v8a -o target/android-unity-libs build --release --lib --locked --features mobile-ffmpeg-build
-
-      - name: Stage Android Unity Plugin
-        run: |
-          package_dir="target/unity-package/android/Assets/Plugins/Android/arm64-v8a"
-          mkdir -p "$package_dir"
-          cp target/android-unity-libs/arm64-v8a/librustav_native.so "$package_dir/"
-          cat > "$package_dir/DEPENDENCIES.txt" <<'EOF'
-          Android Unity 插件目录：Assets/Plugins/Android/arm64-v8a
-
-          运行时文件：
-            - librustav_native.so
-
-          额外运行时依赖：
-            - 无；FFmpeg 已静态链接进 librustav_native.so
-          EOF
+          python3 scripts/ci/build_unity_plugins.py --project-root "$GITHUB_WORKSPACE" --platform android --output-root "target/unity-package/android" --cargo-ndk-output "target/android-unity-libs" --abi arm64-v8a
 
       - name: Upload Android Artifact
         uses: actions/upload-artifact@v4
@@ -226,6 +153,8 @@ jobs:
   ios-build:
     name: iOS XCFramework Build
     runs-on: macos-latest
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/ios-staticlib
 
     steps:
       - name: Checkout
@@ -242,121 +171,13 @@ jobs:
           workspaces: |
             . -> target
 
-      - name: Patch ffmpeg-sys-next iOS SDK lookup
-        shell: bash
-        run: |
-          cargo fetch --locked --target aarch64-apple-ios --target aarch64-apple-ios-sim
-          python3 <<'PY'
-          import os
-          import pathlib
-          import sys
-
-          cargo_home = pathlib.Path(os.environ.get("CARGO_HOME", pathlib.Path.home() / ".cargo"))
-          matches = sorted(cargo_home.glob("registry/src/*/ffmpeg-sys-next-*/build.rs"))
-          if not matches:
-              print("ffmpeg-sys-next build.rs not found", file=sys.stderr)
-              sys.exit(1)
-
-          path = matches[-1]
-          text = path.read_text(encoding="utf-8")
-
-          block_old = '''fn get_ffmpeg_target_os() -> String {
-              let cargo_target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
-              match cargo_target_os.as_str() {
-                  "ios" => "darwin".to_string(),
-                  _ => cargo_target_os,
-              }
-          }
-          '''
-          helper_new = '''fn get_ffmpeg_target_os() -> String {
-              let cargo_target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
-              match cargo_target_os.as_str() {
-                  "ios" => "darwin".to_string(),
-                  _ => cargo_target_os,
-              }
-          }
-
-          fn get_apple_sdk_name() -> &'static str {
-              match env::var("TARGET") {
-                  Ok(target) if target.contains("-ios-sim") => "iphonesimulator",
-                  _ => "iphoneos",
-              }
-          }
-          '''
-          if block_old not in text:
-              print(f"expected get_ffmpeg_target_os block not found in {path}", file=sys.stderr)
-              sys.exit(1)
-
-          text = text.replace(block_old, helper_new, 1)
-          text = text.replace('["--sdk", "iphoneos", "--show-sdk-path"]', '["--sdk", get_apple_sdk_name(), "--show-sdk-path"]')
-          text = text.replace('["--sdk", "iphoneos", "-f", "clang"]', '["--sdk", get_apple_sdk_name(), "-f", "clang"]')
-
-          path.write_text(text, encoding="utf-8")
-          print(f"patched {path}")
-          PY
-
       - name: Show Xcode Version
         run: |
           xcodebuild -version
 
-      - name: Patch RustAV crate types for iOS
-        shell: bash
+      - name: Build iOS Unity Plugin
         run: |
-          python3 <<'PY'
-          import pathlib
-          import sys
-
-          path = pathlib.Path("Cargo.toml")
-          text = path.read_text(encoding="utf-8")
-          old = 'crate-type = ["cdylib", "rlib", "staticlib"]'
-          new = 'crate-type = ["staticlib", "rlib"]'
-          if old not in text:
-              print("expected crate-type declaration not found", file=sys.stderr)
-              sys.exit(1)
-
-          path.write_text(text.replace(old, new, 1), encoding="utf-8")
-          print("patched Cargo.toml for iOS static library build")
-          PY
-
-      - name: Build iOS Device Library
-        run: |
-          cargo build --release --lib --locked --target aarch64-apple-ios --features mobile-ffmpeg-build
-
-      - name: Build iOS Simulator Library
-        run: |
-          cargo build --release --lib --locked --target aarch64-apple-ios-sim --features mobile-ffmpeg-build
-
-      - name: Package iOS XCFramework
-        run: |
-          mkdir -p target/apple-unity
-          xcodebuild -create-xcframework \
-            -library target/aarch64-apple-ios/release/librustav_native.a -headers include \
-            -library target/aarch64-apple-ios-sim/release/librustav_native.a -headers include \
-            -output target/apple-unity/RustAV.xcframework
-
-      - name: Stage iOS Unity Plugin
-        run: |
-          unity_dir="target/unity-package/ios/Assets/Plugins/iOS"
-          support_dir="target/unity-package/ios/BuildSupport/iOS"
-          mkdir -p "$unity_dir" "$support_dir"
-
-          cp target/aarch64-apple-ios/release/librustav_native.a "$unity_dir/"
-          cp include/RustAV.h "$unity_dir/"
-          cp -R target/apple-unity/RustAV.xcframework "$support_dir/"
-
-          cat > "$unity_dir/DEPENDENCIES.txt" <<'EOF'
-          iOS Unity 插件目录：Assets/Plugins/iOS
-
-          自动集成文件：
-            - librustav_native.a
-            - RustAV.h
-
-          额外运行时依赖：
-            - 无；FFmpeg 已静态链接进静态库
-
-          附加构建支持：
-            - BuildSupport/iOS/RustAV.xcframework
-          EOF
+          python3 scripts/ci/build_unity_plugins.py --project-root "$GITHUB_WORKSPACE" --platform ios --manifest-path "ios-staticlib/Cargo.toml" --target-dir "target/ios-staticlib" --output-root "target/unity-package/ios" --xcframework-output "target/apple-unity/RustAV.xcframework"
 
       - name: Upload iOS Artifact
         uses: actions/upload-artifact@v4
@@ -397,15 +218,7 @@ jobs:
 
       - name: Assemble Unity Plugins Bundle
         run: |
-          mkdir -p UnityPlugins
-          cp -R artifacts/windows/. UnityPlugins/
-          cp -R artifacts/android/. UnityPlugins/
-          cp -R artifacts/ios/. UnityPlugins/
-          cp UNITY_PLUGIN_PACKAGE_LAYOUT.md UnityPlugins/README.md
-
-      - name: Archive Unity Plugins Bundle
-        run: |
-          zip -r RustAV-UnityPlugins.zip UnityPlugins
+          python3 scripts/ci/build_unity_plugins.py --project-root "$GITHUB_WORKSPACE" --platform package --windows-artifact "artifacts/windows" --android-artifact "artifacts/android" --ios-artifact "artifacts/ios" --bundle-root "UnityPlugins" --zip-output "RustAV-UnityPlugins.zip"
 
       - name: Upload Unity Plugins Bundle
         uses: actions/upload-artifact@v4

@@ -2,7 +2,7 @@
 
 use crate::AVLibUtil::PixelFormatToFFmpeg;
 use crate::FixedSizeQueue::FixedSizeQueue;
-use crate::IAVLibSource::IAVLibSource;
+use crate::IAVLibSource::{AVLibStreamInfo, IAVLibSource};
 use crate::IVideoDescription::IVideoDescription;
 use crate::PixelFormat::PixelFormat;
 use crate::VideoFrame::VideoFrame;
@@ -16,6 +16,9 @@ use std::thread;
 
 pub struct AVLibVideoDecoder {
     _source: Arc<Mutex<Box<dyn IAVLibSource + Send>>>,
+    _streamIndex: i32,
+    _sourceStreamInfo: AVLibStreamInfo,
+    _decodedShape: Arc<Mutex<(i32, i32)>>,
     pub _parsedFrames: Arc<FixedSizeQueue<VideoFrame>>,
     _readyFrames: Arc<FixedSizeQueue<VideoFrame>>,
     _isRealtime: bool,
@@ -47,6 +50,11 @@ impl AVLibVideoDecoder {
         } else {
             false
         };
+        let source_stream_info = if let Ok(s) = source.lock() {
+            s.Stream(stream_idx)
+        } else {
+            AVLibStreamInfo::empty()
+        };
         let frame_queue_size = if is_realtime {
             Self::REALTIME_VIDEO_FRAME_QUEUE_SIZE
         } else {
@@ -63,6 +71,10 @@ impl AVLibVideoDecoder {
         let seek_request = Arc::new(AtomicBool::new(true));
         let seek_request_time = Arc::new(Mutex::new(0.0));
         let last_frame = Arc::new(Mutex::new(None));
+        let decoded_shape = Arc::new(Mutex::new((
+            source_stream_info.width.max(0),
+            source_stream_info.height.max(0),
+        )));
         let continue_mutex = Arc::new(Mutex::new(()));
         let continue_condition = Arc::new(Condvar::new());
         let target_width = target_desc.Width() as u32;
@@ -72,6 +84,9 @@ impl AVLibVideoDecoder {
 
         let mut obj = Self {
             _source: source.clone(),
+            _streamIndex: stream_idx,
+            _sourceStreamInfo: source_stream_info,
+            _decodedShape: decoded_shape.clone(),
             _parsedFrames: parsed.clone(),
             _readyFrames: ready.clone(),
             _isRealtime: is_realtime,
@@ -92,6 +107,7 @@ impl AVLibVideoDecoder {
         let t_last_frame = last_frame.clone();
         let t_seek_request = seek_request.clone();
         let t_seek_request_time = seek_request_time.clone();
+        let t_decoded_shape = decoded_shape.clone();
         let t_target_width = target_width;
         let t_target_height = target_height;
         let t_continue_mutex = continue_mutex.clone();
@@ -186,6 +202,10 @@ impl AVLibVideoDecoder {
                             let decoded_fmt = decoded.format();
                             let decoded_w = decoded.width();
                             let decoded_h = decoded.height();
+
+                            if let Ok(mut shape) = t_decoded_shape.lock() {
+                                *shape = (decoded_w as i32, decoded_h as i32);
+                            }
 
                             let needs_rebuild = match scaler_source {
                                 Some((fmt, w, h)) => {
@@ -350,6 +370,29 @@ impl AVLibVideoDecoder {
         obj
     }
 
+    pub fn StreamIndex(&self) -> i32 {
+        self._streamIndex
+    }
+
+    pub fn NeedsRecreate(&self) -> bool {
+        let stream = if let Ok(source) = self._source.lock() {
+            source.Stream(self._streamIndex)
+        } else {
+            return false;
+        };
+
+        Self::StreamShapeChanged(self._sourceStreamInfo, stream)
+    }
+
+    fn StreamShapeChanged(previous: AVLibStreamInfo, current: AVLibStreamInfo) -> bool {
+        let width_changed =
+            previous.width > 0 && current.width > 0 && previous.width != current.width;
+        let height_changed =
+            previous.height > 0 && current.height > 0 && previous.height != current.height;
+
+        width_changed || height_changed
+    }
+
     pub fn Recycle(&self, mut frame: VideoFrame) {
         frame.OnRecycle();
         self._readyFrames.Push(frame);
@@ -360,6 +403,27 @@ impl AVLibVideoDecoder {
             return;
         }
 
+        let drained = self._parsedFrames.Drain();
+        for frame in drained {
+            self.Recycle(frame);
+        }
+
+        let last_frame = {
+            let mut last = match self._lastFrame.lock() {
+                Ok(g) => g,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            last.take()
+        };
+
+        if let Some(frame) = last_frame {
+            self.Recycle(frame);
+        }
+
+        self._continueCondition.notify_all();
+    }
+
+    pub fn FlushFrames(&self) {
         let drained = self._parsedFrames.Drain();
         for frame in drained {
             self.Recycle(frame);
@@ -521,6 +585,22 @@ impl AVLibVideoDecoder {
         }
 
         None
+    }
+
+    pub fn DroppedFrameCount(&self) -> u64 {
+        self._parsedFrames.DroppedCount()
+    }
+
+    pub fn ActualSourceVideoSize(&self) -> Option<(i32, i32)> {
+        let Ok(shape) = self._decodedShape.lock() else {
+            return None;
+        };
+
+        if shape.0 > 0 && shape.1 > 0 {
+            Some(*shape)
+        } else {
+            None
+        }
     }
 }
 

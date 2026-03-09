@@ -443,6 +443,10 @@ impl AVLibAudioDecoder {
 
         Some(frame)
     }
+
+    pub fn DroppedFrameCount(&self) -> u64 {
+        self._parsedFrames.DroppedCount()
+    }
 }
 
 impl Drop for AVLibAudioDecoder {

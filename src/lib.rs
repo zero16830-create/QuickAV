@@ -1,6 +1,8 @@
+#[allow(non_snake_case)]
 pub mod Logging {
     pub mod Debug;
 }
+#[allow(non_snake_case)]
 pub mod Rendering {
     #[cfg(windows)]
     pub mod D3D11TextureWriter;
@@ -28,12 +30,15 @@ pub mod IAVLibSource;
 pub mod IFrameVisitor;
 pub mod IVideoClient;
 pub mod IVideoDescription;
+pub mod OutputFactory;
 pub mod PixelFormat;
 pub mod Player;
 pub mod TextureClient;
 pub mod UnityConnection;
 pub mod VideoFrame;
 pub mod PlaybackClock;
+pub mod PlayerRegistry;
+pub mod SourceFactory;
 pub mod dllmain;
 pub mod stdafx;
 

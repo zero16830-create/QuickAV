@@ -1,11 +1,15 @@
 #![allow(non_snake_case)]
 
 use std::collections::VecDeque;
-use std::sync::Mutex;
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Mutex,
+};
 
 pub struct FixedSizeQueue<T> {
     queue: Mutex<VecDeque<T>>,
     capacity: usize,
+    dropped_count: AtomicU64,
 }
 
 impl<T> FixedSizeQueue<T> {
@@ -13,6 +17,7 @@ impl<T> FixedSizeQueue<T> {
         Self {
             queue: Mutex::new(VecDeque::with_capacity(capacity)),
             capacity,
+            dropped_count: AtomicU64::new(0),
         }
     }
 
@@ -20,6 +25,7 @@ impl<T> FixedSizeQueue<T> {
         let mut q = self.queue.lock().unwrap();
         if q.len() >= self.capacity {
             let _ = q.pop_front();
+            self.dropped_count.fetch_add(1, Ordering::SeqCst);
         }
         q.push_back(item);
     }
@@ -50,5 +56,9 @@ impl<T> FixedSizeQueue<T> {
 
     pub fn Count(&self) -> usize {
         self.queue.lock().unwrap().len()
+    }
+
+    pub fn DroppedCount(&self) -> u64 {
+        self.dropped_count.load(Ordering::SeqCst)
     }
 }

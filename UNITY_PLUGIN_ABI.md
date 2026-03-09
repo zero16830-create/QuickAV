@@ -1,60 +1,175 @@
 # Unity 插件 ABI 说明
 
-## 目标
+## 当前状态
 
-RustAV 当前面向 Unity 插件提供两条视频输出路径：
+RustAV 当前对 Unity 提供一套正式命名空间 ABI，公共导出统一收敛为 `RustAV_*`。
 
-1. Windows D3D11 纹理写入。
-2. 通用 CPU RGBA 拉帧导出（Windows / iOS / Android 统一）。
-3. 通用 PCM 音频拉取导出（随 `CreatePlayerPullRGBA` 一并启用）。
+例外只有 Unity 引擎约定入口：
 
-推荐策略：
+1. `UnityPluginLoad`
+2. `UnityPluginUnload`
 
-1. Windows 如已持有 Unity D3D11 纹理，优先使用纹理写入。
-2. iOS / Android 统一使用 RGBA 拉帧接口。
-3. 如需 Unity 播放声音，使用 `GetAudioMetaPCM / CopyAudioPCM` 将 PCM 喂给 `AudioClip` 或平台音频设备。
+这两个函数名必须保持精确匹配，不能重命名。
 
-## 导出函数
+## ABI 版本
 
-### 播放器创建
+1. `RustAV_GetAbiVersion() -> uint32_t`
+2. `RustAV_GetBuildInfo() -> const char*`
 
-1. `GetPlayer(path, targetTexture) -> int`
-   - 仅适用于 Windows D3D11 纹理路径。
-   - 成功返回 `player id`。
-   - 失败返回 `-1`。
-2. `CreatePlayerPullRGBA(path, targetWidth, targetHeight) -> int`
+当前 ABI 版本：`1.2.0`
+
+## 错误码
+
+所有控制类接口统一使用以下负值错误码：
+
+1. `RustAVErrorCode_Ok = 0`
+2. `RustAVErrorCode_InvalidArgument = -1`
+3. `RustAVErrorCode_InvalidPlayer = -2`
+4. `RustAVErrorCode_CreateFailed = -3`
+5. `RustAVErrorCode_BufferTooSmall = -4`
+6. `RustAVErrorCode_UnsupportedOperation = -5`
+7. `RustAVErrorCode_InvalidState = -6`
+
+约定：
+
+1. `< 0` 表示错误
+2. `0` 表示成功或当前无数据
+3. `> 0` 仅用于“已有帧 / 已有音频 / 实际复制字节数”这类查询结果
+
+## 播放器接口
+
+### 创建
+
+1. `RustAV_PlayerCreateTexture(path, targetTexture) -> int32_t`
+   - 仅用于 Windows D3D11 纹理写入路径。
+2. `RustAV_PlayerCreatePullRGBA(path, targetWidth, targetHeight) -> int32_t`
    - 适用于 Windows / iOS / Android。
-   - `targetWidth`、`targetHeight` 必须大于 `0`。
-   - 成功返回 `player id`。
-   - 失败返回 `-1`。
+   - 同时启用 RGBA 帧导出和 PCM 音频导出。
 
-### 生命周期控制
+### 生命周期与控制
 
-1. `Play(id) -> int`
-   - 启动拉流和解码节奏。
-   - 成功返回 `0`，失败返回 `-1`。
-2. `Stop(id) -> int`
-   - 停止播放。
-   - 成功返回 `0`，失败返回 `-1`。
-3. `ReleasePlayer(id) -> int`
-   - 释放播放器。
-   - 成功返回 `1`，失败返回 `-1`。
+1. `RustAV_PlayerRelease(id) -> int32_t`
+2. `RustAV_PlayerUpdate(id) -> int32_t`
+3. `RustAV_PlayerGetDuration(id) -> double`
+4. `RustAV_PlayerGetTime(id) -> double`
+5. `RustAV_PlayerPlay(id) -> int32_t`
+6. `RustAV_PlayerStop(id) -> int32_t`
+7. `RustAV_PlayerSeek(id, time) -> int32_t`
+8. `RustAV_PlayerSetLoop(id, loopValue) -> int32_t`
+9. `RustAV_PlayerSetAudioSinkDelaySeconds(id, delaySec) -> int32_t`
+10. `RustAV_PlayerGetHealthSnapshot(id, outSnapshot) -> int32_t`
+11. `RustAV_PlayerGetHealthSnapshotV2(id, outSnapshot) -> int32_t`
+12. `RustAV_PlayerGetStreamInfo(id, streamIndex, outInfo) -> int32_t`
 
-### 运行期辅助
+说明：
 
-1. `UpdatePlayer(id) -> int`
-   - Windows 纹理模式：用于执行纹理写入。
-   - RGBA 拉帧模式：可安全调用，但当前不会产生额外写入动作。
-2. `Duration(id) -> double`
-3. `Time(id) -> double`
-4. `Seek(id, time) -> double`
-5. `SetLoop(id, loopValue) -> int`
-6. `SetAudioSinkDelaySeconds(id, delaySec) -> int`
-   - 将平台音频设备当前仍未真正播出的缓冲时长回写给 native。
-   - `delaySec` 必须是非负有限数。
-   - 不回写该值也能播放，但实时音画同步精度会下降。
+1. `RustAV_PlayerUpdate` 在 Windows 纹理路径下用于驱动写入，在 Pull 路径下可安全调用。
+2. `RustAV_PlayerSeek` 现在返回状态码，不再返回伪造的 `double`。
+3. `RustAV_PlayerSeek` 允许在已连接、可 seek 且未 shutdown 的状态下使用，不再要求必须处于播放中。
+4. `RustAV_PlayerStop` 当前语义是“停止播放意图并保留当前位置”，不会自动回到开头。
+5. `RustAV_PlayerSetAudioSinkDelaySeconds` 用于把宿主音频设备仍未真正播出的缓冲时长回写给 native。
 
-## RGBA 拉帧接口
+## 流信息接口
+
+### 结构
+
+```c
+typedef struct RustAVStreamInfo {
+    uint32_t struct_size;
+    uint32_t struct_version;
+    int32_t stream_index;
+    int32_t codec_type;
+    int32_t width;
+    int32_t height;
+    int32_t sample_rate;
+    int32_t channels;
+} RustAVStreamInfo;
+```
+
+### 接口
+
+1. `RustAV_PlayerGetStreamInfo(id, streamIndex, outInfo) -> int32_t`
+
+说明：
+
+1. 调用方应先初始化 `outInfo->struct_size = sizeof(RustAVStreamInfo)`。
+2. 当前 `struct_version = RUSTAV_STREAM_INFO_VERSION`。
+3. 视频流返回 `width/height`，音频流返回 `sample_rate/channels`。
+4. 这个接口用于宿主获取源流原始尺寸，不依赖当前 RGBA 导出目标尺寸。
+
+## 健康快照
+
+### V1 兼容接口
+
+`RustAV_PlayerGetHealthSnapshot` 保留为兼容接口，继续返回旧版健康快照布局。
+
+适用场景：
+
+1. 已经绑定旧结构的调用方
+2. 只需要最小健康信息且不区分 source 连接细分状态的调用方
+
+### V2 推荐接口
+
+`RustAV_PlayerGetHealthSnapshotV2` 是推荐的新接口。调用方应先初始化：
+
+1. `outSnapshot->struct_size = sizeof(RustAVPlayerHealthSnapshotV2)`
+2. `outSnapshot->struct_version = RUSTAV_PLAYER_HEALTH_SNAPSHOT_V2_VERSION`
+
+native 侧会校验结构体大小并回填最终版本信息。
+如果 `struct_size` 小于当前 ABI 需要的大小，返回 `RustAVErrorCode_BufferTooSmall`。
+
+V2 会返回当前 player 的最小运行时健康信息，包括：
+
+1. 连接状态
+2. 播放状态与显式 player state
+3. 实时流 / 可 seek / 循环标志
+4. stream 数、视频 decoder 数、音频 decoder 是否存在
+5. duration / current time / external clock / audio clock / presented audio clock
+6. audio sink delay
+7. 当前视频同步补偿量
+8. connect attempt 计数
+9. video/audio decoder 重建计数
+10. video/audio 丢帧计数
+11. source packet/timeout/reconnect 计数
+12. source 是否处于连接检查阶段
+13. source 最近活动距离当前的秒数
+14. source 细分连接状态 `source_connection_state`
+
+这个接口用于：
+
+1. 宿主运行时自检
+2. 自动化测试验收
+3. 线上问题快速定位
+
+当前 `state` 取值：
+
+1. `0 = Idle`
+2. `1 = Connecting`
+3. `2 = Ready`
+4. `3 = Playing`
+5. `4 = Paused`
+6. `5 = Shutdown`
+7. `6 = Ended`
+
+补充字段：
+
+1. `runtime_state`
+   - 反映 source/decoder 运行态，不混入播放意图
+2. `playback_intent`
+   - `0 = Stopped`
+   - `1 = PlayRequested`
+3. `stop_reason`
+   - `0 = None`
+   - `1 = UserStop`
+   - `2 = EndOfStream`
+4. `source_connection_state`
+   - `0 = Disconnected`
+   - `1 = Connecting`
+   - `2 = Connected`
+   - `3 = Reconnecting`
+   - `4 = Checking`
+
+## RGBA 帧导出
 
 ### 元信息结构
 
@@ -70,27 +185,18 @@ typedef struct RustAVFrameMeta {
 } RustAVFrameMeta;
 ```
 
-字段语义：
+### 接口
 
-1. `width` / `height`：当前导出帧尺寸。
-2. `format`：当前固定为 `PIXEL_FORMAT_RGBA32`。
-3. `stride`：每行字节数，当前等于 `width * 4`。
-4. `data_size`：当前整帧字节数。
-5. `time_sec`：帧时间戳，单位秒。
-6. `frame_index`：导出帧序号，单调递增。
+1. `RustAV_PlayerGetFrameMetaRGBA(id, outMeta) -> int32_t`
+   - `1`：已有帧
+   - `0`：当前无帧
+   - `<0`：错误
+2. `RustAV_PlayerCopyFrameRGBA(id, dst, dstLen) -> int32_t`
+   - `>0`：实际复制字节数
+   - `0`：当前无帧
+   - `<0`：错误
 
-### 取帧函数
-
-1. `GetFrameMetaRGBA(id, outMeta) -> int`
-   - 返回 `1`：已有帧，`outMeta` 已填充。
-   - 返回 `0`：播放器有效，但当前还没有首帧。
-   - 返回 `-1`：参数无效、`id` 无效，或该播放器不是 RGBA 拉帧模式。
-2. `CopyFrameRGBA(id, dst, dstLen) -> int`
-   - 返回 `> 0`：实际复制的字节数。
-   - 返回 `0`：当前还没有可用帧。
-   - 返回 `-1`：参数无效，或目标缓冲区长度不足。
-
-## PCM 音频拉取接口
+## PCM 音频导出
 
 ### 元信息结构
 
@@ -111,77 +217,78 @@ typedef struct RustAVAudioMeta {
 } RustAVAudioMeta;
 ```
 
-字段语义：
+### 接口
 
-1. `sample_rate`：当前 PCM 采样率。
-2. `channels`：声道数。
-3. `bytes_per_sample`：单样本字节数。
-4. `sample_format`：当前样本格式，现阶段固定为 `RustAVAudioSampleFormat_F32`。
-5. `buffered_bytes`：当前 native 内部待消费的 PCM 字节数。
-6. `time_sec`：当前队首 PCM 的时间戳，单位秒；消费式读取后会随已消费字节持续前移。
-7. `frame_index`：导出音频块序号，单调递增。
+1. `RustAV_PlayerGetAudioMetaPCM(id, outMeta) -> int32_t`
+   - `1`：已有 PCM
+   - `0`：当前无 PCM
+   - `<0`：错误
+2. `RustAV_PlayerCopyAudioPCM(id, dst, dstLen) -> int32_t`
+   - `>0`：实际复制字节数
+   - `0`：当前无 PCM
+   - `<0`：错误
 
-### 取音频函数
+说明：
 
-1. `GetAudioMetaPCM(id, outMeta) -> int`
-   - 返回 `1`：已有 PCM，`outMeta` 已填充。
-   - 返回 `0`：播放器有效，但当前还没有首个音频块。
-   - 返回 `-1`：参数无效、`id` 无效，或该播放器不支持音频导出。
-2. `CopyAudioPCM(id, dst, dstLen) -> int`
-   - 返回 `> 0`：实际复制的字节数。
-   - 返回 `0`：当前没有可消费 PCM。
-   - 返回 `-1`：参数无效，或目标缓冲区长度不足。
-   - 该接口是**消费式读取**，复制成功后内部缓冲会前移。
+1. 音频导出是消费式读取。
+2. `time_sec` 会随着已消费字节持续前移。
+3. 当前样本格式固定为 `float32 interleaved PCM`。
+
+## 日志接口
+
+1. `RustAV_DebugInitialize(cacheLogs)`
+2. `RustAV_DebugTeardown()`
+3. `RustAV_DebugClearCallbacks()`
+4. `RustAV_DebugRegisterLogCallback(callback)`
+5. `RustAV_DebugRegisterWarningCallback(callback)`
+6. `RustAV_DebugRegisterErrorCallback(callback)`
+
+日志回调在 Windows 上使用 `__stdcall`，其他平台使用 C 默认调用约定。
+
+## Unity 渲染事件
+
+1. `UnityPluginLoad(void* interfaces)`
+2. `UnityPluginUnload(void)`
+3. `RustAV_GetRenderEventFunc() -> RustAVRenderEventFunc`
+
+说明：
+
+1. `OnRenderEvent` 不再作为公共 ABI 暴露。
+2. Unity C# 层应通过 `RustAV_GetRenderEventFunc` 获取回调指针。
 
 ## 推荐调用顺序
 
-### Windows 纹理模式
+### Windows D3D11 纹理模式
 
-1. `id = GetPlayer(uri, texturePtr)`
-2. `Play(id)`
-3. Unity 渲染循环中调用 `UpdatePlayer(id)` 或渲染事件回调
-4. 结束时调用 `ReleasePlayer(id)`
+1. `id = RustAV_PlayerCreateTexture(uri, texturePtr)`
+2. `RustAV_PlayerPlay(id)`
+3. 每帧调用 `RustAV_PlayerUpdate(id)` 或渲染事件驱动
+4. 结束时调用 `RustAV_PlayerRelease(id)`
 
-### 通用 RGBA 拉帧模式
+### 通用 Pull 模式
 
-1. `id = CreatePlayerPullRGBA(uri, width, height)`
-2. `Play(id)`
+1. `id = RustAV_PlayerCreatePullRGBA(uri, width, height)`
+2. `RustAV_PlayerPlay(id)`
 3. 每帧调用：
-   - `GetFrameMetaRGBA(id, &meta)`
-   - 若返回 `1`，分配或复用 `meta.data_size` 大小的缓冲区
-   - `CopyFrameRGBA(id, buffer, bufferLen)`
-   - `GetAudioMetaPCM(id, &audioMeta)`
-   - 若返回 `1`，分配或复用 `audioMeta.buffered_bytes` 大小的缓冲区
-   - `CopyAudioPCM(id, audioBuffer, audioBufferLen)`
-4. 将数据上传到 Unity `Texture2D`
-5. 将 `float32 interleaved PCM` 写入 Unity `AudioClip` 或平台音频输出
-6. 若已知平台音频输出仍有设备缓冲，调用 `SetAudioSinkDelaySeconds(id, delaySec)`
-7. 结束时调用 `ReleasePlayer(id)`
+   - `RustAV_PlayerUpdate(id)`
+   - `RustAV_PlayerGetFrameMetaRGBA(...)`
+   - `RustAV_PlayerCopyFrameRGBA(...)`
+   - `RustAV_PlayerGetAudioMetaPCM(...)`
+   - `RustAV_PlayerCopyAudioPCM(...)`
+4. 若宿主音频设备存在未播放缓冲，调用 `RustAV_PlayerSetAudioSinkDelaySeconds(id, delaySec)`
+5. 结束时调用 `RustAV_PlayerRelease(id)`
 
-## 音画同步闭环
+## 线程约束
 
-1. Native 主时钟默认使用音频主时钟。
-2. `GetAudioMetaPCM / CopyAudioPCM` 只表示 PCM 已经导出，不代表用户已经真正听到声音。
-3. 平台音频层应周期性调用 `SetAudioSinkDelaySeconds`，把设备缓冲时长回写给 native。
-4. Windows `test_player` 已接入此闭环。
-5. `UnityAV/Solution/UnityAV/MediaPlayerPull.cs` 已接入 `AudioClip` 环形缓冲和 Unity DSP buffer 的延迟估算。
+1. 同一个 `player id` 应由宿主统一线程调度，不要跨线程交叉控制。
+2. `CopyFrameRGBA` 返回独立副本，调用方应自行管理缓冲区生命周期。
+3. `CopyAudioPCM` 为消费式读取，宿主应自行维护音频环形缓冲。
+4. 生产级实时同步要求宿主周期性回写 `RustAV_PlayerSetAudioSinkDelaySeconds`。
 
-## 线程与内存约束
+## Unity C# 当前绑定
 
-1. FFI 层建议由 Unity 主线程统一调度，避免跨线程交叉控制同一 `player id`。
-2. `CopyFrameRGBA` 会把内部最新帧复制到调用方缓冲区，调用方拿到的是独立副本。
-3. `GetFrameMetaRGBA` 只返回最新帧快照，不保证保留历史帧。
-4. 若需要固定分辨率贴图，Unity 侧应按创建时的目标宽高分配 `Texture2D`。
-5. `CopyAudioPCM` 是消费式接口，Unity 侧应维护自己的环形音频缓冲，避免音频线程直接跨线程控制 native player。
-6. Unity 托管层当前已通过 `NativePlugin.cs` 统一原生库名：
-   - Windows / Android：`rustav_native`
-   - iOS：`__Internal`
-
-## 当前平台约束
-
-1. `GetPlayer` 目前只对 Windows D3D11 有效。
-2. `CreatePlayerPullRGBA` 是当前三端统一的最小公共能力。
-3. Android 云端产物为 `librustav_native.so`。
-4. iOS 云端产物为 `RustAV.xcframework`，打包头文件位于 `include/RustAV.h`。
-5. Unity iOS 侧 `DllImport` 应使用 `__Internal`，Android / Windows 侧使用 `rustav_native`。
-6. 三端如需生产级实时同步，音频输出层都应接入 `SetAudioSinkDelaySeconds`。
+1. Windows / Android：`DllImport("rustav_native")`
+2. iOS：`DllImport("__Internal")`
+3. `MediaPlayer.cs` 已切换到新的 `RustAV_Player*` 命名
+4. `MediaPlayerPull.cs` 已切换到新的 `RustAV_Player*` 命名
+5. `NativeInitializer.cs` 已切换到新的 `RustAV_Debug*` 和 `RustAV_GetRenderEventFunc`

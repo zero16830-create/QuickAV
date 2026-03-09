@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 
-use crate::UnityConnection::{gPlayers, ForcePlayersWrite};
+use crate::PlayerRegistry::{ForcePlayersWrite, ReleaseAllPlayers, TouchPlayersRegistry};
 use std::os::raw::{c_int, c_void};
 use std::ptr;
 use std::sync::atomic::{AtomicPtr, Ordering};
@@ -80,7 +80,6 @@ unsafe fn ResolveUnityGraphics(interfaces: *mut c_void) -> *mut c_void {
     ((*unity_interfaces).GetInterfaceSplit)(IUNITY_GRAPHICS_GUID_HIGH, IUNITY_GRAPHICS_GUID_LOW)
 }
 
-#[no_mangle]
 pub extern "system" fn OnRenderEvent(_eventId: c_int) {
     ForcePlayersWrite();
 }
@@ -120,10 +119,7 @@ pub extern "system" fn UnityPluginLoad(interfaces: *mut c_void) {
 
     OnGraphicsDeviceEvent(K_UNITY_GFX_DEVICE_EVENT_INITIALIZE);
 
-    let mut players = gPlayers.lock().unwrap_or_else(|p| p.into_inner());
-    if players.is_empty() {
-        *players = Vec::new();
-    }
+    TouchPlayersRegistry();
 }
 
 #[no_mangle]
@@ -141,14 +137,10 @@ pub extern "system" fn UnityPluginUnload() {
 
     G_UNITY_INTERFACES.store(ptr::null_mut(), Ordering::SeqCst);
 
-    let old_players = {
-        let mut players = gPlayers.lock().unwrap_or_else(|p| p.into_inner());
-        std::mem::take(&mut *players)
-    };
-    drop(old_players);
+    ReleaseAllPlayers();
 }
 
 #[no_mangle]
-pub extern "system" fn GetRenderEventFunc() -> extern "system" fn(c_int) {
+pub extern "system" fn RustAV_GetRenderEventFunc() -> extern "system" fn(c_int) {
     OnRenderEvent
 }
