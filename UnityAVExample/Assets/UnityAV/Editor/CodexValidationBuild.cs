@@ -39,9 +39,11 @@ namespace UnityAV.Editor
 
         public static void BuildWindowsValidationPlayer()
         {
+            WindowsNativeRuntimePackager.ConfigureProjectRuntimeImportSettings();
+            WindowsNativeRuntimePackager.EnsureProjectRuntimeAvailable();
             CreatePullValidationScene();
 
-            Directory.CreateDirectory(Path.GetDirectoryName(BuildPath) ?? "Build/CodexPullValidation");
+            PrepareBuildOutput(BuildPath);
             var previousFullScreenMode = PlayerSettings.fullScreenMode;
             var previousDefaultScreenWidth = PlayerSettings.defaultScreenWidth;
             var previousDefaultScreenHeight = PlayerSettings.defaultScreenHeight;
@@ -80,6 +82,8 @@ namespace UnityAV.Editor
                 throw new System.Exception(
                     "Windows 验证包构建失败: " + report.summary.result);
             }
+
+            WindowsNativeRuntimePackager.PackageGstreamerRuntimeOrThrow(BuildPath);
 
             Debug.Log("[CodexValidationBuild] build_succeeded=" + BuildPath);
         }
@@ -154,6 +158,18 @@ namespace UnityAV.Editor
             {
                 AssetDatabase.Refresh();
             }
+        }
+
+        private static void PrepareBuildOutput(string buildPath)
+        {
+            var buildDirectory = Path.GetDirectoryName(buildPath);
+            if (!string.IsNullOrWhiteSpace(buildDirectory)
+                && Directory.Exists(buildDirectory))
+            {
+                Directory.Delete(buildDirectory, true);
+            }
+
+            Directory.CreateDirectory(buildDirectory ?? "Build/CodexPullValidation");
         }
     }
 }

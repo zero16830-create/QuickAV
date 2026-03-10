@@ -12,9 +12,10 @@
 #endif
 
 #define RUSTAV_ABI_VERSION_MAJOR 1u
-#define RUSTAV_ABI_VERSION_MINOR 2u
+#define RUSTAV_ABI_VERSION_MINOR 4u
 #define RUSTAV_ABI_VERSION_PATCH 0u
 #define RUSTAV_PLAYER_HEALTH_SNAPSHOT_V2_VERSION 2u
+#define RUSTAV_PLAYER_OPEN_OPTIONS_VERSION 1u
 #define RUSTAV_STREAM_INFO_VERSION 1u
 #define RUSTAV_MAKE_ABI_VERSION(major, minor, patch) \
     ((((uint32_t)(major)) << 24) | (((uint32_t)(minor)) << 16) | ((uint32_t)(patch)))
@@ -72,6 +73,12 @@ typedef enum RustAVAudioSampleFormat {
     RustAVAudioSampleFormat_F32 = 1
 } RustAVAudioSampleFormat;
 
+typedef enum RustAVBackendKind {
+    RustAVBackendKind_Auto = 0,
+    RustAVBackendKind_Ffmpeg = 1,
+    RustAVBackendKind_Gstreamer = 2
+} RustAVBackendKind;
+
 typedef struct RustAVFrameMeta {
     int32_t width;
     int32_t height;
@@ -91,6 +98,13 @@ typedef struct RustAVAudioMeta {
     double time_sec;
     int64_t frame_index;
 } RustAVAudioMeta;
+
+typedef struct RustAVPlayerOpenOptions {
+    uint32_t struct_size;
+    uint32_t struct_version;
+    int32_t backend_kind;
+    int32_t strict_backend;
+} RustAVPlayerOpenOptions;
 
 typedef struct RustAVStreamInfo {
     uint32_t struct_size;
@@ -177,7 +191,16 @@ uint32_t RUSTAV_CALL RustAV_GetAbiVersion(void);
 const char* RUSTAV_CALL RustAV_GetBuildInfo(void);
 
 int32_t RUSTAV_CALL RustAV_PlayerCreateTexture(const char* path, void* targetTexture);
+int32_t RUSTAV_CALL RustAV_PlayerCreateTextureEx(
+    const char* path,
+    void* targetTexture,
+    const RustAVPlayerOpenOptions* options);
 int32_t RUSTAV_CALL RustAV_PlayerCreatePullRGBA(const char* path, int32_t targetWidth, int32_t targetHeight);
+int32_t RUSTAV_CALL RustAV_PlayerCreatePullRGBAEx(
+    const char* path,
+    int32_t targetWidth,
+    int32_t targetHeight,
+    const RustAVPlayerOpenOptions* options);
 int32_t RUSTAV_CALL RustAV_PlayerRelease(int32_t id);
 int32_t RUSTAV_CALL RustAV_PlayerUpdate(int32_t id);
 double RUSTAV_CALL RustAV_PlayerGetDuration(int32_t id);
@@ -187,6 +210,7 @@ int32_t RUSTAV_CALL RustAV_PlayerStop(int32_t id);
 int32_t RUSTAV_CALL RustAV_PlayerSeek(int32_t id, double time);
 int32_t RUSTAV_CALL RustAV_PlayerSetLoop(int32_t id, bool loopValue);
 int32_t RUSTAV_CALL RustAV_PlayerSetAudioSinkDelaySeconds(int32_t id, double delaySec);
+int32_t RUSTAV_CALL RustAV_PlayerGetBackendKind(int32_t id);
 int32_t RUSTAV_CALL RustAV_PlayerGetHealthSnapshot(int32_t id, RustAVPlayerHealthSnapshot* outSnapshot);
 int32_t RUSTAV_CALL RustAV_PlayerGetHealthSnapshotV2(int32_t id, RustAVPlayerHealthSnapshotV2* outSnapshot);
 int32_t RUSTAV_CALL RustAV_PlayerGetStreamInfo(int32_t id, int32_t streamIndex, RustAVStreamInfo* outInfo);
@@ -194,6 +218,12 @@ int32_t RUSTAV_CALL RustAV_PlayerGetFrameMetaRGBA(int32_t id, RustAVFrameMeta* o
 int32_t RUSTAV_CALL RustAV_PlayerCopyFrameRGBA(int32_t id, uint8_t* destination, int32_t destinationLength);
 int32_t RUSTAV_CALL RustAV_PlayerGetAudioMetaPCM(int32_t id, RustAVAudioMeta* outMeta);
 int32_t RUSTAV_CALL RustAV_PlayerCopyAudioPCM(int32_t id, uint8_t* destination, int32_t destinationLength);
+int32_t RUSTAV_CALL RustAV_GetBackendRuntimeDiagnostic(
+    int32_t backendKind,
+    const char* path,
+    bool requireAudioExport,
+    char* destination,
+    int32_t destinationLength);
 
 void RUSTAV_CALL RustAV_DebugInitialize(bool cacheLogs);
 void RUSTAV_CALL RustAV_DebugTeardown(void);

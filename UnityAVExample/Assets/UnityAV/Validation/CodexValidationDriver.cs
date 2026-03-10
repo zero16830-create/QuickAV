@@ -11,11 +11,16 @@ namespace UnityAV
     [DefaultExecutionOrder(-1000)]
     public class CodexValidationDriver : MonoBehaviour
     {
+        private const float MinimumPlaybackAdvanceSeconds = 1.0f;
+
         public MediaPlayerPull Player;
         public float ValidationSeconds = 6f;
+        public float StartupTimeoutSeconds = 10f;
         public float LogIntervalSeconds = 1f;
         public string UriArgumentName = "-uri=";
+        public string BackendArgumentName = "-backend=";
         public string ValidationSecondsArgumentName = "-validationSeconds=";
+        public string StartupTimeoutSecondsArgumentName = "-startupTimeoutSeconds=";
         public string WindowWidthArgumentName = "-windowWidth=";
         public string WindowHeightArgumentName = "-windowHeight=";
         public bool ForceWindowedMode = true;
@@ -30,6 +35,14 @@ namespace UnityAV
         private bool _hasExplicitWindowHeight;
         private bool _windowConfigured;
         private bool _sourceSizedWindowApplied;
+        private bool _validationWindowStarted;
+        private float _validationWindowStartTime;
+        private string _validationWindowStartReason = string.Empty;
+        private double _validationWindowInitialPlaybackTime = -1.0;
+        private double _maxObservedPlaybackTime = -1.0;
+        private bool _observedTextureDuringWindow;
+        private bool _observedAudioDuringWindow;
+        private bool _observedStartedDuringWindow;
 
         private void Awake()
         {
@@ -50,9 +63,23 @@ namespace UnityAV
                 Debug.Log("[CodexValidation] override uri=" + overrideUri);
             }
 
+            var overrideBackend = TryReadStringArgument(BackendArgumentName);
+            MediaBackendKind parsedBackend;
+            if (TryParseBackend(overrideBackend, out parsedBackend))
+            {
+                Player.PreferredBackend = parsedBackend;
+                Player.StrictBackend = parsedBackend != MediaBackendKind.Auto;
+                Debug.Log(
+                    "[CodexValidation] override backend=" + parsedBackend
+                    + " strict=" + Player.StrictBackend);
+            }
+
             ValidationSeconds = TryReadFloatArgument(
                 ValidationSecondsArgumentName,
                 ValidationSeconds);
+            StartupTimeoutSeconds = TryReadFloatArgument(
+                StartupTimeoutSecondsArgumentName,
+                StartupTimeoutSeconds);
 
             _requestedWindowWidth = TryReadIntArgument(WindowWidthArgumentName, Player.Width, out _hasExplicitWindowWidth);
             _requestedWindowHeight = TryReadIntArgument(WindowHeightArgumentName, Player.Height, out _hasExplicitWindowHeight);
@@ -78,7 +105,7 @@ namespace UnityAV
             if (Player == null)
             {
                 Debug.LogError("[CodexValidation] missing MediaPlayerPull");
-                StartCoroutine(QuitAfterDelay(1f));
+                StartCoroutine(QuitAfterDelay(1f, 2));
                 return;
             }
 
@@ -107,8 +134,41 @@ namespace UnityAV
         private IEnumerator RunValidation()
         {
             var startTime = Time.realtimeSinceStartup;
-            while (Time.realtimeSinceStartup - startTime < ValidationSeconds)
+            while (true)
             {
+                var now = Time.realtimeSinceStartup;
+                var snapshot = CaptureSnapshot();
+                if (!_validationWindowStarted)
+                {
+                    var startupElapsed = now - startTime;
+                    if (snapshot.Started)
+                    {
+                        StartValidationWindow(
+                            now,
+                            startupElapsed,
+                            "playback-start",
+                            snapshot.PlaybackTime);
+                    }
+                    else if (startupElapsed >= StartupTimeoutSeconds)
+                    {
+                        StartValidationWindow(
+                            now,
+                            startupElapsed,
+                            "startup-timeout",
+                            snapshot.PlaybackTime);
+                    }
+                }
+                else
+                {
+                    RecordValidationObservation(snapshot);
+                }
+
+                if (_validationWindowStarted
+                    && now - _validationWindowStartTime >= ValidationSeconds)
+                {
+                    break;
+                }
+
                 if (Time.realtimeSinceStartup - _lastLogTime >= LogIntervalSeconds)
                 {
                     EmitStatus();
@@ -118,31 +178,150 @@ namespace UnityAV
                 yield return null;
             }
 
-            EmitStatus();
-            Debug.Log("[CodexValidation] complete");
-            yield return QuitAfterDelay(0.5f);
+            var finalSnapshot = EmitStatus();
+            var validationPassed = EvaluateValidationResult(finalSnapshot);
+            var exitCode = validationPassed ? 0 : 2;
+            yield return QuitAfterDelay(0.5f, exitCode);
         }
 
-        private void EmitStatus()
+        private ValidationSnapshot EmitStatus()
+        {
+            var snapshot = CaptureSnapshot();
+
+            Debug.Log(string.Format(
+                "[CodexValidation] time={0:F3}s texture={1} audioPlaying={2} started={3} startupElapsed={4:F3}s sourceState={5} sourcePackets={6} sourceTimeouts={7} sourceReconnects={8} window={9}x{10} textureSize={11}x{12} fullscreen={13} mode={14} backend={15}",
+                snapshot.PlaybackTime,
+                snapshot.HasTexture,
+                snapshot.AudioPlaying,
+                snapshot.Started,
+                Player.StartupElapsedSeconds,
+                snapshot.SourceState,
+                snapshot.SourcePackets,
+                snapshot.SourceTimeouts,
+                snapshot.SourceReconnects,
+                Screen.width,
+                Screen.height,
+                snapshot.TextureWidth,
+                snapshot.TextureHeight,
+                Screen.fullScreen,
+                Screen.fullScreenMode,
+                Player.ActualBackendKind));
+            return snapshot;
+        }
+
+        private ValidationSnapshot CaptureSnapshot()
         {
             var playbackTime = SafeReadPlaybackTime();
-            var hasTexture = Player.TargetMaterial != null && Player.TargetMaterial.mainTexture != null;
+            var hasTexture = Player.HasPresentedVideoFrame
+                && Player.TargetMaterial != null
+                && Player.TargetMaterial.mainTexture != null;
             var audioSource = Player.GetComponent<AudioSource>();
             var audioPlaying = audioSource != null && audioSource.isPlaying;
             var textureWidth = hasTexture ? Player.TargetMaterial.mainTexture.width : 0;
             var textureHeight = hasTexture ? Player.TargetMaterial.mainTexture.height : 0;
+            MediaPlayerPull.PlayerRuntimeHealth health;
+            var hasHealth = Player.TryGetRuntimeHealth(out health);
+            return new ValidationSnapshot
+            {
+                PlaybackTime = playbackTime,
+                HasTexture = hasTexture,
+                AudioPlaying = audioPlaying,
+                Started = Player.HasStartedPlayback,
+                TextureWidth = textureWidth,
+                TextureHeight = textureHeight,
+                SourceState = hasHealth ? health.SourceConnectionState.ToString() : "Unavailable",
+                SourcePackets = hasHealth ? health.SourcePacketCount.ToString() : "-1",
+                SourceTimeouts = hasHealth ? health.SourceTimeoutCount.ToString() : "-1",
+                SourceReconnects = hasHealth ? health.SourceReconnectCount.ToString() : "-1",
+            };
+        }
 
-            Debug.Log(string.Format(
-                "[CodexValidation] time={0:F3}s texture={1} audioPlaying={2} window={3}x{4} textureSize={5}x{6} fullscreen={7} mode={8}",
-                playbackTime,
-                hasTexture,
-                audioPlaying,
-                Screen.width,
-                Screen.height,
-                textureWidth,
-                textureHeight,
-                Screen.fullScreen,
-                Screen.fullScreenMode));
+        private void StartValidationWindow(
+            float now,
+            float startupElapsed,
+            string reason,
+            double playbackTime)
+        {
+            _validationWindowStarted = true;
+            _validationWindowStartTime = now;
+            _validationWindowStartReason = reason;
+            _validationWindowInitialPlaybackTime = playbackTime;
+            _maxObservedPlaybackTime = playbackTime;
+            Debug.Log(
+                string.Format(
+                    "[CodexValidation] validation_window_started reason={0} startup_elapsed={1:F3}s",
+                    reason,
+                    startupElapsed));
+        }
+
+        private void RecordValidationObservation(ValidationSnapshot snapshot)
+        {
+            _observedTextureDuringWindow |= snapshot.HasTexture;
+            _observedAudioDuringWindow |= snapshot.AudioPlaying;
+            _observedStartedDuringWindow |= snapshot.Started;
+            if (snapshot.PlaybackTime > _maxObservedPlaybackTime)
+            {
+                _maxObservedPlaybackTime = snapshot.PlaybackTime;
+            }
+        }
+
+        private bool EvaluateValidationResult(ValidationSnapshot finalSnapshot)
+        {
+            RecordValidationObservation(finalSnapshot);
+
+            var playbackAdvance = 0.0;
+            if (_maxObservedPlaybackTime >= 0.0 && _validationWindowInitialPlaybackTime >= 0.0)
+            {
+                playbackAdvance = _maxObservedPlaybackTime - _validationWindowInitialPlaybackTime;
+            }
+
+            if (_validationWindowStartReason == "startup-timeout"
+                && !_observedStartedDuringWindow)
+            {
+                Debug.LogError(
+                    "[CodexValidation] result=failed reason=startup-timeout-no-playback");
+                return false;
+            }
+
+            if (!_observedStartedDuringWindow)
+            {
+                Debug.LogError(
+                    "[CodexValidation] result=failed reason=playback-not-started");
+                return false;
+            }
+
+            if (!_observedTextureDuringWindow)
+            {
+                Debug.LogError(
+                    "[CodexValidation] result=failed reason=missing-video-frame");
+                return false;
+            }
+
+            if (!_observedAudioDuringWindow)
+            {
+                Debug.LogError(
+                    "[CodexValidation] result=failed reason=audio-not-playing");
+                return false;
+            }
+
+            if (playbackAdvance < MinimumPlaybackAdvanceSeconds)
+            {
+                Debug.LogError(
+                    string.Format(
+                        "[CodexValidation] result=failed reason=playback-stalled advance={0:F3}s",
+                        playbackAdvance));
+                return false;
+            }
+
+            Debug.Log(
+                string.Format(
+                    "[CodexValidation] result=passed reason=steady-playback advance={0:F3}s sourceState={1} sourceTimeouts={2} sourceReconnects={3}",
+                    playbackAdvance,
+                    finalSnapshot.SourceState,
+                    finalSnapshot.SourceTimeouts,
+                    finalSnapshot.SourceReconnects));
+            Debug.Log("[CodexValidation] complete");
+            return true;
         }
 
         private double SafeReadPlaybackTime()
@@ -310,14 +489,54 @@ namespace UnityAV
             return parsed;
         }
 
-        private IEnumerator QuitAfterDelay(float seconds)
+        private static bool TryParseBackend(string rawValue, out MediaBackendKind backend)
+        {
+            backend = MediaBackendKind.Auto;
+            if (string.IsNullOrEmpty(rawValue))
+            {
+                return false;
+            }
+
+            switch (rawValue.Trim().ToLowerInvariant())
+            {
+                case "auto":
+                    backend = MediaBackendKind.Auto;
+                    return true;
+                case "ffmpeg":
+                    backend = MediaBackendKind.Ffmpeg;
+                    return true;
+                case "gstreamer":
+                    backend = MediaBackendKind.Gstreamer;
+                    return true;
+                default:
+                    Debug.LogWarning("[CodexValidation] ignore unknown backend=" + rawValue);
+                    return false;
+            }
+        }
+
+        private IEnumerator QuitAfterDelay(float seconds, int exitCode)
         {
             yield return new WaitForSeconds(seconds);
 #if UNITY_EDITOR
             UnityEditor.EditorApplication.isPlaying = false;
 #else
             Application.Quit();
+            Environment.Exit(exitCode);
 #endif
+        }
+
+        private struct ValidationSnapshot
+        {
+            public double PlaybackTime;
+            public bool HasTexture;
+            public bool AudioPlaying;
+            public bool Started;
+            public int TextureWidth;
+            public int TextureHeight;
+            public string SourceState;
+            public string SourcePackets;
+            public string SourceTimeouts;
+            public string SourceReconnects;
         }
     }
 }

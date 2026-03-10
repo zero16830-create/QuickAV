@@ -29,11 +29,13 @@ namespace UnityAV.Editor
 
             ApplyPlayerSettings(target, version, applicationIdentifier, androidVersionCode, androidAppBundle);
 
-            var outputDirectory = Path.GetDirectoryName(outputPath);
-            if (!string.IsNullOrWhiteSpace(outputDirectory))
+            if (target == BuildTarget.StandaloneWindows64)
             {
-                Directory.CreateDirectory(outputDirectory);
+                WindowsNativeRuntimePackager.ConfigureProjectRuntimeImportSettings();
+                WindowsNativeRuntimePackager.EnsureProjectRuntimeAvailable();
             }
+
+            PrepareBuildOutput(target, outputPath);
 
             var buildOptions = new BuildPlayerOptions
             {
@@ -47,6 +49,11 @@ namespace UnityAV.Editor
             if (report.summary.result != BuildResult.Succeeded)
             {
                 throw new Exception("CI 构建失败: " + report.summary.result);
+            }
+
+            if (target == BuildTarget.StandaloneWindows64)
+            {
+                WindowsNativeRuntimePackager.PackageGstreamerRuntimeOrThrow(outputPath);
             }
 
             UnityEngine.Debug.Log("[RustAVReleaseBuild] build_succeeded=" + outputPath);
@@ -89,6 +96,49 @@ namespace UnityAV.Editor
                     return BuildTarget.iOS;
                 default:
                     throw new ArgumentOutOfRangeException("value", value, "不支持的构建目标");
+            }
+        }
+
+        private static void PrepareBuildOutput(
+            BuildTarget target,
+            string outputPath)
+        {
+            if (string.IsNullOrWhiteSpace(outputPath))
+            {
+                return;
+            }
+
+            if (File.Exists(outputPath))
+            {
+                File.Delete(outputPath);
+            }
+
+            if (Directory.Exists(outputPath))
+            {
+                Directory.Delete(outputPath, true);
+            }
+
+            if (target == BuildTarget.StandaloneWindows64
+                && outputPath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            {
+                var outputDirectory = Path.GetDirectoryName(outputPath);
+                if (!string.IsNullOrWhiteSpace(outputDirectory)
+                    && Directory.Exists(outputDirectory))
+                {
+                    Directory.Delete(outputDirectory, true);
+                }
+
+                if (!string.IsNullOrWhiteSpace(outputDirectory))
+                {
+                    Directory.CreateDirectory(outputDirectory);
+                }
+                return;
+            }
+
+            var parentDirectory = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrWhiteSpace(parentDirectory))
+            {
+                Directory.CreateDirectory(parentDirectory);
             }
         }
 

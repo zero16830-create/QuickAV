@@ -458,6 +458,7 @@ jobs:
             -RtspUri 'rtsp://127.0.0.1:8554/mystream' `
             -RtmpUri 'rtmp://127.0.0.1:1935/mystream' `
             -ValidationSeconds 8 `
+            -Backend 'gstreamer' `
             -MinPlaybackSeconds 2.0 `
             -AvSyncThresholdMs 200 `
             -FfmpegExe "$env:FFMPEG_EXE" `

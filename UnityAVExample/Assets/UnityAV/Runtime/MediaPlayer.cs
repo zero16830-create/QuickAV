@@ -1,6 +1,7 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 using UnityEngine;
 
 namespace UnityAV
@@ -16,12 +17,84 @@ namespace UnityAV
         private const int DefaultWidth = 1024;
         private const int DefaultHeight = 1024;
         private const int InvalidPlayerId = -1;
+        private const uint RustAVPlayerOpenOptionsVersion = 1u;
+        private const uint RustAVPlayerHealthSnapshotV2Version = 2u;
+        private const int BackendDiagnosticBufferLength = 512;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RustAVPlayerOpenOptions
+        {
+            public uint StructSize;
+            public uint StructVersion;
+            public int BackendKind;
+            public int StrictBackend;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RustAVPlayerHealthSnapshotV2
+        {
+            public uint StructSize;
+            public uint StructVersion;
+            public int State;
+            public int RuntimeState;
+            public int PlaybackIntent;
+            public int StopReason;
+            public int SourceConnectionState;
+            public int IsConnected;
+            public int IsPlaying;
+            public int IsRealtime;
+            public int CanSeek;
+            public int IsLooping;
+            public int StreamCount;
+            public int VideoDecoderCount;
+            public int HasAudioDecoder;
+            public double DurationSec;
+            public double CurrentTimeSec;
+            public double ExternalTimeSec;
+            public double AudioTimeSec;
+            public double AudioPresentedTimeSec;
+            public double AudioSinkDelaySec;
+            public double VideoSyncCompensationSec;
+            public long ConnectAttemptCount;
+            public long VideoDecoderRecreateCount;
+            public long AudioDecoderRecreateCount;
+            public long VideoFrameDropCount;
+            public long AudioFrameDropCount;
+            public long SourcePacketCount;
+            public long SourceTimeoutCount;
+            public long SourceReconnectCount;
+            public int SourceIsCheckingConnection;
+            public double SourceLastActivityAgeSec;
+        }
+
+        public struct PlayerRuntimeHealth
+        {
+            public MediaSourceConnectionState SourceConnectionState;
+            public bool IsConnected;
+            public bool IsPlaying;
+            public bool IsRealtime;
+            public long SourcePacketCount;
+            public long SourceTimeoutCount;
+            public long SourceReconnectCount;
+            public double SourceLastActivityAgeSec;
+            public double CurrentTimeSec;
+        }
 
         /// <summary>
         /// The uri of the media to stream
         /// </summary>
         [Header("Media Properties:")]
         public string Uri;
+
+        /// <summary>
+        /// Preferred native backend.
+        /// </summary>
+        public MediaBackendKind PreferredBackend = MediaBackendKind.Auto;
+
+        /// <summary>
+        /// Whether fallback is forbidden when PreferredBackend is specified.
+        /// </summary>
+        public bool StrictBackend;
 
         /// <summary>
         /// Should the media be looped?
@@ -55,6 +128,12 @@ namespace UnityAV
         private int _id = InvalidPlayerId;
         private bool _playRequested;
         private bool _resumeAfterPause;
+        private MediaBackendKind _actualBackendKind = MediaBackendKind.Auto;
+
+        public MediaBackendKind ActualBackendKind
+        {
+            get { return _actualBackendKind; }
+        }
 
         private static bool IsRemoteUri(string uri)
         {
@@ -83,73 +162,51 @@ namespace UnityAV
             return path;
         }
 
-        /// <summary>
-        /// Gets a media player
-        /// </summary>
-        /// <param name="uri">The uri to the media to play</param>
-        /// <param name="texturePointer">The texture pointer to stream to</param>
-        /// <returns>Non-negative unique id of the player, negative on failure</returns>
         [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerCreateTexture")]
         private static extern int GetPlayer(string uri, IntPtr texturePointer);
 
-        /// <summary>
-        /// Releases a media player
-        /// </summary>
-        /// <param name="id">The id of the player to release</param>
-        /// <returns>Non-negative value on success, negative on failure</returns>
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerCreateTextureEx")]
+        private static extern int GetPlayerEx(
+            string uri,
+            IntPtr texturePointer,
+            ref RustAVPlayerOpenOptions options);
+
         [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerRelease")]
         private static extern int ReleasePlayer(int id);
 
-        /// <summary>
-        /// Evaluates the duration of a media player
-        /// </summary>
-        /// <param name="id">The player id to evaluate</param>
-        /// <returns>The duration of the player in seconds, negative on failure</returns>
         [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerGetDuration")]
         private static extern double Duration(int id);
 
-        /// <summary>
-        /// Evaluates the current time of a media player from start of play
-        /// </summary>
-        /// <param name="id">The player id to evaluate</param>
-        /// <returns>The current time of the player in seconds from start of play, 
-        /// negative on failure</returns>
         [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerGetTime")]
         private static extern double Time(int id);
 
-        /// <summary>
-        /// Begins or resumes a media players playback
-        /// </summary>
-        /// <param name="id">The player id to evaluate</param>
-        /// <returns>Non-negative value on success, negative on failure</returns>
         [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerPlay")]
         private static extern int Play(int id);
 
-        /// <summary>
-        /// Stops a players media playback
-        /// </summary>
-        /// <param name="id">The player id to stop</param>
-        /// <returns>Non-negative value on success, negative on failure</returns>
         [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerStop")]
         private static extern int Stop(int id);
 
-        /// <summary>
-        /// Seeks a media player
-        /// </summary>
-        /// <param name="id">The player id to evaluate</param>
-        /// <param name="time">The time to seek to</param>
-        /// <returns>Non-negative value on success, negative on failure</returns>
         [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerSeek")]
         private static extern int Seek(int id, double time);
 
-        /// <summary>
-        /// Sets a media player to loop or not
-        /// </summary>
-        /// <param name="id">The player id to set looping for</param>
-        /// <param name="loop">True if the player should loop, false if not</param>
-        /// <returns>Non-negative value on success, negative on failure</returns>
         [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerSetLoop")]
         private static extern int SetLoop(int id, bool loop);
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerGetBackendKind")]
+        private static extern int GetPlayerBackendKind(int id);
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerGetHealthSnapshotV2")]
+        private static extern int GetPlayerHealthSnapshotV2(
+            int id,
+            ref RustAVPlayerHealthSnapshotV2 snapshot);
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_GetBackendRuntimeDiagnostic")]
+        private static extern int GetBackendRuntimeDiagnostic(
+            int backendKind,
+            string path,
+            bool requireAudioExport,
+            StringBuilder destination,
+            int destinationLength);
 
         /// <summary>
         /// Begins or resumes playback
@@ -208,7 +265,7 @@ namespace UnityAV
 
             if (result < 0)
             {
-                throw new Exception($"Failed to get duration");
+                throw new Exception("Failed to get duration");
             }
 
             return result;
@@ -260,24 +317,83 @@ namespace UnityAV
             }
         }
 
+        public bool TryGetRuntimeHealth(out PlayerRuntimeHealth health)
+        {
+            health = default(PlayerRuntimeHealth);
+            if (!ValidatePlayerId(_id))
+            {
+                return false;
+            }
+
+            try
+            {
+                var snapshot = new RustAVPlayerHealthSnapshotV2
+                {
+                    StructSize = (uint)Marshal.SizeOf(typeof(RustAVPlayerHealthSnapshotV2)),
+                    StructVersion = RustAVPlayerHealthSnapshotV2Version,
+                };
+                var result = GetPlayerHealthSnapshotV2(_id, ref snapshot);
+                if (result < 0)
+                {
+                    return false;
+                }
+
+                health = new PlayerRuntimeHealth
+                {
+                    SourceConnectionState = NormalizeSourceConnectionState(snapshot.SourceConnectionState),
+                    IsConnected = snapshot.IsConnected != 0,
+                    IsPlaying = snapshot.IsPlaying != 0,
+                    IsRealtime = snapshot.IsRealtime != 0,
+                    SourcePacketCount = snapshot.SourcePacketCount,
+                    SourceTimeoutCount = snapshot.SourceTimeoutCount,
+                    SourceReconnectCount = snapshot.SourceReconnectCount,
+                    SourceLastActivityAgeSec = snapshot.SourceLastActivityAgeSec,
+                    CurrentTimeSec = snapshot.CurrentTimeSec,
+                };
+                return true;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return false;
+            }
+            catch (DllNotFoundException)
+            {
+                return false;
+            }
+        }
+
         private void Start()
         {
             NativeInitializer.Initialize(this);
 
             var uri = ResolveUri(Uri);
 
-            // create the texture to write to
             _targetTexture = new Texture2D(Width, Height, TextureFormat.ARGB32, false)
             {
                 filterMode = FilterMode.Bilinear,
                 name = Uri
             };
 
-            // register the texture and get the id from the native plugin
-            _id = GetPlayer(uri, _targetTexture.GetNativeTexturePtr());
+            var openOptions = new RustAVPlayerOpenOptions
+            {
+                StructSize = (uint)Marshal.SizeOf(typeof(RustAVPlayerOpenOptions)),
+                StructVersion = RustAVPlayerOpenOptionsVersion,
+                BackendKind = (int)PreferredBackend,
+                StrictBackend = StrictBackend ? 1 : 0,
+            };
+
+            try
+            {
+                _id = GetPlayerEx(uri, _targetTexture.GetNativeTexturePtr(), ref openOptions);
+            }
+            catch (EntryPointNotFoundException)
+            {
+                _id = GetPlayer(uri, _targetTexture.GetNativeTexturePtr());
+            }
 
             if (ValidatePlayerId(_id))
             {
+                _actualBackendKind = ReadActualBackendKind();
                 if (TargetMaterial != null)
                 {
                     TargetMaterial.mainTexture = _targetTexture;
@@ -286,7 +402,13 @@ namespace UnityAV
             }
             else
             {
-                throw new Exception($"Failed to create player with error: {_id}");
+                var diagnostic = ReadBackendRuntimeDiagnostic(uri);
+                if (string.IsNullOrEmpty(diagnostic))
+                {
+                    throw new Exception($"Failed to create player with error: {_id}");
+                }
+
+                throw new Exception($"Failed to create player with error: {_id}; {diagnostic}");
             }
 
             if (AutoPlay)
@@ -344,6 +466,7 @@ namespace UnityAV
             _id = InvalidPlayerId;
             _playRequested = false;
             _resumeAfterPause = false;
+            _actualBackendKind = MediaBackendKind.Auto;
 
             if (result < 0)
             {
@@ -362,6 +485,84 @@ namespace UnityAV
             {
                 Destroy(_targetTexture);
                 _targetTexture = null;
+            }
+        }
+
+        private MediaBackendKind ReadActualBackendKind()
+        {
+            if (!ValidatePlayerId(_id))
+            {
+                return MediaBackendKind.Auto;
+            }
+
+            try
+            {
+                var backendKind = GetPlayerBackendKind(_id);
+                switch (backendKind)
+                {
+                    case 1:
+                        return MediaBackendKind.Ffmpeg;
+                    case 2:
+                        return MediaBackendKind.Gstreamer;
+                    default:
+                        return MediaBackendKind.Auto;
+                }
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return MediaBackendKind.Auto;
+            }
+        }
+
+        private string ReadBackendRuntimeDiagnostic(string uri)
+        {
+            if (string.IsNullOrEmpty(uri))
+            {
+                return string.Empty;
+            }
+
+            try
+            {
+                var buffer = new StringBuilder(BackendDiagnosticBufferLength);
+                var result = GetBackendRuntimeDiagnostic(
+                    (int)PreferredBackend,
+                    uri,
+                    false,
+                    buffer,
+                    buffer.Capacity);
+                if (result >= 0 && buffer.Length > 0)
+                {
+                    return buffer.ToString();
+                }
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return string.Empty;
+            }
+            catch (DllNotFoundException)
+            {
+                return string.Empty;
+            }
+
+            return string.Empty;
+        }
+
+        private static MediaSourceConnectionState NormalizeSourceConnectionState(int value)
+        {
+            switch (value)
+            {
+                case 0:
+                    return MediaSourceConnectionState.Disconnected;
+                case 1:
+                    return MediaSourceConnectionState.Connecting;
+                case 2:
+                    return MediaSourceConnectionState.Connected;
+                case 3:
+                    return MediaSourceConnectionState.Reconnecting;
+                case 4:
+                    return MediaSourceConnectionState.Checking;
+                default:
+                    return MediaSourceConnectionState.Unknown;
             }
         }
     }

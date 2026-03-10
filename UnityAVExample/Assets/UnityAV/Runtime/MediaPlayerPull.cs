@@ -1,10 +1,28 @@
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 using UnityEngine;
 
 namespace UnityAV
 {
+    public enum MediaBackendKind
+    {
+        Auto = 0,
+        Ffmpeg = 1,
+        Gstreamer = 2,
+    }
+
+    public enum MediaSourceConnectionState
+    {
+        Unknown = -1,
+        Disconnected = 0,
+        Connecting = 1,
+        Connected = 2,
+        Reconnecting = 3,
+        Checking = 4,
+    }
+
     /// <summary>
     /// 使用拉帧/拉音频模式的播放器，适合 Windows/iOS/Android 通用接入。
     /// </summary>
@@ -17,8 +35,15 @@ namespace UnityAV
         private const int DefaultHeight = 1024;
         private const int InvalidPlayerId = -1;
         private const int AudioStartThresholdMilliseconds = 120;
+        private const int RealtimeAudioStartupGraceMilliseconds = 750;
+        private const int RealtimeAudioStartupMinimumThresholdMilliseconds = 40;
+        private const int RealtimeStartupAdditionalAudioSinkDelayMilliseconds = 20;
+        private const int RealtimeAudioRingCapacityMilliseconds = 750;
         private const int MaxAudioCopyBytes = 256 * 1024;
         private const int MaxAudioCopyIterations = 8;
+        private const uint RustAVPlayerOpenOptionsVersion = 1u;
+        private const uint RustAVPlayerHealthSnapshotV2Version = 2u;
+        private const int BackendDiagnosticBufferLength = 512;
 
         private enum RustAVAudioSampleFormat
         {
@@ -63,11 +88,80 @@ namespace UnityAV
             public int Channels;
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RustAVPlayerOpenOptions
+        {
+            public uint StructSize;
+            public uint StructVersion;
+            public int BackendKind;
+            public int StrictBackend;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RustAVPlayerHealthSnapshotV2
+        {
+            public uint StructSize;
+            public uint StructVersion;
+            public int State;
+            public int RuntimeState;
+            public int PlaybackIntent;
+            public int StopReason;
+            public int SourceConnectionState;
+            public int IsConnected;
+            public int IsPlaying;
+            public int IsRealtime;
+            public int CanSeek;
+            public int IsLooping;
+            public int StreamCount;
+            public int VideoDecoderCount;
+            public int HasAudioDecoder;
+            public double DurationSec;
+            public double CurrentTimeSec;
+            public double ExternalTimeSec;
+            public double AudioTimeSec;
+            public double AudioPresentedTimeSec;
+            public double AudioSinkDelaySec;
+            public double VideoSyncCompensationSec;
+            public long ConnectAttemptCount;
+            public long VideoDecoderRecreateCount;
+            public long AudioDecoderRecreateCount;
+            public long VideoFrameDropCount;
+            public long AudioFrameDropCount;
+            public long SourcePacketCount;
+            public long SourceTimeoutCount;
+            public long SourceReconnectCount;
+            public int SourceIsCheckingConnection;
+            public double SourceLastActivityAgeSec;
+        }
+
+        public struct PlayerRuntimeHealth
+        {
+            public MediaSourceConnectionState SourceConnectionState;
+            public bool IsConnected;
+            public bool IsPlaying;
+            public bool IsRealtime;
+            public long SourcePacketCount;
+            public long SourceTimeoutCount;
+            public long SourceReconnectCount;
+            public double SourceLastActivityAgeSec;
+            public double CurrentTimeSec;
+        }
+
         /// <summary>
         /// 媒体地址，支持本地文件、RTSP、RTMP。
         /// </summary>
         [Header("Media Properties:")]
         public string Uri;
+
+        /// <summary>
+        /// 优先使用的底层后端。
+        /// </summary>
+        public MediaBackendKind PreferredBackend = MediaBackendKind.Auto;
+
+        /// <summary>
+        /// 是否严格要求指定后端；开启后不允许静默回退。
+        /// </summary>
+        public bool StrictBackend;
 
         /// <summary>
         /// 是否循环播放。
@@ -133,10 +227,22 @@ namespace UnityAV
         private int _audioBytesPerSample;
         private bool _playRequested;
         private bool _resumeAfterPause;
+        private MediaBackendKind _actualBackendKind = MediaBackendKind.Auto;
+        private float _playRequestedRealtimeAt = -1f;
+        private float _firstVideoFrameRealtimeAt = -1f;
+        private float _firstAudioStartRealtimeAt = -1f;
+        private float _firstPositivePlaybackTimeRealtimeAt = -1f;
         private readonly object _audioLock = new object();
 
         [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerCreatePullRGBA")]
         private static extern int CreatePlayerPullRGBA(string uri, int targetWidth, int targetHeight);
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerCreatePullRGBAEx")]
+        private static extern int CreatePlayerPullRGBAEx(
+            string uri,
+            int targetWidth,
+            int targetHeight,
+            ref RustAVPlayerOpenOptions options);
 
         [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerRelease")]
         private static extern int ReleasePlayer(int id);
@@ -180,6 +286,102 @@ namespace UnityAV
         [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerGetStreamInfo")]
         private static extern int GetStreamInfo(int id, int streamIndex, ref RustAVStreamInfo outInfo);
 
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerGetBackendKind")]
+        private static extern int GetPlayerBackendKind(int id);
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerGetHealthSnapshotV2")]
+        private static extern int GetPlayerHealthSnapshotV2(
+            int id,
+            ref RustAVPlayerHealthSnapshotV2 snapshot);
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_GetBackendRuntimeDiagnostic")]
+        private static extern int GetBackendRuntimeDiagnostic(
+            int backendKind,
+            string path,
+            bool requireAudioExport,
+            StringBuilder destination,
+            int destinationLength);
+
+        public MediaBackendKind ActualBackendKind
+        {
+            get { return _actualBackendKind; }
+        }
+
+        public bool HasPresentedVideoFrame
+        {
+            get { return _lastFrameIndex >= 0; }
+        }
+
+        public bool IsAudioOutputActive
+        {
+            get { return _audioSource != null && _audioSource.isPlaying; }
+        }
+
+        public bool HasStartedPlayback
+        {
+            get
+            {
+                return HasPresentedVideoFrame
+                    || IsAudioOutputActive
+                    || _firstPositivePlaybackTimeRealtimeAt >= 0f;
+            }
+        }
+
+        public float StartupElapsedSeconds
+        {
+            get
+            {
+                if (_playRequestedRealtimeAt < 0f)
+                {
+                    return 0f;
+                }
+
+                return Mathf.Max(0f, UnityEngine.Time.realtimeSinceStartup - _playRequestedRealtimeAt);
+            }
+        }
+
+        public bool TryGetRuntimeHealth(out PlayerRuntimeHealth health)
+        {
+            health = default(PlayerRuntimeHealth);
+            if (!ValidatePlayerId(_id))
+            {
+                return false;
+            }
+
+            try
+            {
+                var snapshot = new RustAVPlayerHealthSnapshotV2
+                {
+                    StructSize = (uint)Marshal.SizeOf(typeof(RustAVPlayerHealthSnapshotV2)),
+                    StructVersion = RustAVPlayerHealthSnapshotV2Version
+                };
+
+                var result = GetPlayerHealthSnapshotV2(_id, ref snapshot);
+                if (result < 0)
+                {
+                    return false;
+                }
+
+                health = new PlayerRuntimeHealth
+                {
+                    SourceConnectionState = NormalizeSourceConnectionState(snapshot.SourceConnectionState),
+                    IsConnected = snapshot.IsConnected != 0,
+                    IsPlaying = snapshot.IsPlaying != 0,
+                    IsRealtime = snapshot.IsRealtime != 0,
+                    SourcePacketCount = snapshot.SourcePacketCount,
+                    SourceTimeoutCount = snapshot.SourceTimeoutCount,
+                    SourceReconnectCount = snapshot.SourceReconnectCount,
+                    SourceLastActivityAgeSec = snapshot.SourceLastActivityAgeSec,
+                    CurrentTimeSec = snapshot.CurrentTimeSec,
+                };
+                return true;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return false;
+            }
+        }
+
         /// <summary>
         /// 开始或恢复播放。
         /// </summary>
@@ -198,6 +400,7 @@ namespace UnityAV
             }
 
             _playRequested = true;
+            _playRequestedRealtimeAt = UnityEngine.Time.realtimeSinceStartup;
             TryStartAudioSource();
         }
 
@@ -219,6 +422,7 @@ namespace UnityAV
             }
 
             _playRequested = false;
+            ResetStartupTelemetry();
             if (_audioSource != null)
             {
                 _audioSource.Pause();
@@ -329,6 +533,7 @@ namespace UnityAV
             var uri = ResolveUri(Uri);
             _isRealtimeSource = IsRemoteUri(uri);
             EnsureAudioSource();
+            var diagnostic = ReadBackendRuntimeDiagnostic(uri);
 
             _targetTexture = new Texture2D(Width, Height, TextureFormat.RGBA32, false)
             {
@@ -336,11 +541,21 @@ namespace UnityAV
                 name = Uri
             };
 
-            _id = CreatePlayerPullRGBA(uri, Width, Height);
+            _id = CreateNativePlayer(uri);
             if (!ValidatePlayerId(_id))
             {
-                throw new Exception("Failed to create pull player with error: " + _id);
+                throw new Exception(
+                    "Failed to create pull player with error: " + _id
+                    + " requested_backend=" + PreferredBackend
+                    + " strict_backend=" + StrictBackend
+                    + " diagnostic=" + diagnostic);
             }
+            _actualBackendKind = ReadActualBackendKind();
+            ResetStartupTelemetry();
+            Debug.Log(
+                "[MediaPlayerPull] player_created requested_backend=" + PreferredBackend
+                + " actual_backend=" + _actualBackendKind
+                + " strict_backend=" + StrictBackend);
 
             if (TargetMaterial != null)
             {
@@ -365,6 +580,7 @@ namespace UnityAV
             UpdatePlayer(_id);
             UpdateVideoFrame();
             UpdateAudioBuffer();
+            RecordPositivePlaybackTimeIfNeeded();
             UpdateNativeAudioSinkDelay();
         }
 
@@ -438,6 +654,16 @@ namespace UnityAV
                 return string.Copy(uri);
             }
 
+            if (Path.IsPathRooted(uri))
+            {
+                if (!File.Exists(uri))
+                {
+                    throw new FileNotFoundException(uri + " not found.");
+                }
+
+                return uri;
+            }
+
             var path = Application.streamingAssetsPath + Path.DirectorySeparatorChar + uri;
             if (!File.Exists(path))
             {
@@ -475,6 +701,15 @@ namespace UnityAV
             _targetTexture.LoadRawTextureData(_videoBytes);
             _targetTexture.Apply(false, false);
             _lastFrameIndex = meta.FrameIndex;
+            if (_firstVideoFrameRealtimeAt < 0f)
+            {
+                _firstVideoFrameRealtimeAt = UnityEngine.Time.realtimeSinceStartup;
+                Debug.Log(
+                    "[MediaPlayerPull] first_video_frame startup_seconds="
+                    + StartupElapsedSeconds.ToString("F3")
+                    + " frame_time="
+                    + meta.TimeSec.ToString("F3"));
+            }
         }
 
         private void UpdateAudioBuffer()
@@ -563,6 +798,13 @@ namespace UnityAV
             _audioBytesPerSample = meta.BytesPerSample;
 
             var ringCapacity = Math.Max(_audioSampleRate * _audioChannels * 4, 4096);
+            if (_isRealtimeSource)
+            {
+                ringCapacity = Math.Max(
+                    (_audioSampleRate * _audioChannels
+                        * RealtimeAudioRingCapacityMilliseconds) / 1000,
+                    4096);
+            }
             lock (_audioLock)
             {
                 _audioRing = new float[ringCapacity];
@@ -710,8 +952,7 @@ namespace UnityAV
                     return;
                 }
 
-                var thresholdSamples = (_audioSampleRate * _audioChannels
-                    * AudioStartThresholdMilliseconds) / 1000;
+                var thresholdSamples = CalculateAudioStartThresholdSamples();
                 if (_audioBufferedSamples < thresholdSamples)
                 {
                     return;
@@ -719,7 +960,65 @@ namespace UnityAV
             }
 
             _audioSource.Play();
+            if (_firstAudioStartRealtimeAt < 0f)
+            {
+                _firstAudioStartRealtimeAt = UnityEngine.Time.realtimeSinceStartup;
+                Debug.Log(
+                    "[MediaPlayerPull] first_audio_start startup_seconds="
+                    + StartupElapsedSeconds.ToString("F3"));
+            }
             UpdateNativeAudioSinkDelay();
+        }
+
+        private int CalculateAudioStartThresholdSamples()
+        {
+            var thresholdSamples = (_audioSampleRate * _audioChannels
+                * AudioStartThresholdMilliseconds) / 1000;
+            if (!_isRealtimeSource)
+            {
+                return thresholdSamples;
+            }
+
+            var startupElapsedMilliseconds = StartupElapsedSeconds * 1000f;
+            if (!HasPresentedVideoFrame
+                || startupElapsedMilliseconds < RealtimeAudioStartupGraceMilliseconds)
+            {
+                return thresholdSamples;
+            }
+
+            var relaxedThresholdSamples = (_audioSampleRate * _audioChannels
+                * RealtimeAudioStartupMinimumThresholdMilliseconds) / 1000;
+            return Math.Max(Math.Min(thresholdSamples, relaxedThresholdSamples), _audioChannels);
+        }
+
+        private void RecordPositivePlaybackTimeIfNeeded()
+        {
+            if (_firstPositivePlaybackTimeRealtimeAt >= 0f || !ValidatePlayerId(_id))
+            {
+                return;
+            }
+
+            double playbackTime;
+            try
+            {
+                playbackTime = Time(_id);
+            }
+            catch (Exception)
+            {
+                return;
+            }
+
+            if (playbackTime <= 0.0)
+            {
+                return;
+            }
+
+            _firstPositivePlaybackTimeRealtimeAt = UnityEngine.Time.realtimeSinceStartup;
+            Debug.Log(
+                "[MediaPlayerPull] first_positive_playback_time startup_seconds="
+                + StartupElapsedSeconds.ToString("F3")
+                + " playback_time="
+                + playbackTime.ToString("F3"));
         }
 
         private void UpdateNativeAudioSinkDelay()
@@ -730,11 +1029,15 @@ namespace UnityAV
             }
 
             var delaySec = 0.0;
+            var audioStarted = _audioSource != null && _audioSource.isPlaying;
             if (EnableAudio && _audioSampleRate > 0 && _audioChannels > 0)
             {
-                lock (_audioLock)
+                if (!_isRealtimeSource || audioStarted)
                 {
-                    delaySec += (double)_audioBufferedSamples / (_audioSampleRate * _audioChannels);
+                    lock (_audioLock)
+                    {
+                        delaySec += (double)_audioBufferedSamples / (_audioSampleRate * _audioChannels);
+                    }
                 }
 
                 int dspBufferLength;
@@ -748,10 +1051,21 @@ namespace UnityAV
 
             if (_isRealtimeSource && RealtimeAdditionalAudioSinkDelayMilliseconds > 0)
             {
-                delaySec += (double)RealtimeAdditionalAudioSinkDelayMilliseconds / 1000.0;
+                var realtimeDelayMilliseconds = audioStarted
+                    ? RealtimeAdditionalAudioSinkDelayMilliseconds
+                    : RealtimeStartupAdditionalAudioSinkDelayMilliseconds;
+                delaySec += (double)realtimeDelayMilliseconds / 1000.0;
             }
 
             SetAudioSinkDelaySeconds(_id, delaySec);
+        }
+
+        private void ResetStartupTelemetry()
+        {
+            _playRequestedRealtimeAt = -1f;
+            _firstVideoFrameRealtimeAt = -1f;
+            _firstAudioStartRealtimeAt = -1f;
+            _firstPositivePlaybackTimeRealtimeAt = -1f;
         }
 
         private void ReleaseNativePlayer()
@@ -769,8 +1083,10 @@ namespace UnityAV
             SetAudioSinkDelaySeconds(_id, 0.0);
             ReleasePlayer(_id);
             _id = InvalidPlayerId;
+            _actualBackendKind = MediaBackendKind.Auto;
             _playRequested = false;
             _resumeAfterPause = false;
+            ResetStartupTelemetry();
         }
 
         private void ReleaseManagedResources()
@@ -806,6 +1122,107 @@ namespace UnityAV
                 _audioReadIndex = 0;
                 _audioWriteIndex = 0;
                 _audioBufferedSamples = 0;
+            }
+        }
+
+        private int CreateNativePlayer(string uri)
+        {
+            try
+            {
+                var options = BuildOpenOptions();
+                return CreatePlayerPullRGBAEx(uri, Width, Height, ref options);
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return CreatePlayerPullRGBA(uri, Width, Height);
+            }
+        }
+
+        private RustAVPlayerOpenOptions BuildOpenOptions()
+        {
+            return new RustAVPlayerOpenOptions
+            {
+                StructSize = (uint)Marshal.SizeOf(typeof(RustAVPlayerOpenOptions)),
+                StructVersion = RustAVPlayerOpenOptionsVersion,
+                BackendKind = (int)PreferredBackend,
+                StrictBackend = StrictBackend ? 1 : 0,
+            };
+        }
+
+        private string ReadBackendRuntimeDiagnostic(string uri)
+        {
+            if (string.IsNullOrEmpty(uri))
+            {
+                return string.Empty;
+            }
+
+            try
+            {
+                var buffer = new StringBuilder(BackendDiagnosticBufferLength);
+                var result = GetBackendRuntimeDiagnostic(
+                    (int)PreferredBackend,
+                    uri,
+                    EnableAudio,
+                    buffer,
+                    buffer.Capacity);
+                if (result >= 0 && buffer.Length > 0)
+                {
+                    return buffer.ToString();
+                }
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return string.Empty;
+            }
+            catch (DllNotFoundException)
+            {
+                return string.Empty;
+            }
+
+            return string.Empty;
+        }
+
+        private MediaBackendKind ReadActualBackendKind()
+        {
+            try
+            {
+                return NormalizeBackendKind(GetPlayerBackendKind(_id));
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return PreferredBackend;
+            }
+        }
+
+        private static MediaBackendKind NormalizeBackendKind(int rawValue)
+        {
+            switch (rawValue)
+            {
+                case 1:
+                    return MediaBackendKind.Ffmpeg;
+                case 2:
+                    return MediaBackendKind.Gstreamer;
+                default:
+                    return MediaBackendKind.Auto;
+            }
+        }
+
+        private static MediaSourceConnectionState NormalizeSourceConnectionState(int rawValue)
+        {
+            switch (rawValue)
+            {
+                case 0:
+                    return MediaSourceConnectionState.Disconnected;
+                case 1:
+                    return MediaSourceConnectionState.Connecting;
+                case 2:
+                    return MediaSourceConnectionState.Connected;
+                case 3:
+                    return MediaSourceConnectionState.Reconnecting;
+                case 4:
+                    return MediaSourceConnectionState.Checking;
+                default:
+                    return MediaSourceConnectionState.Unknown;
             }
         }
     }
