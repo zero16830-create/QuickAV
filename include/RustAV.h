@@ -190,11 +190,19 @@ typedef void (RUSTAV_CALL *RustAVRenderEventFunc)(int32_t eventId);
 uint32_t RUSTAV_CALL RustAV_GetAbiVersion(void);
 const char* RUSTAV_CALL RustAV_GetBuildInfo(void);
 
-int32_t RUSTAV_CALL RustAV_PlayerCreateTexture(const char* path, void* targetTexture);
-int32_t RUSTAV_CALL RustAV_PlayerCreateTextureEx(
-    const char* path,
-    void* targetTexture,
-    const RustAVPlayerOpenOptions* options);
+/*
+ * 跨平台标准能力
+ *
+ * 这组接口是 Windows / iOS / Android 应优先依赖的统一合同。
+ * 推荐组合：
+ *   - RustAV_PlayerCreatePullRGBA[Ex]
+ *   - RustAV_PlayerGetFrameMetaRGBA
+ *   - RustAV_PlayerCopyFrameRGBA
+ *   - RustAV_PlayerGetAudioMetaPCM
+ *   - RustAV_PlayerCopyAudioPCM
+ *   - RustAV_PlayerPlay / Stop / Seek / SetLoop
+ *   - RustAV_PlayerGetHealthSnapshotV2 / RustAV_GetBackendRuntimeDiagnostic
+ */
 int32_t RUSTAV_CALL RustAV_PlayerCreatePullRGBA(const char* path, int32_t targetWidth, int32_t targetHeight);
 int32_t RUSTAV_CALL RustAV_PlayerCreatePullRGBAEx(
     const char* path,
@@ -224,6 +232,18 @@ int32_t RUSTAV_CALL RustAV_GetBackendRuntimeDiagnostic(
     bool requireAudioExport,
     char* destination,
     int32_t destinationLength);
+
+/*
+ * Windows 专属增强能力
+ *
+ * 这组接口依赖 Windows 图形互操作与 Unity 原生渲染事件。
+ * Android / iOS 不应把它当成主播放路径。
+ */
+int32_t RUSTAV_CALL RustAV_PlayerCreateTexture(const char* path, void* targetTexture);
+int32_t RUSTAV_CALL RustAV_PlayerCreateTextureEx(
+    const char* path,
+    void* targetTexture,
+    const RustAVPlayerOpenOptions* options);
 
 void RUSTAV_CALL RustAV_DebugInitialize(bool cacheLogs);
 void RUSTAV_CALL RustAV_DebugTeardown(void);

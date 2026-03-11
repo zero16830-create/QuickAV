@@ -7,7 +7,8 @@ using UnityEngine;
 namespace UnityAV
 {
     /// <summary>
-    /// 使用拉帧/拉音频模式的播放器，适合 Windows/iOS/Android 通用接入。
+    /// 使用拉帧/拉音频模式的播放器。
+    /// 这是 Windows/iOS/Android 的统一主播放路径，优先级高于纹理直连模式。
     /// </summary>
     public class MediaPlayerPull : MonoBehaviour
     {

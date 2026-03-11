@@ -7,7 +7,8 @@ using UnityEngine;
 namespace UnityAV
 {
     /// <summary>
-    /// Responsible for playing streamed media
+    /// 使用原生纹理直连模式的播放器。
+    /// 当前主要服务 Windows 纹理互操作增强场景，不作为 Android/iOS 主播放入口。
     /// </summary>
     public class MediaPlayer : MonoBehaviour
     {
