@@ -1,0 +1,38 @@
+// NV12 -> RGBA Compute Shader
+// 仅用于 Unity NativeVideo source plane textures 的 Windows D3D11 消费路径。
+
+#pragma kernel CSMain
+
+Texture2D<float> YPlane;
+Texture2D<float2> UVPlane;
+RWTexture2D<float4> Result;
+
+int Width;
+int Height;
+
+float3 YUVToRGB(float y, float u, float v)
+{
+    float3 rgb;
+    rgb.r = y + 1.5748 * v;
+    rgb.g = y - 0.1873 * u - 0.4681 * v;
+    rgb.b = y + 1.8556 * u;
+    return saturate(rgb);
+}
+
+[numthreads(16, 16, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    if ((int)id.x >= Width || (int)id.y >= Height)
+    {
+        return;
+    }
+
+    int flippedY = Height - 1 - (int)id.y;
+    float y = YPlane.Load(int3(id.x, flippedY, 0));
+    int2 uvPosition = int2(id.x / 2, flippedY / 2);
+    float2 uv = UVPlane.Load(int3(uvPosition, 0));
+    float u = uv.x - 0.5;
+    float v = uv.y - 0.5;
+    float3 rgb = YUVToRGB(y, u, v);
+    Result[id.xy] = float4(rgb, 1.0);
+}

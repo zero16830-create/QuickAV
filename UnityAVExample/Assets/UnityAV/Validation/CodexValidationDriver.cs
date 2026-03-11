@@ -20,6 +20,7 @@ namespace UnityAV
         public float RealtimeReferenceLagToleranceSeconds = 0.10f;
         public string UriArgumentName = "-uri=";
         public string BackendArgumentName = "-backend=";
+        public string VideoRendererArgumentName = "-videoRenderer=";
         public string ValidationSecondsArgumentName = "-validationSeconds=";
         public string StartupTimeoutSecondsArgumentName = "-startupTimeoutSeconds=";
         public string WindowWidthArgumentName = "-windowWidth=";
@@ -78,6 +79,14 @@ namespace UnityAV
                     + " strict=" + Player.StrictBackend);
             }
 
+            var overrideVideoRenderer = TryReadStringArgument(VideoRendererArgumentName);
+            MediaPlayerPull.PullVideoRendererKind parsedVideoRenderer;
+            if (TryParseVideoRenderer(overrideVideoRenderer, out parsedVideoRenderer))
+            {
+                Player.VideoRenderer = parsedVideoRenderer;
+                Debug.Log("[CodexValidation] override video_renderer=" + parsedVideoRenderer);
+            }
+
             ValidationSeconds = TryReadFloatArgument(
                 ValidationSecondsArgumentName,
                 ValidationSeconds);
@@ -125,11 +134,12 @@ namespace UnityAV
             _startTime = _lastLogTime;
             Debug.Log(
                 string.Format(
-                    "[CodexValidation] start validation seconds={0:F1} requestedWindow={1}x{2} explicitWindow={3}",
+                    "[CodexValidation] start validation seconds={0:F1} requestedWindow={1}x{2} explicitWindow={3} video_renderer={4}",
                     ValidationSeconds,
                     Player.Width,
                     Player.Height,
-                    HasExplicitWindowOverride()));
+                    HasExplicitWindowOverride(),
+                    Player.VideoRenderer));
 
             if (HasExplicitWindowOverride())
             {
@@ -199,7 +209,7 @@ namespace UnityAV
             var snapshot = CaptureSnapshot();
 
             Debug.Log(string.Format(
-                "[CodexValidation] time={0:F3}s texture={1} audioPlaying={2} started={3} startupElapsed={4:F3}s sourceState={5} sourcePackets={6} sourceTimeouts={7} sourceReconnects={8} window={9}x{10} textureSize={11}x{12} fullscreen={13} mode={14} backend={15}",
+                "[CodexValidation] time={0:F3}s texture={1} audioPlaying={2} started={3} startupElapsed={4:F3}s sourceState={5} sourcePackets={6} sourceTimeouts={7} sourceReconnects={8} window={9}x{10} textureSize={11}x{12} fullscreen={13} mode={14} backend={15} requested_renderer={16} actual_renderer={17}",
                 snapshot.PlaybackTime,
                 snapshot.HasTexture,
                 snapshot.AudioPlaying,
@@ -215,7 +225,9 @@ namespace UnityAV
                 snapshot.TextureHeight,
                 Screen.fullScreen,
                 Screen.fullScreenMode,
-                Player.ActualBackendKind));
+                Player.ActualBackendKind,
+                Player.VideoRenderer,
+                Player.ActualVideoRenderer));
             if (snapshot.HasAvSyncSample)
             {
                 Debug.Log(string.Format(
@@ -624,6 +636,30 @@ namespace UnityAV
                     return true;
                 default:
                     Debug.LogWarning("[CodexValidation] ignore unknown backend=" + rawValue);
+                    return false;
+            }
+        }
+
+        private static bool TryParseVideoRenderer(
+            string rawValue,
+            out MediaPlayerPull.PullVideoRendererKind renderer)
+        {
+            renderer = MediaPlayerPull.PullVideoRendererKind.Cpu;
+            if (string.IsNullOrEmpty(rawValue))
+            {
+                return false;
+            }
+
+            switch (rawValue.Trim().ToLowerInvariant())
+            {
+                case "cpu":
+                    renderer = MediaPlayerPull.PullVideoRendererKind.Cpu;
+                    return true;
+                case "wgpu":
+                    renderer = MediaPlayerPull.PullVideoRendererKind.Wgpu;
+                    return true;
+                default:
+                    Debug.LogWarning("[CodexValidation] ignore unknown video_renderer=" + rawValue);
                     return false;
             }
         }

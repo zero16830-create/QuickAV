@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using UnityEngine;
 
@@ -19,6 +20,9 @@ namespace UnityAV
 
         [DllImport(NativePlugin.Name, EntryPoint = "RustAV_GetRenderEventFunc")]
         private static extern IntPtr GetRenderEventFunc();
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_GetRenderEventBaseId")]
+        private static extern int GetRenderEventBaseId();
 
         [DllImport(NativePlugin.Name, EntryPoint = "RustAV_DebugInitialize")]
         private static extern void DebugInitialize(bool cacheLogs);
@@ -41,9 +45,12 @@ namespace UnityAV
         private static readonly LogDelegate DebugLogThunkDelegate = DebugLogThunk;
         private static readonly LogDelegate WarningLogThunkDelegate = WarningLogThunk;
         private static readonly LogDelegate ErrorMethodThunkDelegate = ErrorMethodThunk;
+        private static readonly object RenderEventPlayersLock = new object();
+        private static readonly HashSet<int> RenderEventPlayerIds = new HashSet<int>();
 
         private static bool Initialized;
         private static RenderEventDriver RenderDriver;
+        private static int CachedRenderEventBaseId = int.MinValue;
 
         public static void Initialize(MonoBehaviour monoBehaviour)
         {
@@ -85,6 +92,12 @@ namespace UnityAV
                 RenderDriver = null;
             }
 
+            lock (RenderEventPlayersLock)
+            {
+                RenderEventPlayerIds.Clear();
+            }
+            CachedRenderEventBaseId = int.MinValue;
+
             if (!Initialized)
             {
                 return;
@@ -92,6 +105,32 @@ namespace UnityAV
 
             DebugTeardown();
             Initialized = false;
+        }
+
+        public static void RegisterPlayerRenderEvent(int playerId)
+        {
+            if (playerId < 0)
+            {
+                return;
+            }
+
+            lock (RenderEventPlayersLock)
+            {
+                RenderEventPlayerIds.Add(playerId);
+            }
+        }
+
+        public static void UnregisterPlayerRenderEvent(int playerId)
+        {
+            if (playerId < 0)
+            {
+                return;
+            }
+
+            lock (RenderEventPlayersLock)
+            {
+                RenderEventPlayerIds.Remove(playerId);
+            }
         }
 
         private static void EnsureRenderDriver()
@@ -136,6 +175,40 @@ namespace UnityAV
             return message == IntPtr.Zero ? string.Empty : (Marshal.PtrToStringAnsi(message) ?? string.Empty);
         }
 
+        private static int[] SnapshotRenderEventPlayerIds()
+        {
+            lock (RenderEventPlayersLock)
+            {
+                if (RenderEventPlayerIds.Count == 0)
+                {
+                    return Array.Empty<int>();
+                }
+
+                var ids = new int[RenderEventPlayerIds.Count];
+                RenderEventPlayerIds.CopyTo(ids);
+                return ids;
+            }
+        }
+
+        private static int ResolveRenderEventBaseId()
+        {
+            if (CachedRenderEventBaseId != int.MinValue)
+            {
+                return CachedRenderEventBaseId;
+            }
+
+            try
+            {
+                CachedRenderEventBaseId = GetRenderEventBaseId();
+            }
+            catch (EntryPointNotFoundException)
+            {
+                CachedRenderEventBaseId = -1;
+            }
+
+            return CachedRenderEventBaseId;
+        }
+
         private sealed class RenderEventDriver : MonoBehaviour
         {
             private static readonly WaitForEndOfFrame EndOfFrameYield = new WaitForEndOfFrame();
@@ -168,7 +241,25 @@ namespace UnityAV
                     var callback = GetRenderEventFunc();
                     if (callback != IntPtr.Zero)
                     {
-                        GL.IssuePluginEvent(callback, 1);
+                        var renderEventBaseId = ResolveRenderEventBaseId();
+                        var playerIds = SnapshotRenderEventPlayerIds();
+                        if (renderEventBaseId >= 0 && playerIds.Length > 0)
+                        {
+                            for (var index = 0; index < playerIds.Length; index += 1)
+                            {
+                                var playerId = playerIds[index];
+                                if (playerId < 0)
+                                {
+                                    continue;
+                                }
+
+                                GL.IssuePluginEvent(callback, renderEventBaseId + playerId);
+                            }
+                        }
+                        else
+                        {
+                            GL.IssuePluginEvent(callback, 1);
+                        }
                     }
                 }
             }

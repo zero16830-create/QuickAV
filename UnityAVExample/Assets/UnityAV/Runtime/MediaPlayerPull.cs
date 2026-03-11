@@ -33,6 +33,12 @@ namespace UnityAV
             Float32 = 1
         }
 
+        public enum PullVideoRendererKind
+        {
+            Cpu = 0,
+            Wgpu = 1
+        }
+
         [StructLayout(LayoutKind.Sequential)]
         private struct RustAVFrameMeta
         {
@@ -123,6 +129,13 @@ namespace UnityAV
         public int Height = DefaultHeight;
 
         /// <summary>
+        /// 拉帧模式下使用的内部视频渲染器。
+        /// Cpu 表示传统 CPU/RGBA 导出路径；
+        /// Wgpu 表示使用 Rust 侧 wgpu 渲染后再导出 RGBA。
+        /// </summary>
+        public PullVideoRendererKind VideoRenderer = PullVideoRendererKind.Cpu;
+
+        /// <summary>
         /// 用于显示视频的材质。
         /// </summary>
         public Material TargetMaterial;
@@ -165,6 +178,7 @@ namespace UnityAV
         private bool _playRequested;
         private bool _resumeAfterPause;
         private MediaBackendKind _actualBackendKind = MediaBackendKind.Auto;
+        private PullVideoRendererKind _actualVideoRenderer = PullVideoRendererKind.Cpu;
         private float _playRequestedRealtimeAt = -1f;
         private float _firstVideoFrameRealtimeAt = -1f;
         private float _firstAudioStartRealtimeAt = -1f;
@@ -180,6 +194,16 @@ namespace UnityAV
 
         [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerCreatePullRGBAEx")]
         private static extern int CreatePlayerPullRGBAEx(
+            string uri,
+            int targetWidth,
+            int targetHeight,
+            ref MediaNativeInteropCommon.RustAVPlayerOpenOptions options);
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerCreateWgpuRGBA")]
+        private static extern int CreatePlayerWgpuRGBA(string uri, int targetWidth, int targetHeight);
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerCreateWgpuRGBAEx")]
+        private static extern int CreatePlayerWgpuRGBAEx(
             string uri,
             int targetWidth,
             int targetHeight,
@@ -246,6 +270,11 @@ namespace UnityAV
         public MediaBackendKind ActualBackendKind
         {
             get { return _actualBackendKind; }
+        }
+
+        public PullVideoRendererKind ActualVideoRenderer
+        {
+            get { return _actualVideoRenderer; }
         }
 
         public bool HasPresentedVideoFrame
@@ -638,7 +667,9 @@ namespace UnityAV
                 Debug.Log(
                     "[MediaPlayerPull] player_created requested_backend=" + PreferredBackend
                     + " actual_backend=" + _actualBackendKind
-                    + " strict_backend=" + StrictBackend);
+                    + " strict_backend=" + StrictBackend
+                    + " requested_video_renderer=" + VideoRenderer
+                    + " actual_video_renderer=" + _actualVideoRenderer);
 
                 if (TargetMaterial != null)
                 {
@@ -1303,6 +1334,7 @@ namespace UnityAV
             ReleasePlayer(_id);
             _id = InvalidPlayerId;
             _actualBackendKind = MediaBackendKind.Auto;
+            _actualVideoRenderer = PullVideoRendererKind.Cpu;
             _playRequested = false;
             _resumeAfterPause = false;
             ResetStartupTelemetry();
@@ -1357,10 +1389,32 @@ namespace UnityAV
                 var options = MediaNativeInteropCommon.CreateOpenOptions(
                     PreferredBackend,
                     StrictBackend);
+                if (VideoRenderer == PullVideoRendererKind.Wgpu)
+                {
+                    _actualVideoRenderer = PullVideoRendererKind.Wgpu;
+                    return CreatePlayerWgpuRGBAEx(uri, Width, Height, ref options);
+                }
+
+                _actualVideoRenderer = PullVideoRendererKind.Cpu;
                 return CreatePlayerPullRGBAEx(uri, Width, Height, ref options);
             }
             catch (EntryPointNotFoundException)
             {
+                if (VideoRenderer == PullVideoRendererKind.Wgpu)
+                {
+                    try
+                    {
+                        _actualVideoRenderer = PullVideoRendererKind.Wgpu;
+                        return CreatePlayerWgpuRGBA(uri, Width, Height);
+                    }
+                    catch (EntryPointNotFoundException)
+                    {
+                        Debug.LogWarning(
+                            "[MediaPlayerPull] wgpu entrypoint missing, fallback to cpu renderer");
+                    }
+                }
+
+                _actualVideoRenderer = PullVideoRendererKind.Cpu;
                 return CreatePlayerPullRGBA(uri, Width, Height);
             }
         }

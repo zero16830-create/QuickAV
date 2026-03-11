@@ -24,11 +24,97 @@ namespace UnityAV
         Checking = 4,
     }
 
+    public enum NativeVideoPlatformKind
+    {
+        Unknown = 0,
+        Windows = 1,
+        Ios = 2,
+        Android = 3,
+    }
+
+    public enum NativeVideoSurfaceKind
+    {
+        Unknown = 0,
+        D3D11Texture2D = 1,
+        MetalTexture = 2,
+        CVPixelBuffer = 3,
+        AndroidSurfaceTexture = 4,
+        AndroidHardwareBuffer = 5,
+    }
+
+    public enum NativeVideoPixelFormatKind
+    {
+        Unknown = -1,
+        Yuv420p = 0,
+        Rgba32 = 1,
+        Nv12 = 2,
+    }
+
+    public enum NativeVideoPlaneTextureFormatKind
+    {
+        Unknown = 0,
+        R8Unorm = 1,
+        Rg8Unorm = 2,
+    }
+
+    public enum NativeVideoPlaneResourceKindKind
+    {
+        Unknown = 0,
+        D3D11Texture2D = 1,
+        D3D11ShaderResourceView = 2,
+    }
+
     internal static class MediaNativeInteropCommon
     {
         internal const uint RustAVPlayerOpenOptionsVersion = 1u;
         internal const uint RustAVPlayerHealthSnapshotV2Version = 2u;
+        internal const uint RustAVNativeVideoTargetVersion = 1u;
+        internal const uint RustAVNativeVideoInteropCapsVersion = 1u;
+        internal const uint RustAVNativeVideoFrameVersion = 1u;
+        internal const uint RustAVNativeVideoPlaneTexturesVersion = 1u;
+        internal const uint RustAVNativeVideoPlaneViewsVersion = 1u;
         internal const int BackendDiagnosticBufferLength = 512;
+        internal const uint NativeVideoTargetFlagNone = 0u;
+        internal const uint NativeVideoTargetFlagExternalTexture = 1u << 0;
+        internal const uint NativeVideoTargetFlagUnityOwnedTexture = 1u << 1;
+        internal const uint NativeVideoTargetFlagDisableDirectTargetPresent = 1u << 2;
+        internal const uint NativeVideoCapFlagTargetBindingSupported = 1u << 0;
+        internal const uint NativeVideoCapFlagFrameAcquireSupported = 1u << 1;
+        internal const uint NativeVideoCapFlagFrameReleaseSupported = 1u << 2;
+        internal const uint NativeVideoCapFlagFallbackCopyPath = 1u << 3;
+        internal const uint NativeVideoCapFlagExternalTextureTarget = 1u << 4;
+        internal const uint NativeVideoCapFlagSourceSurfaceZeroCopy = 1u << 5;
+        internal const uint NativeVideoCapFlagPresentedFrameDirectBindable = 1u << 6;
+        internal const uint NativeVideoCapFlagPresentedFrameStrictZeroCopy = 1u << 7;
+        internal const uint NativeVideoCapFlagSourcePlaneTexturesSupported = 1u << 8;
+        internal const uint NativeVideoCapFlagSourcePlaneViewsSupported = 1u << 9;
+        internal const uint NativeVideoFrameFlagNone = 0u;
+        internal const uint NativeVideoFrameFlagHasFrame = 1u << 0;
+        internal const uint NativeVideoFrameFlagHardwareDecode = 1u << 1;
+        internal const uint NativeVideoFrameFlagZeroCopy = 1u << 2;
+        internal const uint NativeVideoFrameFlagCpuFallback = 1u << 3;
+
+        internal enum NativeVideoPixelFormat
+        {
+            Unknown = -1,
+            Yuv420p = 0,
+            Rgba32 = 1,
+            Nv12 = 2,
+        }
+
+        internal enum NativeVideoPlaneTextureFormat
+        {
+            Unknown = 0,
+            R8Unorm = 1,
+            Rg8Unorm = 2,
+        }
+
+        internal enum NativeVideoPlaneResourceKind
+        {
+            Unknown = 0,
+            D3D11Texture2D = 1,
+            D3D11ShaderResourceView = 2,
+        }
 
         [StructLayout(LayoutKind.Sequential)]
         internal struct RustAVPlayerOpenOptions
@@ -37,6 +123,98 @@ namespace UnityAV
             public uint StructVersion;
             public int BackendKind;
             public int StrictBackend;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct RustAVNativeVideoTarget
+        {
+            public uint StructSize;
+            public uint StructVersion;
+            public int PlatformKind;
+            public int SurfaceKind;
+            public ulong TargetHandle;
+            public ulong AuxiliaryHandle;
+            public int Width;
+            public int Height;
+            public int PixelFormat;
+            public uint Flags;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct RustAVNativeVideoInteropCaps
+        {
+            public uint StructSize;
+            public uint StructVersion;
+            public int BackendKind;
+            public int PlatformKind;
+            public int SurfaceKind;
+            public int Supported;
+            public int HardwareDecodeSupported;
+            public int ZeroCopySupported;
+            public int AcquireReleaseSupported;
+            public uint Flags;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct RustAVNativeVideoFrame
+        {
+            public uint StructSize;
+            public uint StructVersion;
+            public int SurfaceKind;
+            public ulong NativeHandle;
+            public ulong AuxiliaryHandle;
+            public int Width;
+            public int Height;
+            public int PixelFormat;
+            public double TimeSec;
+            public long FrameIndex;
+            public uint Flags;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct RustAVNativeVideoPlaneTextures
+        {
+            public uint StructSize;
+            public uint StructVersion;
+            public int SurfaceKind;
+            public int SourcePixelFormat;
+            public ulong YNativeHandle;
+            public ulong YAuxiliaryHandle;
+            public int YWidth;
+            public int YHeight;
+            public int YTextureFormat;
+            public ulong UVNativeHandle;
+            public ulong UVAuxiliaryHandle;
+            public int UVWidth;
+            public int UVHeight;
+            public int UVTextureFormat;
+            public double TimeSec;
+            public long FrameIndex;
+            public uint Flags;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct RustAVNativeVideoPlaneViews
+        {
+            public uint StructSize;
+            public uint StructVersion;
+            public int SurfaceKind;
+            public int SourcePixelFormat;
+            public ulong YNativeHandle;
+            public ulong YAuxiliaryHandle;
+            public int YWidth;
+            public int YHeight;
+            public int YTextureFormat;
+            public int YResourceKind;
+            public ulong UVNativeHandle;
+            public ulong UVAuxiliaryHandle;
+            public int UVWidth;
+            public int UVHeight;
+            public int UVTextureFormat;
+            public int UVResourceKind;
+            public double TimeSec;
+            public long FrameIndex;
+            public uint Flags;
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -87,6 +265,28 @@ namespace UnityAV
             int playerId,
             ref RustAVPlayerHealthSnapshotV2 snapshot);
 
+        internal delegate int GetNativeVideoInteropCapsDelegate(
+            int backendKind,
+            string path,
+            ref RustAVNativeVideoTarget target,
+            ref RustAVNativeVideoInteropCaps caps);
+
+        internal delegate int AcquireNativeVideoFrameDelegate(
+            int playerId,
+            ref RustAVNativeVideoFrame frame);
+
+        internal delegate int GetNativeVideoSourcePlaneTexturesDelegate(
+            int playerId,
+            ref RustAVNativeVideoPlaneTextures textures);
+
+        internal delegate int GetNativeVideoSourcePlaneViewsDelegate(
+            int playerId,
+            ref RustAVNativeVideoPlaneViews views);
+
+        internal delegate int ReleaseNativeVideoFrameDelegate(
+            int playerId,
+            long frameIndex);
+
         internal struct RuntimeHealthView
         {
             public MediaSourceConnectionState SourceConnectionState;
@@ -101,6 +301,76 @@ namespace UnityAV
             public double AudioTimeSec;
             public double AudioPresentedTimeSec;
             public double AudioSinkDelaySec;
+        }
+
+        internal struct NativeVideoInteropCapsView
+        {
+            public MediaBackendKind BackendKind;
+            public NativeVideoPlatformKind PlatformKind;
+            public NativeVideoSurfaceKind SurfaceKind;
+            public bool Supported;
+            public bool HardwareDecodeSupported;
+            public bool ZeroCopySupported;
+            public bool SourceSurfaceZeroCopySupported;
+            public bool PresentedFrameDirectBindable;
+            public bool PresentedFrameStrictZeroCopySupported;
+            public bool SourcePlaneTexturesSupported;
+            public bool SourcePlaneViewsSupported;
+            public bool AcquireReleaseSupported;
+            public uint Flags;
+        }
+
+        internal struct NativeVideoFrameView
+        {
+            public NativeVideoSurfaceKind SurfaceKind;
+            public IntPtr NativeHandle;
+            public IntPtr AuxiliaryHandle;
+            public int Width;
+            public int Height;
+            public NativeVideoPixelFormat PixelFormat;
+            public double TimeSec;
+            public long FrameIndex;
+            public uint Flags;
+        }
+
+        internal struct NativeVideoPlaneTexturesView
+        {
+            public NativeVideoSurfaceKind SurfaceKind;
+            public NativeVideoPixelFormat SourcePixelFormat;
+            public IntPtr YNativeHandle;
+            public IntPtr YAuxiliaryHandle;
+            public int YWidth;
+            public int YHeight;
+            public NativeVideoPlaneTextureFormat YTextureFormat;
+            public IntPtr UVNativeHandle;
+            public IntPtr UVAuxiliaryHandle;
+            public int UVWidth;
+            public int UVHeight;
+            public NativeVideoPlaneTextureFormat UVTextureFormat;
+            public double TimeSec;
+            public long FrameIndex;
+            public uint Flags;
+        }
+
+        internal struct NativeVideoPlaneViewsView
+        {
+            public NativeVideoSurfaceKind SurfaceKind;
+            public NativeVideoPixelFormat SourcePixelFormat;
+            public IntPtr YNativeHandle;
+            public IntPtr YAuxiliaryHandle;
+            public int YWidth;
+            public int YHeight;
+            public NativeVideoPlaneTextureFormat YTextureFormat;
+            public NativeVideoPlaneResourceKind YResourceKind;
+            public IntPtr UVNativeHandle;
+            public IntPtr UVAuxiliaryHandle;
+            public int UVWidth;
+            public int UVHeight;
+            public NativeVideoPlaneTextureFormat UVTextureFormat;
+            public NativeVideoPlaneResourceKind UVResourceKind;
+            public double TimeSec;
+            public long FrameIndex;
+            public uint Flags;
         }
 
         internal static bool TryReadRuntimeHealth(
@@ -165,6 +435,90 @@ namespace UnityAV
             {
                 StructSize = (uint)Marshal.SizeOf(typeof(RustAVPlayerHealthSnapshotV2)),
                 StructVersion = RustAVPlayerHealthSnapshotV2Version,
+            };
+        }
+
+        internal static RustAVNativeVideoTarget CreateNativeVideoTarget(
+            NativeVideoPlatformKind platformKind,
+            NativeVideoSurfaceKind surfaceKind,
+            IntPtr targetHandle,
+            IntPtr auxiliaryHandle,
+            int width,
+            int height,
+            uint extraFlags = NativeVideoTargetFlagNone)
+        {
+            var flags = NativeVideoTargetFlagExternalTexture;
+            if (auxiliaryHandle != IntPtr.Zero)
+            {
+                flags |= NativeVideoTargetFlagUnityOwnedTexture;
+            }
+            flags |= extraFlags;
+
+            return new RustAVNativeVideoTarget
+            {
+                StructSize = (uint)Marshal.SizeOf(typeof(RustAVNativeVideoTarget)),
+                StructVersion = RustAVNativeVideoTargetVersion,
+                PlatformKind = (int)platformKind,
+                SurfaceKind = (int)surfaceKind,
+                TargetHandle = unchecked((ulong)targetHandle.ToInt64()),
+                AuxiliaryHandle = unchecked((ulong)auxiliaryHandle.ToInt64()),
+                Width = width,
+                Height = height,
+                PixelFormat = (int)NativeVideoPixelFormat.Rgba32,
+                Flags = flags,
+            };
+        }
+
+        internal static RustAVNativeVideoTarget CreateDefaultNativeVideoTarget(
+            IntPtr targetHandle,
+            IntPtr auxiliaryHandle,
+            int width,
+            int height,
+            uint extraFlags = NativeVideoTargetFlagNone)
+        {
+            return CreateNativeVideoTarget(
+                DetectNativeVideoPlatformKind(),
+                DetectDefaultNativeVideoSurfaceKind(),
+                targetHandle,
+                auxiliaryHandle,
+                width,
+                height,
+                extraFlags);
+        }
+
+        internal static RustAVNativeVideoInteropCaps CreateNativeVideoInteropCaps()
+        {
+            return new RustAVNativeVideoInteropCaps
+            {
+                StructSize = (uint)Marshal.SizeOf(typeof(RustAVNativeVideoInteropCaps)),
+                StructVersion = RustAVNativeVideoInteropCapsVersion,
+            };
+        }
+
+        internal static RustAVNativeVideoFrame CreateNativeVideoFrame()
+        {
+            return new RustAVNativeVideoFrame
+            {
+                StructSize = (uint)Marshal.SizeOf(typeof(RustAVNativeVideoFrame)),
+                StructVersion = RustAVNativeVideoFrameVersion,
+            };
+        }
+
+        internal static RustAVNativeVideoPlaneTextures CreateNativeVideoPlaneTextures()
+        {
+            return new RustAVNativeVideoPlaneTextures
+            {
+                StructSize = (uint)Marshal.SizeOf(typeof(RustAVNativeVideoPlaneTextures)),
+                StructVersion = RustAVNativeVideoPlaneTexturesVersion,
+            };
+        }
+
+        internal static RustAVNativeVideoPlaneViews CreateNativeVideoPlaneViews()
+        {
+            return new RustAVNativeVideoPlaneViews
+            {
+                StructSize = (uint)Marshal.SizeOf(typeof(RustAVNativeVideoPlaneViews)),
+                StructVersion = RustAVNativeVideoPlaneViewsVersion,
             };
         }
 
@@ -239,6 +593,378 @@ namespace UnityAV
             }
 
             return string.Empty;
+        }
+
+        internal static bool TryReadNativeVideoInteropCaps(
+            GetNativeVideoInteropCapsDelegate getNativeVideoInteropCaps,
+            MediaBackendKind preferredBackend,
+            string uri,
+            ref RustAVNativeVideoTarget target,
+            out NativeVideoInteropCapsView caps)
+        {
+            caps = default(NativeVideoInteropCapsView);
+
+            try
+            {
+                var nativeCaps = CreateNativeVideoInteropCaps();
+                var result = getNativeVideoInteropCaps(
+                    (int)preferredBackend,
+                    uri,
+                    ref target,
+                    ref nativeCaps);
+                if (result < 0)
+                {
+                    return false;
+                }
+
+                caps = new NativeVideoInteropCapsView
+                {
+                    BackendKind = NormalizeBackendKind(nativeCaps.BackendKind, preferredBackend),
+                    PlatformKind = NormalizeNativeVideoPlatformKind(nativeCaps.PlatformKind),
+                    SurfaceKind = NormalizeNativeVideoSurfaceKind(nativeCaps.SurfaceKind),
+                    Supported = nativeCaps.Supported != 0,
+                    HardwareDecodeSupported = nativeCaps.HardwareDecodeSupported != 0,
+                    ZeroCopySupported = nativeCaps.ZeroCopySupported != 0,
+                    SourceSurfaceZeroCopySupported =
+                        (nativeCaps.Flags & NativeVideoCapFlagSourceSurfaceZeroCopy) != 0,
+                    PresentedFrameDirectBindable =
+                        (nativeCaps.Flags & NativeVideoCapFlagPresentedFrameDirectBindable) != 0,
+                    PresentedFrameStrictZeroCopySupported =
+                        (nativeCaps.Flags & NativeVideoCapFlagPresentedFrameStrictZeroCopy) != 0,
+                    SourcePlaneTexturesSupported =
+                        (nativeCaps.Flags & NativeVideoCapFlagSourcePlaneTexturesSupported) != 0,
+                    SourcePlaneViewsSupported =
+                        (nativeCaps.Flags & NativeVideoCapFlagSourcePlaneViewsSupported) != 0,
+                    AcquireReleaseSupported = nativeCaps.AcquireReleaseSupported != 0,
+                    Flags = nativeCaps.Flags,
+                };
+                return true;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return false;
+            }
+            catch (DllNotFoundException)
+            {
+                return false;
+            }
+        }
+
+        internal static bool TryAcquireNativeVideoFrame(
+            AcquireNativeVideoFrameDelegate acquireNativeVideoFrame,
+            int playerId,
+            out NativeVideoFrameView frame)
+        {
+            frame = default(NativeVideoFrameView);
+
+            try
+            {
+                var nativeFrame = CreateNativeVideoFrame();
+                var result = acquireNativeVideoFrame(playerId, ref nativeFrame);
+                if (result <= 0)
+                {
+                    return false;
+                }
+
+                frame = new NativeVideoFrameView
+                {
+                    SurfaceKind = NormalizeNativeVideoSurfaceKind(nativeFrame.SurfaceKind),
+                    NativeHandle = new IntPtr(unchecked((long)nativeFrame.NativeHandle)),
+                    AuxiliaryHandle = new IntPtr(unchecked((long)nativeFrame.AuxiliaryHandle)),
+                    Width = nativeFrame.Width,
+                    Height = nativeFrame.Height,
+                    PixelFormat = NormalizeNativeVideoPixelFormat(nativeFrame.PixelFormat),
+                    TimeSec = nativeFrame.TimeSec,
+                    FrameIndex = nativeFrame.FrameIndex,
+                    Flags = nativeFrame.Flags,
+                };
+                return true;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return false;
+            }
+            catch (DllNotFoundException)
+            {
+                return false;
+            }
+        }
+
+        internal static bool TryReleaseNativeVideoFrame(
+            ReleaseNativeVideoFrameDelegate releaseNativeVideoFrame,
+            int playerId,
+            long frameIndex)
+        {
+            if (frameIndex < 0)
+            {
+                return false;
+            }
+
+            try
+            {
+                return releaseNativeVideoFrame(playerId, frameIndex) >= 0;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return false;
+            }
+            catch (DllNotFoundException)
+            {
+                return false;
+            }
+        }
+
+        internal static bool TryReadNativeVideoSourcePlaneTextures(
+            GetNativeVideoSourcePlaneTexturesDelegate getNativeVideoSourcePlaneTextures,
+            int playerId,
+            out NativeVideoPlaneTexturesView textures)
+        {
+            textures = default(NativeVideoPlaneTexturesView);
+
+            try
+            {
+                var nativeTextures = CreateNativeVideoPlaneTextures();
+                var result = getNativeVideoSourcePlaneTextures(playerId, ref nativeTextures);
+                if (result <= 0)
+                {
+                    return false;
+                }
+
+                textures = new NativeVideoPlaneTexturesView
+                {
+                    SurfaceKind = NormalizeNativeVideoSurfaceKind(nativeTextures.SurfaceKind),
+                    SourcePixelFormat =
+                        NormalizeNativeVideoPixelFormat(nativeTextures.SourcePixelFormat),
+                    YNativeHandle = new IntPtr(unchecked((long)nativeTextures.YNativeHandle)),
+                    YAuxiliaryHandle =
+                        new IntPtr(unchecked((long)nativeTextures.YAuxiliaryHandle)),
+                    YWidth = nativeTextures.YWidth,
+                    YHeight = nativeTextures.YHeight,
+                    YTextureFormat =
+                        NormalizeNativeVideoPlaneTextureFormat(nativeTextures.YTextureFormat),
+                    UVNativeHandle = new IntPtr(unchecked((long)nativeTextures.UVNativeHandle)),
+                    UVAuxiliaryHandle =
+                        new IntPtr(unchecked((long)nativeTextures.UVAuxiliaryHandle)),
+                    UVWidth = nativeTextures.UVWidth,
+                    UVHeight = nativeTextures.UVHeight,
+                    UVTextureFormat =
+                        NormalizeNativeVideoPlaneTextureFormat(nativeTextures.UVTextureFormat),
+                    TimeSec = nativeTextures.TimeSec,
+                    FrameIndex = nativeTextures.FrameIndex,
+                    Flags = nativeTextures.Flags,
+                };
+                return true;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return false;
+            }
+            catch (DllNotFoundException)
+            {
+                return false;
+            }
+        }
+
+        internal static bool TryReadNativeVideoSourcePlaneViews(
+            GetNativeVideoSourcePlaneViewsDelegate getNativeVideoSourcePlaneViews,
+            int playerId,
+            out NativeVideoPlaneViewsView views)
+        {
+            views = default(NativeVideoPlaneViewsView);
+
+            try
+            {
+                var nativeViews = CreateNativeVideoPlaneViews();
+                var result = getNativeVideoSourcePlaneViews(playerId, ref nativeViews);
+                if (result <= 0)
+                {
+                    return false;
+                }
+
+                views = new NativeVideoPlaneViewsView
+                {
+                    SurfaceKind = NormalizeNativeVideoSurfaceKind(nativeViews.SurfaceKind),
+                    SourcePixelFormat =
+                        NormalizeNativeVideoPixelFormat(nativeViews.SourcePixelFormat),
+                    YNativeHandle = new IntPtr(unchecked((long)nativeViews.YNativeHandle)),
+                    YAuxiliaryHandle =
+                        new IntPtr(unchecked((long)nativeViews.YAuxiliaryHandle)),
+                    YWidth = nativeViews.YWidth,
+                    YHeight = nativeViews.YHeight,
+                    YTextureFormat =
+                        NormalizeNativeVideoPlaneTextureFormat(nativeViews.YTextureFormat),
+                    YResourceKind =
+                        NormalizeNativeVideoPlaneResourceKind(nativeViews.YResourceKind),
+                    UVNativeHandle = new IntPtr(unchecked((long)nativeViews.UVNativeHandle)),
+                    UVAuxiliaryHandle =
+                        new IntPtr(unchecked((long)nativeViews.UVAuxiliaryHandle)),
+                    UVWidth = nativeViews.UVWidth,
+                    UVHeight = nativeViews.UVHeight,
+                    UVTextureFormat =
+                        NormalizeNativeVideoPlaneTextureFormat(nativeViews.UVTextureFormat),
+                    UVResourceKind =
+                        NormalizeNativeVideoPlaneResourceKind(nativeViews.UVResourceKind),
+                    TimeSec = nativeViews.TimeSec,
+                    FrameIndex = nativeViews.FrameIndex,
+                    Flags = nativeViews.Flags,
+                };
+                return true;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return false;
+            }
+            catch (DllNotFoundException)
+            {
+                return false;
+            }
+        }
+
+        internal static NativeVideoPlatformKind DetectNativeVideoPlatformKind()
+        {
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
+            return NativeVideoPlatformKind.Windows;
+#elif UNITY_IOS
+            return NativeVideoPlatformKind.Ios;
+#elif UNITY_ANDROID
+            return NativeVideoPlatformKind.Android;
+#else
+            return NativeVideoPlatformKind.Unknown;
+#endif
+        }
+
+        internal static NativeVideoSurfaceKind DetectDefaultNativeVideoSurfaceKind()
+        {
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
+            return NativeVideoSurfaceKind.D3D11Texture2D;
+#elif UNITY_IOS
+            return NativeVideoSurfaceKind.MetalTexture;
+#elif UNITY_ANDROID
+            return NativeVideoSurfaceKind.AndroidSurfaceTexture;
+#else
+            return NativeVideoSurfaceKind.Unknown;
+#endif
+        }
+
+        internal static NativeVideoPlatformKind NormalizeNativeVideoPlatformKind(int rawValue)
+        {
+            switch (rawValue)
+            {
+                case 1:
+                    return NativeVideoPlatformKind.Windows;
+                case 2:
+                    return NativeVideoPlatformKind.Ios;
+                case 3:
+                    return NativeVideoPlatformKind.Android;
+                default:
+                    return NativeVideoPlatformKind.Unknown;
+            }
+        }
+
+        internal static NativeVideoSurfaceKind NormalizeNativeVideoSurfaceKind(int rawValue)
+        {
+            switch (rawValue)
+            {
+                case 1:
+                    return NativeVideoSurfaceKind.D3D11Texture2D;
+                case 2:
+                    return NativeVideoSurfaceKind.MetalTexture;
+                case 3:
+                    return NativeVideoSurfaceKind.CVPixelBuffer;
+                case 4:
+                    return NativeVideoSurfaceKind.AndroidSurfaceTexture;
+                case 5:
+                    return NativeVideoSurfaceKind.AndroidHardwareBuffer;
+                default:
+                    return NativeVideoSurfaceKind.Unknown;
+            }
+        }
+
+        internal static NativeVideoPixelFormat NormalizeNativeVideoPixelFormat(int rawValue)
+        {
+            switch (rawValue)
+            {
+                case 0:
+                    return NativeVideoPixelFormat.Yuv420p;
+                case 1:
+                    return NativeVideoPixelFormat.Rgba32;
+                case 2:
+                    return NativeVideoPixelFormat.Nv12;
+                default:
+                    return NativeVideoPixelFormat.Unknown;
+            }
+        }
+
+        internal static NativeVideoPlaneTextureFormat NormalizeNativeVideoPlaneTextureFormat(
+            int rawValue)
+        {
+            switch (rawValue)
+            {
+                case 1:
+                    return NativeVideoPlaneTextureFormat.R8Unorm;
+                case 2:
+                    return NativeVideoPlaneTextureFormat.Rg8Unorm;
+                default:
+                    return NativeVideoPlaneTextureFormat.Unknown;
+            }
+        }
+
+        internal static NativeVideoPlaneResourceKind NormalizeNativeVideoPlaneResourceKind(
+            int rawValue)
+        {
+            switch (rawValue)
+            {
+                case 1:
+                    return NativeVideoPlaneResourceKind.D3D11Texture2D;
+                case 2:
+                    return NativeVideoPlaneResourceKind.D3D11ShaderResourceView;
+                default:
+                    return NativeVideoPlaneResourceKind.Unknown;
+            }
+        }
+
+        internal static NativeVideoPixelFormatKind ToPublicNativeVideoPixelFormat(
+            NativeVideoPixelFormat pixelFormat)
+        {
+            switch (pixelFormat)
+            {
+                case NativeVideoPixelFormat.Yuv420p:
+                    return NativeVideoPixelFormatKind.Yuv420p;
+                case NativeVideoPixelFormat.Rgba32:
+                    return NativeVideoPixelFormatKind.Rgba32;
+                case NativeVideoPixelFormat.Nv12:
+                    return NativeVideoPixelFormatKind.Nv12;
+                default:
+                    return NativeVideoPixelFormatKind.Unknown;
+            }
+        }
+
+        internal static NativeVideoPlaneTextureFormatKind ToPublicNativeVideoPlaneTextureFormat(
+            NativeVideoPlaneTextureFormat textureFormat)
+        {
+            switch (textureFormat)
+            {
+                case NativeVideoPlaneTextureFormat.R8Unorm:
+                    return NativeVideoPlaneTextureFormatKind.R8Unorm;
+                case NativeVideoPlaneTextureFormat.Rg8Unorm:
+                    return NativeVideoPlaneTextureFormatKind.Rg8Unorm;
+                default:
+                    return NativeVideoPlaneTextureFormatKind.Unknown;
+            }
+        }
+
+        internal static NativeVideoPlaneResourceKindKind ToPublicNativeVideoPlaneResourceKind(
+            NativeVideoPlaneResourceKind resourceKind)
+        {
+            switch (resourceKind)
+            {
+                case NativeVideoPlaneResourceKind.D3D11Texture2D:
+                    return NativeVideoPlaneResourceKindKind.D3D11Texture2D;
+                case NativeVideoPlaneResourceKind.D3D11ShaderResourceView:
+                    return NativeVideoPlaneResourceKindKind.D3D11ShaderResourceView;
+                default:
+                    return NativeVideoPlaneResourceKindKind.Unknown;
+            }
         }
     }
 
