@@ -9,7 +9,8 @@ namespace UnityAV
 {
     /// <summary>
     /// 使用原生纹理直连模式的播放器。
-    /// 当前主要服务 Windows 纹理互操作增强场景，不作为 Android/iOS 主播放入口。
+    /// 当前主要服务 Windows 纹理互操作增强场景。
+    /// iOS/Android 侧当前只收口 NativeVideo 契约与激活决策，不作为 Android/iOS 主播放入口。
     /// </summary>
     public class MediaPlayer : MonoBehaviour
     {
@@ -37,6 +38,7 @@ namespace UnityAV
             AcquireReleaseUnavailable = 6,
             CreateFailed = 7,
             Active = 8,
+            PlatformRuntimeUnavailable = 9,
         }
 
         public struct PlayerRuntimeHealth
@@ -58,15 +60,18 @@ namespace UnityAV
             public NativeVideoPlatformKind PlatformKind;
             public NativeVideoSurfaceKind SurfaceKind;
             public bool Supported;
+            public bool ContractTargetSupported;
             public bool HardwareDecodeSupported;
             public bool ZeroCopySupported;
             public bool SourceSurfaceZeroCopySupported;
+            public bool ExternalTextureTarget;
             public bool FallbackCopyPathSupported;
             public bool PresentedFrameDirectBindable;
             public bool PresentedFrameStrictZeroCopySupported;
             public bool SourcePlaneTexturesSupported;
             public bool SourcePlaneViewsSupported;
             public bool AcquireReleaseSupported;
+            public bool RuntimeBridgePending;
             public uint Flags;
         }
 
@@ -182,6 +187,13 @@ namespace UnityAV
         /// 是否要求增强路径启用硬件解码。
         /// </summary>
         public bool RequireNativeVideoHardwareDecode = true;
+
+        /// <summary>
+        /// 可选的 NativeVideo surface 覆盖。
+        /// Unknown 表示按当前平台默认 surface 合同选择。
+        /// 目前主要用于 iOS/Android bring-up 时显式固定目标合同。
+        /// </summary>
+        public NativeVideoSurfaceKind PreferredNativeVideoSurface = NativeVideoSurfaceKind.Unknown;
 
         /// <summary>
         /// 是否优先尝试 Unity 材质直接采样 source plane textures。
@@ -641,9 +653,11 @@ namespace UnityAV
                 PlatformKind = _nativeVideoInteropCaps.PlatformKind,
                 SurfaceKind = _nativeVideoInteropCaps.SurfaceKind,
                 Supported = _nativeVideoInteropCaps.Supported,
+                ContractTargetSupported = _nativeVideoInteropCaps.ContractTargetSupported,
                 HardwareDecodeSupported = _nativeVideoInteropCaps.HardwareDecodeSupported,
                 ZeroCopySupported = _nativeVideoInteropCaps.ZeroCopySupported,
                 SourceSurfaceZeroCopySupported = _nativeVideoInteropCaps.SourceSurfaceZeroCopySupported,
+                ExternalTextureTarget = _nativeVideoInteropCaps.ExternalTextureTarget,
                 FallbackCopyPathSupported =
                     (_nativeVideoInteropCaps.Flags & MediaNativeInteropCommon.NativeVideoCapFlagFallbackCopyPath) != 0,
                 PresentedFrameDirectBindable = _nativeVideoInteropCaps.PresentedFrameDirectBindable,
@@ -651,6 +665,7 @@ namespace UnityAV
                 SourcePlaneTexturesSupported = _nativeVideoInteropCaps.SourcePlaneTexturesSupported,
                 SourcePlaneViewsSupported = _nativeVideoInteropCaps.SourcePlaneViewsSupported,
                 AcquireReleaseSupported = _nativeVideoInteropCaps.AcquireReleaseSupported,
+                RuntimeBridgePending = _nativeVideoInteropCaps.RuntimeBridgePending,
                 Flags = _nativeVideoInteropCaps.Flags,
             };
             return true;
@@ -883,6 +898,14 @@ namespace UnityAV
                     ? _targetTexture.GetNativeTexturePtr()
                     : IntPtr.Zero;
                 var auxiliaryHandle = ResolveNativeVideoAuxiliaryHandle(_targetTexture);
+                var targetPlatformKind = MediaNativeInteropCommon.DetectNativeVideoPlatformKind();
+                var resolvedNativeSurfaceKind =
+                    MediaNativeInteropCommon.ResolvePreferredNativeVideoSurfaceKind(
+                        targetPlatformKind,
+                        PreferredNativeVideoSurface);
+                var targetProvider = MediaNativeInteropCommon.DescribeNativeVideoTargetProvider(
+                    targetPlatformKind,
+                    resolvedNativeSurfaceKind);
                 Debug.Log(
                     "[MediaPlayer] create_target_texture"
                     + " texture_type=" + (_targetTexture != null ? _targetTexture.GetType().Name : "null")
@@ -892,13 +915,21 @@ namespace UnityAV
                     + " msaa=" + DescribeTextureMsaa(_targetTexture)
                     + " use_mip_map=" + DescribeTextureUseMipMap(_targetTexture)
                     + " random_write=" + DescribeTextureRandomWrite(_targetTexture)
+                    + " target_provider=" + targetProvider
+                    + " surface_selection="
+                    + MediaNativeInteropCommon.DescribeNativeVideoSurfaceSelection(
+                        targetPlatformKind,
+                        PreferredNativeVideoSurface,
+                        resolvedNativeSurfaceKind)
                     + " size=" + Width + "x" + Height);
 
                 var openOptions = MediaNativeInteropCommon.CreateOpenOptions(
                     PreferredBackend,
                     StrictBackend);
                 var nativeTargetExtraFlags = ResolveNativeVideoTargetExtraFlags();
-                var nativeTarget = MediaNativeInteropCommon.CreateDefaultNativeVideoTarget(
+                var nativeTarget = MediaNativeInteropCommon.CreateNativeVideoTarget(
+                    targetPlatformKind,
+                    resolvedNativeSurfaceKind,
                     targetHandle,
                     auxiliaryHandle,
                     Width,
@@ -942,6 +973,22 @@ namespace UnityAV
                         + " native_video_requested=" + PreferNativeVideo
                         + " native_video_active=" + _nativeVideoPathActive
                         + " native_video_activation_decision=" + _nativeVideoActivationDecision
+                        + " requested_surface=" + PreferredNativeVideoSurface
+                        + " target_platform=" + (NativeVideoPlatformKind)nativeTarget.PlatformKind
+                        + " target_surface=" + (NativeVideoSurfaceKind)nativeTarget.SurfaceKind
+                        + " target_provider="
+                        + MediaNativeInteropCommon.DescribeNativeVideoTargetProvider(
+                            (NativeVideoPlatformKind)nativeTarget.PlatformKind,
+                            (NativeVideoSurfaceKind)nativeTarget.SurfaceKind)
+                        + " target_contract="
+                        + MediaNativeInteropCommon.DescribeNativeVideoTargetContract(
+                            (NativeVideoPlatformKind)nativeTarget.PlatformKind,
+                            (NativeVideoSurfaceKind)nativeTarget.SurfaceKind)
+                        + " caps_supported=" + _nativeVideoInteropCaps.Supported
+                        + " contract_target_supported="
+                        + _nativeVideoInteropCaps.ContractTargetSupported
+                        + " runtime_bridge_pending="
+                        + _nativeVideoInteropCaps.RuntimeBridgePending
                         + " unity_direct_shader_requested="
                         + PreferNativeVideoUnityDirectShader
                         + " unity_compute_requested=" + PreferNativeVideoUnityCompute
@@ -1913,6 +1960,15 @@ namespace UnityAV
                 + " size=" + nativeTarget.Width + "x" + nativeTarget.Height
                 + " platform=" + nativeTarget.PlatformKind
                 + " surface=" + nativeTarget.SurfaceKind
+                + " requested_surface=" + PreferredNativeVideoSurface
+                + " target_provider="
+                + MediaNativeInteropCommon.DescribeNativeVideoTargetProvider(
+                    (NativeVideoPlatformKind)nativeTarget.PlatformKind,
+                    (NativeVideoSurfaceKind)nativeTarget.SurfaceKind)
+                + " target_contract="
+                + MediaNativeInteropCommon.DescribeNativeVideoTargetContract(
+                    (NativeVideoPlatformKind)nativeTarget.PlatformKind,
+                    (NativeVideoSurfaceKind)nativeTarget.SurfaceKind)
                 + " pixel_format=" + nativeTarget.PixelFormat
                 + " flags=0x" + nativeTarget.Flags.ToString("X"));
             if (nativeTarget.TargetHandle == 0
@@ -1941,9 +1997,22 @@ namespace UnityAV
             Debug.Log(
                 "[MediaPlayer] native_video_caps"
                 + " supported=" + capsView.Supported
+                + " contract_target_supported=" + capsView.ContractTargetSupported
                 + " hardware_decode_supported=" + capsView.HardwareDecodeSupported
                 + " zero_copy_supported=" + capsView.ZeroCopySupported
                 + " acquire_release_supported=" + capsView.AcquireReleaseSupported
+                + " runtime_bridge_pending=" + capsView.RuntimeBridgePending
+                + " platform=" + capsView.PlatformKind
+                + " surface=" + capsView.SurfaceKind
+                + " target_provider="
+                + MediaNativeInteropCommon.DescribeNativeVideoTargetProvider(
+                    capsView.PlatformKind,
+                    capsView.SurfaceKind)
+                + " target_contract="
+                + MediaNativeInteropCommon.DescribeNativeVideoTargetContract(
+                    capsView.PlatformKind,
+                    capsView.SurfaceKind)
+                + " external_texture_target=" + capsView.ExternalTextureTarget
                 + " source_surface_zero_copy_supported=" + capsView.SourceSurfaceZeroCopySupported
                 + " presented_direct_bindable_supported=" + capsView.PresentedFrameDirectBindable
                 + " presented_strict_zero_copy_supported=" + capsView.PresentedFrameStrictZeroCopySupported
@@ -1952,8 +2021,49 @@ namespace UnityAV
                 + " flags=0x" + capsView.Flags.ToString("X"));
             if (!capsView.Supported)
             {
-                _nativeVideoActivationDecision = NativeVideoActivationDecisionKind.UnsupportedTarget;
-                Debug.LogWarning("[MediaPlayer] native_video_create_skipped reason=unsupported-target");
+                if (MediaNativeInteropCommon.IsNativeVideoContractBringUpPlatform(capsView.PlatformKind)
+                    && MediaNativeInteropCommon.IsNativeVideoSurfaceKindSupportedByPlatform(
+                        capsView.PlatformKind,
+                        capsView.SurfaceKind))
+                {
+                    _nativeVideoActivationDecision =
+                        NativeVideoActivationDecisionKind.PlatformRuntimeUnavailable;
+                    Debug.LogWarning(
+                        "[MediaPlayer] native_video_create_skipped reason=platform-runtime-unavailable"
+                        + " platform=" + capsView.PlatformKind
+                        + " surface=" + capsView.SurfaceKind
+                        + " requested_surface=" + PreferredNativeVideoSurface
+                        + " target_provider="
+                        + MediaNativeInteropCommon.DescribeNativeVideoTargetProvider(
+                            capsView.PlatformKind,
+                            capsView.SurfaceKind)
+                        + " target_contract="
+                        + MediaNativeInteropCommon.DescribeNativeVideoTargetContract(
+                            capsView.PlatformKind,
+                            capsView.SurfaceKind)
+                        + " contract_target_supported=" + capsView.ContractTargetSupported
+                        + " runtime_bridge_pending=" + capsView.RuntimeBridgePending
+                        + " require_hardware_decode=" + RequireNativeVideoHardwareDecode
+                        + " require_zero_copy=" + RequireNativeVideoZeroCopy);
+                }
+                else
+                {
+                    _nativeVideoActivationDecision =
+                        NativeVideoActivationDecisionKind.UnsupportedTarget;
+                    Debug.LogWarning(
+                        "[MediaPlayer] native_video_create_skipped reason=unsupported-target"
+                        + " platform=" + capsView.PlatformKind
+                        + " surface=" + capsView.SurfaceKind
+                        + " requested_surface=" + PreferredNativeVideoSurface
+                        + " target_provider="
+                        + MediaNativeInteropCommon.DescribeNativeVideoTargetProvider(
+                            capsView.PlatformKind,
+                            capsView.SurfaceKind)
+                        + " target_contract="
+                        + MediaNativeInteropCommon.DescribeNativeVideoTargetContract(
+                            capsView.PlatformKind,
+                            capsView.SurfaceKind));
+                }
                 return;
             }
 
@@ -1968,6 +2078,29 @@ namespace UnityAV
             {
                 _nativeVideoActivationDecision = NativeVideoActivationDecisionKind.StrictZeroCopyUnavailable;
                 Debug.LogWarning("[MediaPlayer] native_video_create_skipped reason=strict-zero-copy-unavailable");
+                return;
+            }
+
+            if (!MediaNativeInteropCommon.IsNativeVideoPresentationPathImplementedForPlatform(
+                    capsView.PlatformKind,
+                    capsView.SurfaceKind))
+            {
+                _nativeVideoActivationDecision =
+                    NativeVideoActivationDecisionKind.PlatformRuntimeUnavailable;
+                Debug.LogWarning(
+                    "[MediaPlayer] native_video_create_skipped reason=presentation-path-unavailable"
+                    + " platform=" + capsView.PlatformKind
+                    + " surface=" + capsView.SurfaceKind
+                    + " target_provider="
+                    + MediaNativeInteropCommon.DescribeNativeVideoTargetProvider(
+                        capsView.PlatformKind,
+                        capsView.SurfaceKind)
+                    + " presentation_availability="
+                    + MediaNativeInteropCommon.DescribeNativeVideoPresentationAvailability(
+                        capsView.PlatformKind,
+                        capsView.SurfaceKind)
+                    + " contract_target_supported=" + capsView.ContractTargetSupported
+                    + " runtime_bridge_pending=" + capsView.RuntimeBridgePending);
                 return;
             }
 

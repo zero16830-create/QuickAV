@@ -115,6 +115,8 @@ typedef enum RustAVNativeVideoSurfaceKind {
 #define RUSTAV_NATIVE_VIDEO_CAP_FLAG_PRESENTED_FRAME_STRICT_ZERO_COPY (1u << 7)
 #define RUSTAV_NATIVE_VIDEO_CAP_FLAG_SOURCE_PLANE_TEXTURES_SUPPORTED (1u << 8)
 #define RUSTAV_NATIVE_VIDEO_CAP_FLAG_SOURCE_PLANE_VIEWS_SUPPORTED (1u << 9)
+#define RUSTAV_NATIVE_VIDEO_CAP_FLAG_CONTRACT_TARGET_SUPPORTED (1u << 10)
+#define RUSTAV_NATIVE_VIDEO_CAP_FLAG_RUNTIME_BRIDGE_PENDING (1u << 11)
 
 #define RUSTAV_NATIVE_VIDEO_FRAME_FLAG_NONE 0u
 #define RUSTAV_NATIVE_VIDEO_FRAME_FLAG_HAS_FRAME (1u << 0)
@@ -382,6 +384,13 @@ int32_t RUSTAV_CALL RustAV_GetBackendRuntimeDiagnostic(
  *
  * 这组接口用于表达原生视频表面、硬解能力探测与 acquire/release 生命周期。
  * 它是增强路径，不替代 PullRGBA/PullPCM 主路径。
+ * 当前运行时严格验证范围是 Windows + D3D11。
+ * iOS / Android 的 platform/surface 枚举与目标描述已经保留合同，
+ * 后续平台桥接应围绕这组合同继续推进。
+ * 对于 iOS / Android，当前允许通过 capability flags 区分：
+ *   - CONTRACT_TARGET_SUPPORTED
+ *   - RUNTIME_BRIDGE_PENDING
+ * 也就是“目标合同已就绪，但 runtime bridge 尚未实装”。
  * 推荐做法：
  *   - 先调用 RustAV_PlayerGetNativeVideoInteropCaps
  *   - 能力满足时再调用 RustAV_PlayerCreateNativeVideoOutput[Ex]

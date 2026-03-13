@@ -424,9 +424,19 @@ namespace UnityAV
             var sourcePlaneTexturesZeroCopy = HasNativeVideoFrameFlag(
                 snapshot.SourcePlaneTextureFlags,
                 MediaNativeInteropCommon.NativeVideoFrameFlagZeroCopy);
+            var presentedPathStrictZeroCopy =
+                string.Equals(
+                    snapshot.PresentationPath,
+                    MediaPlayer.NativeVideoPresentationPathKind.DirectBind.ToString(),
+                    StringComparison.Ordinal)
+                || string.Equals(
+                    snapshot.PresentationPath,
+                    MediaPlayer.NativeVideoPresentationPathKind.RenderEventPass.ToString(),
+                    StringComparison.Ordinal);
 
             var presentedFrameStrictZeroCopy = snapshot.HasNativeSourceFrame
                 && snapshot.HasNativeFrame
+                && presentedPathStrictZeroCopy
                 && sourceZeroCopy
                 && presentedZeroCopy
                 && !presentedCpuFallback;

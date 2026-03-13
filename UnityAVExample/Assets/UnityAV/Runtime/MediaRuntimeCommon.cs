@@ -42,6 +42,16 @@ namespace UnityAV
         AndroidHardwareBuffer = 5,
     }
 
+    public enum NativeVideoTargetProviderKind
+    {
+        Auto = 0,
+        UnityExternalTexture = 1,
+        IosMetalTexture = 2,
+        IosCVPixelBuffer = 3,
+        AndroidSurfaceTexture = 4,
+        AndroidHardwareBuffer = 5,
+    }
+
     public enum NativeVideoPixelFormatKind
     {
         Unknown = -1,
@@ -88,6 +98,8 @@ namespace UnityAV
         internal const uint NativeVideoCapFlagPresentedFrameStrictZeroCopy = 1u << 7;
         internal const uint NativeVideoCapFlagSourcePlaneTexturesSupported = 1u << 8;
         internal const uint NativeVideoCapFlagSourcePlaneViewsSupported = 1u << 9;
+        internal const uint NativeVideoCapFlagContractTargetSupported = 1u << 10;
+        internal const uint NativeVideoCapFlagRuntimeBridgePending = 1u << 11;
         internal const uint NativeVideoFrameFlagNone = 0u;
         internal const uint NativeVideoFrameFlagHasFrame = 1u << 0;
         internal const uint NativeVideoFrameFlagHardwareDecode = 1u << 1;
@@ -309,14 +321,17 @@ namespace UnityAV
             public NativeVideoPlatformKind PlatformKind;
             public NativeVideoSurfaceKind SurfaceKind;
             public bool Supported;
+            public bool ContractTargetSupported;
             public bool HardwareDecodeSupported;
             public bool ZeroCopySupported;
             public bool SourceSurfaceZeroCopySupported;
+            public bool ExternalTextureTarget;
             public bool PresentedFrameDirectBindable;
             public bool PresentedFrameStrictZeroCopySupported;
             public bool SourcePlaneTexturesSupported;
             public bool SourcePlaneViewsSupported;
             public bool AcquireReleaseSupported;
+            public bool RuntimeBridgePending;
             public uint Flags;
         }
 
@@ -474,11 +489,13 @@ namespace UnityAV
             IntPtr auxiliaryHandle,
             int width,
             int height,
+            NativeVideoSurfaceKind preferredSurfaceKind = NativeVideoSurfaceKind.Unknown,
             uint extraFlags = NativeVideoTargetFlagNone)
         {
+            var platformKind = DetectNativeVideoPlatformKind();
             return CreateNativeVideoTarget(
-                DetectNativeVideoPlatformKind(),
-                DetectDefaultNativeVideoSurfaceKind(),
+                platformKind,
+                ResolvePreferredNativeVideoSurfaceKind(platformKind, preferredSurfaceKind),
                 targetHandle,
                 auxiliaryHandle,
                 width,
@@ -623,10 +640,14 @@ namespace UnityAV
                     PlatformKind = NormalizeNativeVideoPlatformKind(nativeCaps.PlatformKind),
                     SurfaceKind = NormalizeNativeVideoSurfaceKind(nativeCaps.SurfaceKind),
                     Supported = nativeCaps.Supported != 0,
+                    ContractTargetSupported =
+                        (nativeCaps.Flags & NativeVideoCapFlagContractTargetSupported) != 0,
                     HardwareDecodeSupported = nativeCaps.HardwareDecodeSupported != 0,
                     ZeroCopySupported = nativeCaps.ZeroCopySupported != 0,
                     SourceSurfaceZeroCopySupported =
                         (nativeCaps.Flags & NativeVideoCapFlagSourceSurfaceZeroCopy) != 0,
+                    ExternalTextureTarget =
+                        (nativeCaps.Flags & NativeVideoCapFlagExternalTextureTarget) != 0,
                     PresentedFrameDirectBindable =
                         (nativeCaps.Flags & NativeVideoCapFlagPresentedFrameDirectBindable) != 0,
                     PresentedFrameStrictZeroCopySupported =
@@ -636,6 +657,8 @@ namespace UnityAV
                     SourcePlaneViewsSupported =
                         (nativeCaps.Flags & NativeVideoCapFlagSourcePlaneViewsSupported) != 0,
                     AcquireReleaseSupported = nativeCaps.AcquireReleaseSupported != 0,
+                    RuntimeBridgePending =
+                        (nativeCaps.Flags & NativeVideoCapFlagRuntimeBridgePending) != 0,
                     Flags = nativeCaps.Flags,
                 };
                 return true;
@@ -835,15 +858,156 @@ namespace UnityAV
 
         internal static NativeVideoSurfaceKind DetectDefaultNativeVideoSurfaceKind()
         {
-#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
-            return NativeVideoSurfaceKind.D3D11Texture2D;
-#elif UNITY_IOS
-            return NativeVideoSurfaceKind.MetalTexture;
-#elif UNITY_ANDROID
-            return NativeVideoSurfaceKind.AndroidSurfaceTexture;
-#else
-            return NativeVideoSurfaceKind.Unknown;
-#endif
+            return GetDefaultNativeVideoSurfaceKindForPlatform(DetectNativeVideoPlatformKind());
+        }
+
+        internal static NativeVideoSurfaceKind GetDefaultNativeVideoSurfaceKindForPlatform(
+            NativeVideoPlatformKind platformKind)
+        {
+            switch (platformKind)
+            {
+                case NativeVideoPlatformKind.Windows:
+                    return NativeVideoSurfaceKind.D3D11Texture2D;
+                case NativeVideoPlatformKind.Ios:
+                    return NativeVideoSurfaceKind.MetalTexture;
+                case NativeVideoPlatformKind.Android:
+                    return NativeVideoSurfaceKind.AndroidSurfaceTexture;
+                default:
+                    return NativeVideoSurfaceKind.Unknown;
+            }
+        }
+
+        internal static NativeVideoSurfaceKind ResolvePreferredNativeVideoSurfaceKind(
+            NativeVideoPlatformKind platformKind,
+            NativeVideoSurfaceKind preferredSurfaceKind)
+        {
+            if (preferredSurfaceKind == NativeVideoSurfaceKind.Unknown)
+            {
+                return GetDefaultNativeVideoSurfaceKindForPlatform(platformKind);
+            }
+
+            if (IsNativeVideoSurfaceKindSupportedByPlatform(platformKind, preferredSurfaceKind))
+            {
+                return preferredSurfaceKind;
+            }
+
+            return GetDefaultNativeVideoSurfaceKindForPlatform(platformKind);
+        }
+
+        internal static NativeVideoTargetProviderKind ResolveNativeVideoTargetProviderKind(
+            NativeVideoPlatformKind platformKind,
+            NativeVideoSurfaceKind surfaceKind)
+        {
+            switch (platformKind)
+            {
+                case NativeVideoPlatformKind.Windows:
+                    return NativeVideoTargetProviderKind.UnityExternalTexture;
+                case NativeVideoPlatformKind.Ios:
+                    if (surfaceKind == NativeVideoSurfaceKind.CVPixelBuffer)
+                    {
+                        return NativeVideoTargetProviderKind.IosCVPixelBuffer;
+                    }
+                    if (surfaceKind == NativeVideoSurfaceKind.MetalTexture)
+                    {
+                        return NativeVideoTargetProviderKind.IosMetalTexture;
+                    }
+                    break;
+                case NativeVideoPlatformKind.Android:
+                    if (surfaceKind == NativeVideoSurfaceKind.AndroidHardwareBuffer)
+                    {
+                        return NativeVideoTargetProviderKind.AndroidHardwareBuffer;
+                    }
+                    if (surfaceKind == NativeVideoSurfaceKind.AndroidSurfaceTexture)
+                    {
+                        return NativeVideoTargetProviderKind.AndroidSurfaceTexture;
+                    }
+                    break;
+            }
+
+            return NativeVideoTargetProviderKind.Auto;
+        }
+
+        internal static string DescribeNativeVideoTargetProvider(
+            NativeVideoPlatformKind platformKind,
+            NativeVideoSurfaceKind surfaceKind)
+        {
+            return ResolveNativeVideoTargetProviderKind(platformKind, surfaceKind).ToString();
+        }
+
+        internal static bool IsNativeVideoExternalTextureTargetSurface(
+            NativeVideoSurfaceKind surfaceKind)
+        {
+            return surfaceKind == NativeVideoSurfaceKind.D3D11Texture2D
+                || surfaceKind == NativeVideoSurfaceKind.MetalTexture;
+        }
+
+        internal static bool IsNativeVideoSurfaceKindSupportedByPlatform(
+            NativeVideoPlatformKind platformKind,
+            NativeVideoSurfaceKind surfaceKind)
+        {
+            switch (platformKind)
+            {
+                case NativeVideoPlatformKind.Windows:
+                    return surfaceKind == NativeVideoSurfaceKind.D3D11Texture2D;
+                case NativeVideoPlatformKind.Ios:
+                    return surfaceKind == NativeVideoSurfaceKind.MetalTexture
+                        || surfaceKind == NativeVideoSurfaceKind.CVPixelBuffer;
+                case NativeVideoPlatformKind.Android:
+                    return surfaceKind == NativeVideoSurfaceKind.AndroidSurfaceTexture
+                        || surfaceKind == NativeVideoSurfaceKind.AndroidHardwareBuffer;
+                default:
+                    return false;
+            }
+        }
+
+        internal static bool IsNativeVideoContractBringUpPlatform(NativeVideoPlatformKind platformKind)
+        {
+            return platformKind == NativeVideoPlatformKind.Ios
+                || platformKind == NativeVideoPlatformKind.Android;
+        }
+
+        internal static bool IsNativeVideoPresentationPathImplementedForPlatform(
+            NativeVideoPlatformKind platformKind,
+            NativeVideoSurfaceKind surfaceKind)
+        {
+            switch (platformKind)
+            {
+                case NativeVideoPlatformKind.Windows:
+                    return surfaceKind == NativeVideoSurfaceKind.D3D11Texture2D;
+                case NativeVideoPlatformKind.Ios:
+                case NativeVideoPlatformKind.Android:
+                    return false;
+                default:
+                    return false;
+            }
+        }
+
+        internal static string DescribeNativeVideoTargetContract(
+            NativeVideoPlatformKind platformKind,
+            NativeVideoSurfaceKind surfaceKind)
+        {
+            return platformKind + "/" + surfaceKind;
+        }
+
+        internal static string DescribeNativeVideoSurfaceSelection(
+            NativeVideoPlatformKind platformKind,
+            NativeVideoSurfaceKind preferredSurfaceKind,
+            NativeVideoSurfaceKind resolvedSurfaceKind)
+        {
+            return "platform=" + platformKind
+                + " preferred=" + preferredSurfaceKind
+                + " resolved=" + resolvedSurfaceKind
+                + " provider=" + DescribeNativeVideoTargetProvider(platformKind, resolvedSurfaceKind);
+        }
+
+        internal static string DescribeNativeVideoPresentationAvailability(
+            NativeVideoPlatformKind platformKind,
+            NativeVideoSurfaceKind surfaceKind)
+        {
+            return "platform=" + platformKind
+                + " surface=" + surfaceKind
+                + " implemented="
+                + IsNativeVideoPresentationPathImplementedForPlatform(platformKind, surfaceKind);
         }
 
         internal static NativeVideoPlatformKind NormalizeNativeVideoPlatformKind(int rawValue)
