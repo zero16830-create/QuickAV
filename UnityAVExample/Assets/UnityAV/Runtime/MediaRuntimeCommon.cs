@@ -58,6 +58,53 @@ namespace UnityAV
         Yuv420p = 0,
         Rgba32 = 1,
         Nv12 = 2,
+        P010 = 3,
+    }
+
+    public enum NativeVideoColorRangeKind
+    {
+        Unknown = -1,
+        Limited = 0,
+        Full = 1,
+    }
+
+    public enum NativeVideoColorMatrixKind
+    {
+        Unknown = -1,
+        Bt601 = 0,
+        Bt709 = 1,
+        Bt2020Ncl = 2,
+        Bt2020Cl = 3,
+        Smpte240M = 4,
+        Rgb = 5,
+    }
+
+    public enum NativeVideoColorPrimariesKind
+    {
+        Unknown = -1,
+        Bt601 = 0,
+        Bt709 = 1,
+        Bt2020 = 2,
+        DciP3 = 3,
+    }
+
+    public enum NativeVideoTransferCharacteristicKind
+    {
+        Unknown = -1,
+        Bt1886 = 0,
+        Srgb = 1,
+        Linear = 2,
+        Smpte240M = 3,
+        Pq = 4,
+        Hlg = 5,
+    }
+
+    public enum NativeVideoDynamicRangeKind
+    {
+        Unknown = 0,
+        Sdr = 1,
+        Hdr10 = 2,
+        Hlg = 3,
     }
 
     public enum NativeVideoPlaneTextureFormatKind
@@ -65,6 +112,8 @@ namespace UnityAV
         Unknown = 0,
         R8Unorm = 1,
         Rg8Unorm = 2,
+        R16Unorm = 3,
+        Rg16Unorm = 4,
     }
 
     public enum NativeVideoPlaneResourceKindKind
@@ -78,6 +127,7 @@ namespace UnityAV
     {
         internal const uint RustAVPlayerOpenOptionsVersion = 1u;
         internal const uint RustAVPlayerHealthSnapshotV2Version = 2u;
+        internal const uint RustAVVideoColorInfoVersion = 1u;
         internal const uint RustAVNativeVideoTargetVersion = 1u;
         internal const uint RustAVNativeVideoInteropCapsVersion = 1u;
         internal const uint RustAVNativeVideoFrameVersion = 1u;
@@ -112,6 +162,53 @@ namespace UnityAV
             Yuv420p = 0,
             Rgba32 = 1,
             Nv12 = 2,
+            P010 = 3,
+        }
+
+        internal enum NativeVideoColorRange
+        {
+            Unknown = -1,
+            Limited = 0,
+            Full = 1,
+        }
+
+        internal enum NativeVideoColorMatrix
+        {
+            Unknown = -1,
+            Bt601 = 0,
+            Bt709 = 1,
+            Bt2020Ncl = 2,
+            Bt2020Cl = 3,
+            Smpte240M = 4,
+            Rgb = 5,
+        }
+
+        internal enum NativeVideoColorPrimaries
+        {
+            Unknown = -1,
+            Bt601 = 0,
+            Bt709 = 1,
+            Bt2020 = 2,
+            DciP3 = 3,
+        }
+
+        internal enum NativeVideoTransferCharacteristic
+        {
+            Unknown = -1,
+            Bt1886 = 0,
+            Srgb = 1,
+            Linear = 2,
+            Smpte240M = 3,
+            Pq = 4,
+            Hlg = 5,
+        }
+
+        internal enum NativeVideoDynamicRange
+        {
+            Unknown = 0,
+            Sdr = 1,
+            Hdr10 = 2,
+            Hlg = 3,
         }
 
         internal enum NativeVideoPlaneTextureFormat
@@ -119,6 +216,8 @@ namespace UnityAV
             Unknown = 0,
             R8Unorm = 1,
             Rg8Unorm = 2,
+            R16Unorm = 3,
+            Rg16Unorm = 4,
         }
 
         internal enum NativeVideoPlaneResourceKind
@@ -150,6 +249,19 @@ namespace UnityAV
             public int Height;
             public int PixelFormat;
             public uint Flags;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct RustAVVideoColorInfo
+        {
+            public uint StructSize;
+            public uint StructVersion;
+            public int Range;
+            public int Matrix;
+            public int Primaries;
+            public int Transfer;
+            public int BitDepth;
+            public int DynamicRange;
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -283,6 +395,10 @@ namespace UnityAV
             ref RustAVNativeVideoTarget target,
             ref RustAVNativeVideoInteropCaps caps);
 
+        internal delegate int GetNativeVideoColorInfoDelegate(
+            int playerId,
+            ref RustAVVideoColorInfo info);
+
         internal delegate int AcquireNativeVideoFrameDelegate(
             int playerId,
             ref RustAVNativeVideoFrame frame);
@@ -386,6 +502,16 @@ namespace UnityAV
             public double TimeSec;
             public long FrameIndex;
             public uint Flags;
+        }
+
+        internal struct VideoColorInfoView
+        {
+            public NativeVideoColorRange Range;
+            public NativeVideoColorMatrix Matrix;
+            public NativeVideoColorPrimaries Primaries;
+            public NativeVideoTransferCharacteristic Transfer;
+            public int BitDepth;
+            public NativeVideoDynamicRange DynamicRange;
         }
 
         internal static bool TryReadRuntimeHealth(
@@ -509,6 +635,15 @@ namespace UnityAV
             {
                 StructSize = (uint)Marshal.SizeOf(typeof(RustAVNativeVideoInteropCaps)),
                 StructVersion = RustAVNativeVideoInteropCapsVersion,
+            };
+        }
+
+        internal static RustAVVideoColorInfo CreateVideoColorInfo()
+        {
+            return new RustAVVideoColorInfo
+            {
+                StructSize = (uint)Marshal.SizeOf(typeof(RustAVVideoColorInfo)),
+                StructVersion = RustAVVideoColorInfoVersion,
             };
         }
 
@@ -661,6 +796,35 @@ namespace UnityAV
                         (nativeCaps.Flags & NativeVideoCapFlagRuntimeBridgePending) != 0,
                     Flags = nativeCaps.Flags,
                 };
+                return true;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return false;
+            }
+            catch (DllNotFoundException)
+            {
+                return false;
+            }
+        }
+
+        internal static bool TryReadVideoColorInfo(
+            GetNativeVideoColorInfoDelegate getNativeVideoColorInfo,
+            int playerId,
+            out VideoColorInfoView info)
+        {
+            info = default(VideoColorInfoView);
+
+            try
+            {
+                var nativeInfo = CreateVideoColorInfo();
+                var result = getNativeVideoColorInfo(playerId, ref nativeInfo);
+                if (result <= 0)
+                {
+                    return false;
+                }
+
+                info = NormalizeVideoColorInfo(nativeInfo);
                 return true;
             }
             catch (EntryPointNotFoundException)
@@ -1054,9 +1218,112 @@ namespace UnityAV
                     return NativeVideoPixelFormat.Rgba32;
                 case 2:
                     return NativeVideoPixelFormat.Nv12;
+                case 3:
+                    return NativeVideoPixelFormat.P010;
                 default:
                     return NativeVideoPixelFormat.Unknown;
             }
+        }
+
+        internal static NativeVideoColorRange NormalizeNativeVideoColorRange(int rawValue)
+        {
+            switch (rawValue)
+            {
+                case 0:
+                    return NativeVideoColorRange.Limited;
+                case 1:
+                    return NativeVideoColorRange.Full;
+                default:
+                    return NativeVideoColorRange.Unknown;
+            }
+        }
+
+        internal static NativeVideoColorMatrix NormalizeNativeVideoColorMatrix(int rawValue)
+        {
+            switch (rawValue)
+            {
+                case 0:
+                    return NativeVideoColorMatrix.Bt601;
+                case 1:
+                    return NativeVideoColorMatrix.Bt709;
+                case 2:
+                    return NativeVideoColorMatrix.Bt2020Ncl;
+                case 3:
+                    return NativeVideoColorMatrix.Bt2020Cl;
+                case 4:
+                    return NativeVideoColorMatrix.Smpte240M;
+                case 5:
+                    return NativeVideoColorMatrix.Rgb;
+                default:
+                    return NativeVideoColorMatrix.Unknown;
+            }
+        }
+
+        internal static NativeVideoColorPrimaries NormalizeNativeVideoColorPrimaries(int rawValue)
+        {
+            switch (rawValue)
+            {
+                case 0:
+                    return NativeVideoColorPrimaries.Bt601;
+                case 1:
+                    return NativeVideoColorPrimaries.Bt709;
+                case 2:
+                    return NativeVideoColorPrimaries.Bt2020;
+                case 3:
+                    return NativeVideoColorPrimaries.DciP3;
+                default:
+                    return NativeVideoColorPrimaries.Unknown;
+            }
+        }
+
+        internal static NativeVideoTransferCharacteristic NormalizeNativeVideoTransferCharacteristic(
+            int rawValue)
+        {
+            switch (rawValue)
+            {
+                case 0:
+                    return NativeVideoTransferCharacteristic.Bt1886;
+                case 1:
+                    return NativeVideoTransferCharacteristic.Srgb;
+                case 2:
+                    return NativeVideoTransferCharacteristic.Linear;
+                case 3:
+                    return NativeVideoTransferCharacteristic.Smpte240M;
+                case 4:
+                    return NativeVideoTransferCharacteristic.Pq;
+                case 5:
+                    return NativeVideoTransferCharacteristic.Hlg;
+                default:
+                    return NativeVideoTransferCharacteristic.Unknown;
+            }
+        }
+
+        internal static NativeVideoDynamicRange NormalizeNativeVideoDynamicRange(int rawValue)
+        {
+            switch (rawValue)
+            {
+                case 1:
+                    return NativeVideoDynamicRange.Sdr;
+                case 2:
+                    return NativeVideoDynamicRange.Hdr10;
+                case 3:
+                    return NativeVideoDynamicRange.Hlg;
+                default:
+                    return NativeVideoDynamicRange.Unknown;
+            }
+        }
+
+        internal static VideoColorInfoView NormalizeVideoColorInfo(RustAVVideoColorInfo info)
+        {
+            return new VideoColorInfoView
+            {
+                Range = NormalizeNativeVideoColorRange(info.Range),
+                Matrix = NormalizeNativeVideoColorMatrix(info.Matrix),
+                Primaries = NormalizeNativeVideoColorPrimaries(info.Primaries),
+                Transfer = NormalizeNativeVideoTransferCharacteristic(info.Transfer),
+                BitDepth = info.BitDepth,
+                DynamicRange = NormalizeNativeVideoDynamicRange(info.DynamicRange),
+            };
         }
 
         internal static NativeVideoPlaneTextureFormat NormalizeNativeVideoPlaneTextureFormat(
@@ -1068,6 +1335,10 @@ namespace UnityAV
                     return NativeVideoPlaneTextureFormat.R8Unorm;
                 case 2:
                     return NativeVideoPlaneTextureFormat.Rg8Unorm;
+                case 3:
+                    return NativeVideoPlaneTextureFormat.R16Unorm;
+                case 4:
+                    return NativeVideoPlaneTextureFormat.Rg16Unorm;
                 default:
                     return NativeVideoPlaneTextureFormat.Unknown;
             }
@@ -1098,9 +1369,117 @@ namespace UnityAV
                     return NativeVideoPixelFormatKind.Rgba32;
                 case NativeVideoPixelFormat.Nv12:
                     return NativeVideoPixelFormatKind.Nv12;
+                case NativeVideoPixelFormat.P010:
+                    return NativeVideoPixelFormatKind.P010;
                 default:
                     return NativeVideoPixelFormatKind.Unknown;
             }
+        }
+
+        internal static NativeVideoColorRangeKind ToPublicNativeVideoColorRange(
+            NativeVideoColorRange colorRange)
+        {
+            switch (colorRange)
+            {
+                case NativeVideoColorRange.Limited:
+                    return NativeVideoColorRangeKind.Limited;
+                case NativeVideoColorRange.Full:
+                    return NativeVideoColorRangeKind.Full;
+                default:
+                    return NativeVideoColorRangeKind.Unknown;
+            }
+        }
+
+        internal static NativeVideoColorMatrixKind ToPublicNativeVideoColorMatrix(
+            NativeVideoColorMatrix colorMatrix)
+        {
+            switch (colorMatrix)
+            {
+                case NativeVideoColorMatrix.Bt601:
+                    return NativeVideoColorMatrixKind.Bt601;
+                case NativeVideoColorMatrix.Bt709:
+                    return NativeVideoColorMatrixKind.Bt709;
+                case NativeVideoColorMatrix.Bt2020Ncl:
+                    return NativeVideoColorMatrixKind.Bt2020Ncl;
+                case NativeVideoColorMatrix.Bt2020Cl:
+                    return NativeVideoColorMatrixKind.Bt2020Cl;
+                case NativeVideoColorMatrix.Smpte240M:
+                    return NativeVideoColorMatrixKind.Smpte240M;
+                case NativeVideoColorMatrix.Rgb:
+                    return NativeVideoColorMatrixKind.Rgb;
+                default:
+                    return NativeVideoColorMatrixKind.Unknown;
+            }
+        }
+
+        internal static NativeVideoColorPrimariesKind ToPublicNativeVideoColorPrimaries(
+            NativeVideoColorPrimaries primaries)
+        {
+            switch (primaries)
+            {
+                case NativeVideoColorPrimaries.Bt601:
+                    return NativeVideoColorPrimariesKind.Bt601;
+                case NativeVideoColorPrimaries.Bt709:
+                    return NativeVideoColorPrimariesKind.Bt709;
+                case NativeVideoColorPrimaries.Bt2020:
+                    return NativeVideoColorPrimariesKind.Bt2020;
+                case NativeVideoColorPrimaries.DciP3:
+                    return NativeVideoColorPrimariesKind.DciP3;
+                default:
+                    return NativeVideoColorPrimariesKind.Unknown;
+            }
+        }
+
+        internal static NativeVideoTransferCharacteristicKind ToPublicNativeVideoTransferCharacteristic(
+            NativeVideoTransferCharacteristic transfer)
+        {
+            switch (transfer)
+            {
+                case NativeVideoTransferCharacteristic.Bt1886:
+                    return NativeVideoTransferCharacteristicKind.Bt1886;
+                case NativeVideoTransferCharacteristic.Srgb:
+                    return NativeVideoTransferCharacteristicKind.Srgb;
+                case NativeVideoTransferCharacteristic.Linear:
+                    return NativeVideoTransferCharacteristicKind.Linear;
+                case NativeVideoTransferCharacteristic.Smpte240M:
+                    return NativeVideoTransferCharacteristicKind.Smpte240M;
+                case NativeVideoTransferCharacteristic.Pq:
+                    return NativeVideoTransferCharacteristicKind.Pq;
+                case NativeVideoTransferCharacteristic.Hlg:
+                    return NativeVideoTransferCharacteristicKind.Hlg;
+                default:
+                    return NativeVideoTransferCharacteristicKind.Unknown;
+            }
+        }
+
+        internal static NativeVideoDynamicRangeKind ToPublicNativeVideoDynamicRange(
+            NativeVideoDynamicRange dynamicRange)
+        {
+            switch (dynamicRange)
+            {
+                case NativeVideoDynamicRange.Sdr:
+                    return NativeVideoDynamicRangeKind.Sdr;
+                case NativeVideoDynamicRange.Hdr10:
+                    return NativeVideoDynamicRangeKind.Hdr10;
+                case NativeVideoDynamicRange.Hlg:
+                    return NativeVideoDynamicRangeKind.Hlg;
+                default:
+                    return NativeVideoDynamicRangeKind.Unknown;
+            }
+        }
+
+        internal static MediaPlayer.NativeVideoColorInfo ToPublicNativeVideoColorInfo(
+            VideoColorInfoView colorInfo)
+        {
+            return new MediaPlayer.NativeVideoColorInfo
+            {
+                Range = ToPublicNativeVideoColorRange(colorInfo.Range),
+                Matrix = ToPublicNativeVideoColorMatrix(colorInfo.Matrix),
+                Primaries = ToPublicNativeVideoColorPrimaries(colorInfo.Primaries),
+                Transfer = ToPublicNativeVideoTransferCharacteristic(colorInfo.Transfer),
+                BitDepth = colorInfo.BitDepth,
+                DynamicRange = ToPublicNativeVideoDynamicRange(colorInfo.DynamicRange),
+            };
         }
 
         internal static NativeVideoPlaneTextureFormatKind ToPublicNativeVideoPlaneTextureFormat(
@@ -1112,6 +1491,10 @@ namespace UnityAV
                     return NativeVideoPlaneTextureFormatKind.R8Unorm;
                 case NativeVideoPlaneTextureFormat.Rg8Unorm:
                     return NativeVideoPlaneTextureFormatKind.Rg8Unorm;
+                case NativeVideoPlaneTextureFormat.R16Unorm:
+                    return NativeVideoPlaneTextureFormatKind.R16Unorm;
+                case NativeVideoPlaneTextureFormat.Rg16Unorm:
+                    return NativeVideoPlaneTextureFormatKind.Rg16Unorm;
                 default:
                     return NativeVideoPlaneTextureFormatKind.Unknown;
             }

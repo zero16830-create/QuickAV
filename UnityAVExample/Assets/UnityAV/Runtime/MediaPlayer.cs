@@ -88,6 +88,16 @@ namespace UnityAV
             public uint Flags;
         }
 
+        public struct NativeVideoColorInfo
+        {
+            public NativeVideoColorRangeKind Range;
+            public NativeVideoColorMatrixKind Matrix;
+            public NativeVideoColorPrimariesKind Primaries;
+            public NativeVideoTransferCharacteristicKind Transfer;
+            public int BitDepth;
+            public NativeVideoDynamicRangeKind DynamicRange;
+        }
+
         public struct NativeVideoPlaneTexturesInfo
         {
             public NativeVideoSurfaceKind SurfaceKind;
@@ -197,7 +207,7 @@ namespace UnityAV
 
         /// <summary>
         /// 是否优先尝试 Unity 材质直接采样 source plane textures。
-        /// 仅在 Windows NativeVideo + NV12 source plane textures 可用时生效。
+        /// 仅在 Windows NativeVideo + NV12/P010 source plane textures 可用时生效。
         /// </summary>
         public bool PreferNativeVideoUnityDirectShader = true;
 
@@ -209,17 +219,17 @@ namespace UnityAV
 
         /// <summary>
         /// 是否优先尝试 Unity Compute Shader 消费 source plane textures。
-        /// 仅在 Windows NativeVideo + NV12 source plane textures 可用时生效。
+        /// 仅在 Windows NativeVideo + NV12/P010 source plane textures 可用时生效。
         /// </summary>
         public bool PreferNativeVideoUnityCompute;
 
         /// <summary>
-        /// 可选的 NV12 直接采样 Shader。为空时会尝试从 Resources/NV12Direct 加载。
+        /// 可选的 NV12/P010 直接采样 Shader。为空时会尝试从 Resources/NV12Direct 加载。
         /// </summary>
         public Shader NativeVideoNv12DirectShader;
 
         /// <summary>
-        /// 可选的 NV12 -> RGBA Compute Shader。为空时会尝试从 Resources/NV12ToRGBA 加载。
+        /// 可选的 NV12/P010 -> RGBA Compute Shader。为空时会尝试从 Resources/NV12ToRGBA 加载。
         /// </summary>
         public ComputeShader NativeVideoNv12ComputeShader;
 
@@ -260,6 +270,10 @@ namespace UnityAV
         private IntPtr _lastBoundNativeHandle = IntPtr.Zero;
         private IntPtr _lastBoundNativePlaneYHandle = IntPtr.Zero;
         private IntPtr _lastBoundNativePlaneUVHandle = IntPtr.Zero;
+        private NativeVideoPlaneTextureFormatKind _lastBoundNativePlaneYFormat =
+            NativeVideoPlaneTextureFormatKind.Unknown;
+        private NativeVideoPlaneTextureFormatKind _lastBoundNativePlaneUVFormat =
+            NativeVideoPlaneTextureFormatKind.Unknown;
         private int _nativeVideoComputeKernel = -1;
         private Shader _originalTargetMaterialShader;
         private bool _capturedTargetMaterialShader;
@@ -269,7 +283,20 @@ namespace UnityAV
         private static readonly int YPlanePropertyId = Shader.PropertyToID("_YPlane");
         private static readonly int UVPlanePropertyId = Shader.PropertyToID("_UVPlane");
         private static readonly int FlipVerticalPropertyId = Shader.PropertyToID("_FlipVertical");
-
+        private static readonly int VideoSourcePixelFormatPropertyId =
+            Shader.PropertyToID("_VideoSourcePixelFormat");
+        private static readonly int VideoColorRangePropertyId =
+            Shader.PropertyToID("_VideoColorRange");
+        private static readonly int VideoColorMatrixPropertyId =
+            Shader.PropertyToID("_VideoColorMatrix");
+        private static readonly int VideoColorPrimariesPropertyId =
+            Shader.PropertyToID("_VideoColorPrimaries");
+        private static readonly int VideoTransferPropertyId =
+            Shader.PropertyToID("_VideoTransfer");
+        private static readonly int VideoBitDepthPropertyId =
+            Shader.PropertyToID("_VideoBitDepth");
+        private static readonly int VideoDynamicRangePropertyId =
+            Shader.PropertyToID("_VideoDynamicRange");
         public MediaBackendKind ActualBackendKind
         {
             get { return _actualBackendKind; }
@@ -441,6 +468,16 @@ namespace UnityAV
         private static extern int GetNativeVideoSourcePlaneViews(
             int id,
             ref MediaNativeInteropCommon.RustAVNativeVideoPlaneViews views);
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerGetNativeVideoColorInfo")]
+        private static extern int GetNativeVideoColorInfo(
+            int id,
+            ref MediaNativeInteropCommon.RustAVVideoColorInfo info);
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerGetNativeVideoSourceColorInfo")]
+        private static extern int GetNativeVideoSourceColorInfo(
+            int id,
+            ref MediaNativeInteropCommon.RustAVVideoColorInfo info);
 
         [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerReleaseNativeVideoFrame")]
         private static extern int ReleaseNativeVideoFrame(
@@ -753,6 +790,74 @@ namespace UnityAV
             return true;
         }
 
+        public bool TryGetNativeVideoColorInfo(out NativeVideoColorInfo colorInfo)
+        {
+            colorInfo = default(NativeVideoColorInfo);
+            if (!_nativeVideoPathActive || !ValidatePlayerId(_id))
+            {
+                return false;
+            }
+
+            MediaNativeInteropCommon.VideoColorInfoView colorView;
+            if (!MediaNativeInteropCommon.TryReadVideoColorInfo(
+                GetNativeVideoColorInfo,
+                _id,
+                out colorView))
+            {
+                return false;
+            }
+
+            colorInfo = new NativeVideoColorInfo
+            {
+                Range = MediaNativeInteropCommon.ToPublicNativeVideoColorRange(colorView.Range),
+                Matrix = MediaNativeInteropCommon.ToPublicNativeVideoColorMatrix(colorView.Matrix),
+                Primaries = MediaNativeInteropCommon.ToPublicNativeVideoColorPrimaries(
+                    colorView.Primaries),
+                Transfer =
+                    MediaNativeInteropCommon.ToPublicNativeVideoTransferCharacteristic(
+                        colorView.Transfer),
+                BitDepth = colorView.BitDepth,
+                DynamicRange =
+                    MediaNativeInteropCommon.ToPublicNativeVideoDynamicRange(
+                        colorView.DynamicRange),
+            };
+            return true;
+        }
+
+        public bool TryGetNativeVideoSourceColorInfo(out NativeVideoColorInfo colorInfo)
+        {
+            colorInfo = default(NativeVideoColorInfo);
+            if (!_nativeVideoPathActive || !ValidatePlayerId(_id))
+            {
+                return false;
+            }
+
+            MediaNativeInteropCommon.VideoColorInfoView colorView;
+            if (!MediaNativeInteropCommon.TryReadVideoColorInfo(
+                GetNativeVideoSourceColorInfo,
+                _id,
+                out colorView))
+            {
+                return false;
+            }
+
+            colorInfo = new NativeVideoColorInfo
+            {
+                Range = MediaNativeInteropCommon.ToPublicNativeVideoColorRange(colorView.Range),
+                Matrix = MediaNativeInteropCommon.ToPublicNativeVideoColorMatrix(colorView.Matrix),
+                Primaries = MediaNativeInteropCommon.ToPublicNativeVideoColorPrimaries(
+                    colorView.Primaries),
+                Transfer =
+                    MediaNativeInteropCommon.ToPublicNativeVideoTransferCharacteristic(
+                        colorView.Transfer),
+                BitDepth = colorView.BitDepth,
+                DynamicRange =
+                    MediaNativeInteropCommon.ToPublicNativeVideoDynamicRange(
+                        colorView.DynamicRange),
+            };
+            return true;
+        }
+
         public bool TryAcquireNativeVideoSourcePlaneTexturesInfo(
             out NativeVideoPlaneTexturesInfo texturesInfo)
         {
@@ -861,6 +966,10 @@ namespace UnityAV
         private IEnumerator Start()
         {
             NativeInitializer.Initialize(this);
+            Debug.Log(
+                "[MediaPlayer] start_prepare_playable_source"
+                + " uri=" + Uri
+                + " backend=" + PreferredBackend);
 
             MediaSourceResolver.PreparedMediaSource preparedSource = null;
             Exception resolveError = null;
@@ -874,6 +983,10 @@ namespace UnityAV
                 throw resolveError;
             }
 
+            Debug.Log(
+                "[MediaPlayer] prepared_playable_source"
+                + " playback_uri=" + (preparedSource != null ? preparedSource.PlaybackUri : "null")
+                + " backend=" + PreferredBackend);
             InitializeNativePlayer(preparedSource);
         }
 
@@ -890,6 +1003,10 @@ namespace UnityAV
 
         private void InitializeNativePlayer(MediaSourceResolver.PreparedMediaSource preparedSource)
         {
+            Debug.Log(
+                "[MediaPlayer] initialize_native_player begin"
+                + " prepared_uri=" + (preparedSource != null ? preparedSource.PlaybackUri : "null")
+                + " backend=" + PreferredBackend);
             var uri = preparedSource.PlaybackUri;
             try
             {
@@ -1049,6 +1166,8 @@ namespace UnityAV
                 if (_firstNativeVideoFrameRealtimeAt < 0f)
                 {
                     _firstNativeVideoFrameRealtimeAt = UnityEngine.Time.realtimeSinceStartup;
+                    NativeVideoColorInfo colorInfo;
+                    var hasColorInfo = TryGetNativeVideoColorInfo(out colorInfo);
                     Debug.Log(
                         "[MediaPlayer] first_native_video_frame startup_seconds="
                         + StartupElapsedSeconds.ToString("F3")
@@ -1056,7 +1175,10 @@ namespace UnityAV
                         + " frame_index=" + frameInfo.FrameIndex
                         + " surface=" + frameInfo.SurfaceKind
                         + " pixel_format=" + frameInfo.PixelFormat
-                        + " flags=0x" + frameInfo.Flags.ToString("X"));
+                        + " flags=0x" + frameInfo.Flags.ToString("X")
+                        + (hasColorInfo
+                            ? " color_info=" + DescribeNativeVideoColorInfo(colorInfo)
+                            : string.Empty));
                 }
 
                 var handled = false;
@@ -1219,11 +1341,11 @@ namespace UnityAV
         {
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
             return texturesInfo.SurfaceKind == NativeVideoSurfaceKind.D3D11Texture2D
-                && texturesInfo.SourcePixelFormat == NativeVideoPixelFormatKind.Nv12
+                && (texturesInfo.SourcePixelFormat == NativeVideoPixelFormatKind.Nv12
+                    || texturesInfo.SourcePixelFormat == NativeVideoPixelFormatKind.P010)
                 && texturesInfo.YNativeHandle != IntPtr.Zero
                 && texturesInfo.UVNativeHandle != IntPtr.Zero
-                && texturesInfo.YTextureFormat == NativeVideoPlaneTextureFormatKind.R8Unorm
-                && texturesInfo.UVTextureFormat == NativeVideoPlaneTextureFormatKind.Rg8Unorm
+                && HasSupportedUnityPlaneTextureFormatPair(texturesInfo)
                 && texturesInfo.YWidth > 0
                 && texturesInfo.YHeight > 0
                 && texturesInfo.UVWidth > 0
@@ -1233,6 +1355,200 @@ namespace UnityAV
 #endif
         }
 
+        private static bool HasSupportedUnityPlaneTextureFormatPair(
+            NativeVideoPlaneTexturesInfo texturesInfo)
+        {
+            switch (texturesInfo.SourcePixelFormat)
+            {
+                case NativeVideoPixelFormatKind.Nv12:
+                    return texturesInfo.YTextureFormat == NativeVideoPlaneTextureFormatKind.R8Unorm
+                        && texturesInfo.UVTextureFormat == NativeVideoPlaneTextureFormatKind.Rg8Unorm;
+                case NativeVideoPixelFormatKind.P010:
+                    return texturesInfo.YTextureFormat == NativeVideoPlaneTextureFormatKind.R16Unorm
+                        && texturesInfo.UVTextureFormat == NativeVideoPlaneTextureFormatKind.Rg16Unorm;
+                default:
+                    return false;
+            }
+        }
+
+        private static bool IsBt2020ColorMatrix(NativeVideoColorMatrixKind matrix)
+        {
+            return matrix == NativeVideoColorMatrixKind.Bt2020Ncl
+                || matrix == NativeVideoColorMatrixKind.Bt2020Cl;
+        }
+
+        private static NativeVideoColorInfo CreateDefaultNativeVideoPlaneColorInfo(
+            NativeVideoPlaneTexturesInfo texturesInfo)
+        {
+            if (texturesInfo.SourcePixelFormat == NativeVideoPixelFormatKind.P010)
+            {
+                return new NativeVideoColorInfo
+                {
+                    Range = NativeVideoColorRangeKind.Limited,
+                    Matrix = NativeVideoColorMatrixKind.Bt2020Ncl,
+                    Primaries = NativeVideoColorPrimariesKind.Bt2020,
+                    Transfer = NativeVideoTransferCharacteristicKind.Pq,
+                    BitDepth = 10,
+                    DynamicRange = NativeVideoDynamicRangeKind.Hdr10,
+                };
+            }
+
+            return new NativeVideoColorInfo
+            {
+                Range = NativeVideoColorRangeKind.Limited,
+                Matrix = NativeVideoColorMatrixKind.Bt709,
+                Primaries = NativeVideoColorPrimariesKind.Bt709,
+                Transfer = NativeVideoTransferCharacteristicKind.Bt1886,
+                BitDepth = 8,
+                DynamicRange = NativeVideoDynamicRangeKind.Sdr,
+            };
+        }
+
+        private NativeVideoColorInfo ResolveEffectiveNativeVideoPlaneColorInfo(
+            NativeVideoPlaneTexturesInfo texturesInfo)
+        {
+            var colorInfo = CreateDefaultNativeVideoPlaneColorInfo(texturesInfo);
+            NativeVideoColorInfo sourceColorInfo;
+            if (TryGetNativeVideoSourceColorInfo(out sourceColorInfo))
+            {
+                if (sourceColorInfo.Range != NativeVideoColorRangeKind.Unknown)
+                {
+                    colorInfo.Range = sourceColorInfo.Range;
+                }
+
+                if (sourceColorInfo.Matrix != NativeVideoColorMatrixKind.Unknown)
+                {
+                    colorInfo.Matrix = sourceColorInfo.Matrix;
+                }
+
+                if (sourceColorInfo.Primaries != NativeVideoColorPrimariesKind.Unknown)
+                {
+                    colorInfo.Primaries = sourceColorInfo.Primaries;
+                }
+
+                if (sourceColorInfo.Transfer != NativeVideoTransferCharacteristicKind.Unknown)
+                {
+                    colorInfo.Transfer = sourceColorInfo.Transfer;
+                }
+
+                if (sourceColorInfo.BitDepth > 0)
+                {
+                    colorInfo.BitDepth = sourceColorInfo.BitDepth;
+                }
+
+                if (sourceColorInfo.DynamicRange != NativeVideoDynamicRangeKind.Unknown)
+                {
+                    colorInfo.DynamicRange = sourceColorInfo.DynamicRange;
+                }
+            }
+
+            if (colorInfo.Range == NativeVideoColorRangeKind.Unknown)
+            {
+                colorInfo.Range = NativeVideoColorRangeKind.Limited;
+            }
+
+            if (colorInfo.Matrix == NativeVideoColorMatrixKind.Unknown)
+            {
+                colorInfo.Matrix = texturesInfo.SourcePixelFormat == NativeVideoPixelFormatKind.P010
+                    ? NativeVideoColorMatrixKind.Bt2020Ncl
+                    : NativeVideoColorMatrixKind.Bt709;
+            }
+
+            if (colorInfo.Primaries == NativeVideoColorPrimariesKind.Unknown)
+            {
+                colorInfo.Primaries = IsBt2020ColorMatrix(colorInfo.Matrix)
+                    ? NativeVideoColorPrimariesKind.Bt2020
+                    : NativeVideoColorPrimariesKind.Bt709;
+            }
+
+            if (colorInfo.BitDepth <= 0)
+            {
+                colorInfo.BitDepth = texturesInfo.SourcePixelFormat == NativeVideoPixelFormatKind.P010
+                    ? 10
+                    : 8;
+            }
+
+            if (colorInfo.DynamicRange == NativeVideoDynamicRangeKind.Unknown)
+            {
+                colorInfo.DynamicRange = colorInfo.Transfer == NativeVideoTransferCharacteristicKind.Pq
+                    ? NativeVideoDynamicRangeKind.Hdr10
+                    : NativeVideoDynamicRangeKind.Sdr;
+            }
+
+            if (colorInfo.Transfer == NativeVideoTransferCharacteristicKind.Unknown)
+            {
+                colorInfo.Transfer = colorInfo.DynamicRange == NativeVideoDynamicRangeKind.Hdr10
+                    ? NativeVideoTransferCharacteristicKind.Pq
+                    : NativeVideoTransferCharacteristicKind.Bt1886;
+            }
+
+            return colorInfo;
+        }
+
+        private void ApplyNativeVideoPlaneColorInfoToMaterial(
+            NativeVideoPlaneTexturesInfo texturesInfo,
+            NativeVideoColorInfo colorInfo)
+        {
+            if (TargetMaterial == null)
+            {
+                return;
+            }
+
+            TargetMaterial.SetFloat(
+                VideoSourcePixelFormatPropertyId,
+                (float)texturesInfo.SourcePixelFormat);
+            TargetMaterial.SetFloat(
+                VideoColorRangePropertyId,
+                (float)colorInfo.Range);
+            TargetMaterial.SetFloat(
+                VideoColorMatrixPropertyId,
+                (float)colorInfo.Matrix);
+            TargetMaterial.SetFloat(
+                VideoColorPrimariesPropertyId,
+                (float)colorInfo.Primaries);
+            TargetMaterial.SetFloat(
+                VideoTransferPropertyId,
+                (float)colorInfo.Transfer);
+            TargetMaterial.SetFloat(
+                VideoBitDepthPropertyId,
+                colorInfo.BitDepth);
+            TargetMaterial.SetFloat(
+                VideoDynamicRangePropertyId,
+                (float)colorInfo.DynamicRange);
+        }
+
+        private static void ApplyNativeVideoPlaneColorInfoToComputeShader(
+            ComputeShader computeShader,
+            NativeVideoPlaneTexturesInfo texturesInfo,
+            NativeVideoColorInfo colorInfo)
+        {
+            computeShader.SetInt("_VideoSourcePixelFormat", (int)texturesInfo.SourcePixelFormat);
+            computeShader.SetInt("_VideoColorRange", (int)colorInfo.Range);
+            computeShader.SetInt("_VideoColorMatrix", (int)colorInfo.Matrix);
+            computeShader.SetInt("_VideoColorPrimaries", (int)colorInfo.Primaries);
+            computeShader.SetInt("_VideoTransfer", (int)colorInfo.Transfer);
+            computeShader.SetInt("_VideoBitDepth", colorInfo.BitDepth);
+            computeShader.SetInt("_VideoDynamicRange", (int)colorInfo.DynamicRange);
+        }
+
+        private static TextureFormat ResolveUnityExternalPlaneTextureFormat(
+            NativeVideoPlaneTextureFormatKind textureFormat)
+        {
+            switch (textureFormat)
+            {
+                case NativeVideoPlaneTextureFormatKind.R8Unorm:
+                    return TextureFormat.R8;
+                case NativeVideoPlaneTextureFormatKind.Rg8Unorm:
+                    return TextureFormat.RG16;
+                case NativeVideoPlaneTextureFormatKind.R16Unorm:
+                    return TextureFormat.R16;
+                case NativeVideoPlaneTextureFormatKind.Rg16Unorm:
+                    return TextureFormat.RG32;
+                default:
+                    throw new NotSupportedException(
+                        "Unsupported native video plane texture format: " + textureFormat);
+            }
+        }
         private void ApplyPresentedTexture(Texture texture)
         {
             DisableNativeVideoPlaneTextureMode();
@@ -1280,13 +1596,18 @@ namespace UnityAV
 
                 if (!_nativeTextureBound)
                 {
+                    NativeVideoColorInfo colorInfo;
+                    var hasColorInfo = TryGetNativeVideoColorInfo(out colorInfo);
                     Debug.Log(
                         "[MediaPlayer] native_texture_bound startup_seconds="
                         + StartupElapsedSeconds.ToString("F3")
                         + " frame_index=" + frameInfo.FrameIndex
                         + " surface=" + frameInfo.SurfaceKind
                         + " pixel_format=" + frameInfo.PixelFormat
-                        + " handle=0x" + frameInfo.NativeHandle.ToInt64().ToString("X"));
+                        + " handle=0x" + frameInfo.NativeHandle.ToInt64().ToString("X")
+                        + (hasColorInfo
+                            ? " color_info=" + DescribeNativeVideoColorInfo(colorInfo)
+                            : string.Empty));
                 }
 
                 _nativeTextureBound = true;
@@ -1356,12 +1677,16 @@ namespace UnityAV
                         "[MediaPlayer] unity_direct_shader requested but source plane textures are not usable"
                         + " surface=" + texturesInfo.SurfaceKind
                         + " source_pixel_format=" + texturesInfo.SourcePixelFormat
+                        + " y_texture_format=" + texturesInfo.YTextureFormat
+                        + " uv_texture_format=" + texturesInfo.UVTextureFormat
                         + " y_handle=0x" + texturesInfo.YNativeHandle.ToInt64().ToString("X")
                         + " uv_handle=0x" + texturesInfo.UVNativeHandle.ToInt64().ToString("X"));
                 }
 
                 return false;
             }
+
+            var effectiveColorInfo = ResolveEffectiveNativeVideoPlaneColorInfo(texturesInfo);
 
             try
             {
@@ -1371,18 +1696,26 @@ namespace UnityAV
                 }
 
                 EnsureNativePlaneTextureBindings(texturesInfo);
-                BindNativeVideoPlaneTexturesToMaterial();
+                BindNativeVideoPlaneTexturesToMaterial(texturesInfo, effectiveColorInfo);
 
                 if (!_nativeVideoDirectShaderPathActive)
                 {
+                    NativeVideoColorInfo colorInfo;
+                    var hasColorInfo = TryGetNativeVideoSourceColorInfo(out colorInfo);
                     Debug.Log(
                         "[MediaPlayer] unity_direct_shader_bound startup_seconds="
                         + StartupElapsedSeconds.ToString("F3")
                         + " frame_index=" + frameInfo.FrameIndex
                         + " source_pixel_format=" + texturesInfo.SourcePixelFormat
+                        + " y_texture_format=" + texturesInfo.YTextureFormat
+                        + " uv_texture_format=" + texturesInfo.UVTextureFormat
                         + " y_handle=0x" + texturesInfo.YNativeHandle.ToInt64().ToString("X")
                         + " uv_handle=0x" + texturesInfo.UVNativeHandle.ToInt64().ToString("X")
-                        + " source_flags=0x" + texturesInfo.Flags.ToString("X"));
+                        + " source_flags=0x" + texturesInfo.Flags.ToString("X")
+                        + " effective_color_info=" + DescribeNativeVideoColorInfo(effectiveColorInfo)
+                        + (hasColorInfo
+                            ? " source_color_info=" + DescribeNativeVideoColorInfo(colorInfo)
+                            : string.Empty));
                 }
 
                 _nativeVideoDirectShaderPathActive = true;
@@ -1403,6 +1736,8 @@ namespace UnityAV
                         "[MediaPlayer] unity_direct_shader failed source_surface="
                         + texturesInfo.SurfaceKind
                         + " source_pixel_format=" + texturesInfo.SourcePixelFormat
+                        + " y_texture_format=" + texturesInfo.YTextureFormat
+                        + " uv_texture_format=" + texturesInfo.UVTextureFormat
                         + " error=" + exception.Message);
                 }
 
@@ -1454,12 +1789,16 @@ namespace UnityAV
                         "[MediaPlayer] unity_compute requested but source plane textures are not usable"
                         + " surface=" + texturesInfo.SurfaceKind
                         + " source_pixel_format=" + texturesInfo.SourcePixelFormat
+                        + " y_texture_format=" + texturesInfo.YTextureFormat
+                        + " uv_texture_format=" + texturesInfo.UVTextureFormat
                         + " y_handle=0x" + texturesInfo.YNativeHandle.ToInt64().ToString("X")
                         + " uv_handle=0x" + texturesInfo.UVNativeHandle.ToInt64().ToString("X"));
                 }
 
                 return false;
             }
+
+            var effectiveColorInfo = ResolveEffectiveNativeVideoPlaneColorInfo(texturesInfo);
 
             try
             {
@@ -1468,6 +1807,10 @@ namespace UnityAV
                     texturesInfo.YWidth,
                     texturesInfo.YHeight);
                 EnsureNativePlaneTextureBindings(texturesInfo);
+                ApplyNativeVideoPlaneColorInfoToComputeShader(
+                    computeShader,
+                    texturesInfo,
+                    effectiveColorInfo);
                 computeShader.SetTexture(_nativeVideoComputeKernel, "YPlane", _nativePlaneTextureY);
                 computeShader.SetTexture(_nativeVideoComputeKernel, "UVPlane", _nativePlaneTextureUV);
                 var threadGroupsX = Mathf.CeilToInt(texturesInfo.YWidth / 16.0f);
@@ -1477,13 +1820,21 @@ namespace UnityAV
 
                 if (!_nativeVideoComputePathActive)
                 {
+                    NativeVideoColorInfo colorInfo;
+                    var hasColorInfo = TryGetNativeVideoSourceColorInfo(out colorInfo);
                     Debug.Log(
                         "[MediaPlayer] unity_compute_bound startup_seconds="
                         + StartupElapsedSeconds.ToString("F3")
                         + " frame_index=" + frameInfo.FrameIndex
                         + " source_pixel_format=" + texturesInfo.SourcePixelFormat
+                        + " y_texture_format=" + texturesInfo.YTextureFormat
+                        + " uv_texture_format=" + texturesInfo.UVTextureFormat
                         + " y_handle=0x" + texturesInfo.YNativeHandle.ToInt64().ToString("X")
-                        + " uv_handle=0x" + texturesInfo.UVNativeHandle.ToInt64().ToString("X"));
+                        + " uv_handle=0x" + texturesInfo.UVNativeHandle.ToInt64().ToString("X")
+                        + " effective_color_info=" + DescribeNativeVideoColorInfo(effectiveColorInfo)
+                        + (hasColorInfo
+                            ? " source_color_info=" + DescribeNativeVideoColorInfo(colorInfo)
+                            : string.Empty));
                 }
 
                 _nativeVideoComputePathActive = true;
@@ -1503,6 +1854,8 @@ namespace UnityAV
                         "[MediaPlayer] unity_compute failed source_surface="
                         + texturesInfo.SurfaceKind
                         + " source_pixel_format=" + texturesInfo.SourcePixelFormat
+                        + " y_texture_format=" + texturesInfo.YTextureFormat
+                        + " uv_texture_format=" + texturesInfo.UVTextureFormat
                         + " error=" + exception.Message);
                 }
 
@@ -1560,7 +1913,9 @@ namespace UnityAV
             return true;
         }
 
-        private void BindNativeVideoPlaneTexturesToMaterial()
+        private void BindNativeVideoPlaneTexturesToMaterial(
+            NativeVideoPlaneTexturesInfo texturesInfo,
+            NativeVideoColorInfo colorInfo)
         {
             if (TargetMaterial == null)
             {
@@ -1571,6 +1926,7 @@ namespace UnityAV
             TargetMaterial.SetFloat(FlipVerticalPropertyId, 1.0f);
             TargetMaterial.SetTexture(YPlanePropertyId, _nativePlaneTextureY);
             TargetMaterial.SetTexture(UVPlanePropertyId, _nativePlaneTextureUV);
+            ApplyNativeVideoPlaneColorInfoToMaterial(texturesInfo, colorInfo);
         }
 
         private void DisableNativeVideoPlaneTextureMode()
@@ -1630,51 +1986,58 @@ namespace UnityAV
 
         private void EnsureNativePlaneTextureBindings(NativeVideoPlaneTexturesInfo texturesInfo)
         {
+            var yTextureFormat = ResolveUnityExternalPlaneTextureFormat(texturesInfo.YTextureFormat);
+            var uvTextureFormat = ResolveUnityExternalPlaneTextureFormat(texturesInfo.UVTextureFormat);
+
             var requiresYRecreate = _nativePlaneTextureY == null
                 || _nativePlaneTextureY.width != texturesInfo.YWidth
-                || _nativePlaneTextureY.height != texturesInfo.YHeight;
+                || _nativePlaneTextureY.height != texturesInfo.YHeight
+                || _lastBoundNativePlaneYFormat != texturesInfo.YTextureFormat;
             if (requiresYRecreate)
             {
                 ReleaseNativePlaneTexture(ref _nativePlaneTextureY);
                 _nativePlaneTextureY = Texture2D.CreateExternalTexture(
                     texturesInfo.YWidth,
                     texturesInfo.YHeight,
-                    TextureFormat.R8,
+                    yTextureFormat,
                     false,
                     false,
                     texturesInfo.YNativeHandle);
                 _nativePlaneTextureY.filterMode = FilterMode.Bilinear;
                 _nativePlaneTextureY.name = Uri + "#NativeVideoY";
-                _lastBoundNativePlaneYHandle = texturesInfo.YNativeHandle;
             }
             else if (_lastBoundNativePlaneYHandle != texturesInfo.YNativeHandle)
             {
                 _nativePlaneTextureY.UpdateExternalTexture(texturesInfo.YNativeHandle);
-                _lastBoundNativePlaneYHandle = texturesInfo.YNativeHandle;
             }
+
+            _lastBoundNativePlaneYHandle = texturesInfo.YNativeHandle;
+            _lastBoundNativePlaneYFormat = texturesInfo.YTextureFormat;
 
             var requiresUVRecreate = _nativePlaneTextureUV == null
                 || _nativePlaneTextureUV.width != texturesInfo.UVWidth
-                || _nativePlaneTextureUV.height != texturesInfo.UVHeight;
+                || _nativePlaneTextureUV.height != texturesInfo.UVHeight
+                || _lastBoundNativePlaneUVFormat != texturesInfo.UVTextureFormat;
             if (requiresUVRecreate)
             {
                 ReleaseNativePlaneTexture(ref _nativePlaneTextureUV);
                 _nativePlaneTextureUV = Texture2D.CreateExternalTexture(
                     texturesInfo.UVWidth,
                     texturesInfo.UVHeight,
-                    TextureFormat.RG16,
+                    uvTextureFormat,
                     false,
                     false,
                     texturesInfo.UVNativeHandle);
                 _nativePlaneTextureUV.filterMode = FilterMode.Bilinear;
                 _nativePlaneTextureUV.name = Uri + "#NativeVideoUV";
-                _lastBoundNativePlaneUVHandle = texturesInfo.UVNativeHandle;
             }
             else if (_lastBoundNativePlaneUVHandle != texturesInfo.UVNativeHandle)
             {
                 _nativePlaneTextureUV.UpdateExternalTexture(texturesInfo.UVNativeHandle);
-                _lastBoundNativePlaneUVHandle = texturesInfo.UVNativeHandle;
             }
+
+            _lastBoundNativePlaneUVHandle = texturesInfo.UVNativeHandle;
+            _lastBoundNativePlaneUVFormat = texturesInfo.UVTextureFormat;
         }
 
         private void ReleaseBoundNativeTexture()
@@ -1700,8 +2063,9 @@ namespace UnityAV
             ReleaseNativePlaneTexture(ref _nativePlaneTextureUV);
             _lastBoundNativePlaneYHandle = IntPtr.Zero;
             _lastBoundNativePlaneUVHandle = IntPtr.Zero;
+            _lastBoundNativePlaneYFormat = NativeVideoPlaneTextureFormatKind.Unknown;
+            _lastBoundNativePlaneUVFormat = NativeVideoPlaneTextureFormatKind.Unknown;
         }
-
         private void ReleaseNativePlaneTexture(ref Texture2D texture)
         {
             if (texture == null)
@@ -1756,8 +2120,9 @@ namespace UnityAV
             _lastBoundNativeHandle = IntPtr.Zero;
             _lastBoundNativePlaneYHandle = IntPtr.Zero;
             _lastBoundNativePlaneUVHandle = IntPtr.Zero;
+            _lastBoundNativePlaneYFormat = NativeVideoPlaneTextureFormatKind.Unknown;
+            _lastBoundNativePlaneUVFormat = NativeVideoPlaneTextureFormatKind.Unknown;
         }
-
         private void ReleaseNativePlayer()
         {
             if (!ValidatePlayerId(_id))
@@ -1915,6 +2280,16 @@ namespace UnityAV
             }
 
             return "n/a";
+        }
+
+        private static string DescribeNativeVideoColorInfo(NativeVideoColorInfo colorInfo)
+        {
+            return "range=" + colorInfo.Range
+                + " matrix=" + colorInfo.Matrix
+                + " primaries=" + colorInfo.Primaries
+                + " transfer=" + colorInfo.Transfer
+                + " bit_depth=" + colorInfo.BitDepth
+                + " dynamic_range=" + colorInfo.DynamicRange;
         }
 
         private MediaBackendKind ReadActualBackendKind()

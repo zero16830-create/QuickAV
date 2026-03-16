@@ -1,5 +1,5 @@
-// NV12 -> RGBA Compute Shader
-// 仅用于 Unity NativeVideo source plane textures 的 Windows D3D11 消费路径。
+// NV12/P010 -> RGBA Compute Shader
+// 用于 Unity NativeVideo source plane textures 的 Windows D3D11 消费路径。
 
 #pragma kernel CSMain
 
@@ -9,14 +9,142 @@ RWTexture2D<float4> Result;
 
 int Width;
 int Height;
+int _VideoSourcePixelFormat;
+int _VideoColorRange;
+int _VideoColorMatrix;
+int _VideoColorPrimaries;
+int _VideoTransfer;
+int _VideoBitDepth;
+int _VideoDynamicRange;
 
-float3 YUVToRGB(float y, float u, float v)
+static const int VideoColorRangeLimited = 0;
+static const int VideoColorMatrixBt601 = 0;
+static const int VideoColorMatrixBt709 = 1;
+static const int VideoColorMatrixBt2020Ncl = 2;
+static const int VideoColorMatrixBt2020Cl = 3;
+static const int VideoTransferLinear = 2;
+static const int VideoTransferPq = 4;
+static const int VideoDynamicRangeHdr10 = 2;
+
+float2 ResolveYuvCoefficients(int matrixKind)
 {
+    if (matrixKind == VideoColorMatrixBt601)
+    {
+        return float2(0.2990, 0.1140);
+    }
+
+    if (matrixKind == VideoColorMatrixBt2020Ncl || matrixKind == VideoColorMatrixBt2020Cl)
+    {
+        return float2(0.2627, 0.0593);
+    }
+
+    return float2(0.2126, 0.0722);
+}
+
+void NormalizeYuvSample(
+    float yEncoded,
+    float2 uvEncoded,
+    out float luma,
+    out float2 chroma)
+{
+    float bitDepth = max((float)_VideoBitDepth, 8.0);
+    float denom = bitDepth >= 10.0 ? 1023.0 : 255.0;
+    float yOffset = bitDepth >= 10.0 ? (64.0 / denom) : (16.0 / denom);
+    float yScale = bitDepth >= 10.0 ? (denom / 876.0) : (255.0 / 219.0);
+    float uvScale = bitDepth >= 10.0 ? (denom / 896.0) : (255.0 / 224.0);
+
+    if (_VideoColorRange == VideoColorRangeLimited)
+    {
+        luma = saturate((yEncoded - yOffset) * yScale);
+        chroma = (uvEncoded - 0.5) * uvScale;
+    }
+    else
+    {
+        luma = saturate(yEncoded);
+        chroma = uvEncoded - 0.5;
+    }
+}
+
+float3 ConvertYuvToRgb(float yEncoded, float2 uvEncoded)
+{
+    float luma;
+    float2 chroma;
+    NormalizeYuvSample(yEncoded, uvEncoded, luma, chroma);
+
+    float2 coeffs = ResolveYuvCoefficients(_VideoColorMatrix);
+    float kr = coeffs.x;
+    float kb = coeffs.y;
+    float kg = max(1.0 - kr - kb, 1e-6);
+
+    float cb = chroma.x;
+    float cr = chroma.y;
+
     float3 rgb;
-    rgb.r = y + 1.5748 * v;
-    rgb.g = y - 0.1873 * u - 0.4681 * v;
-    rgb.b = y + 1.8556 * u;
-    return saturate(rgb);
+    rgb.r = luma + 2.0 * (1.0 - kr) * cr;
+    rgb.b = luma + 2.0 * (1.0 - kb) * cb;
+    rgb.g = luma
+        - (2.0 * kb * (1.0 - kb) / kg) * cb
+        - (2.0 * kr * (1.0 - kr) / kg) * cr;
+    return rgb;
+}
+
+float3 PqToLinear(float3 encoded)
+{
+    const float m1 = 2610.0 / 16384.0;
+    const float m2 = 2523.0 / 32.0;
+    const float c1 = 3424.0 / 4096.0;
+    const float c2 = 2413.0 / 128.0;
+    const float c3 = 2392.0 / 128.0;
+
+    float3 safeEncoded = max(encoded, 0.0);
+    float3 powerTerm = pow(safeEncoded, 1.0 / m2);
+    float3 numerator = max(powerTerm - c1, 0.0);
+    float3 denominator = max(c2 - c3 * powerTerm, 1e-6);
+    return pow(numerator / denominator, 1.0 / m1);
+}
+
+float3 ConvertBt2020ToBt709(float3 linearBt2020)
+{
+    return float3(
+        dot(float3(1.6605, -0.5876, -0.0728), linearBt2020),
+        dot(float3(-0.1246, 1.1329, -0.0083), linearBt2020),
+        dot(float3(-0.0182, -0.1006, 1.1187), linearBt2020));
+}
+
+float3 ToneMapHdr10ToSdr(float3 linearRgb)
+{
+    float3 exposed = max(linearRgb, 0.0) * 48.0;
+    float3 numerator = exposed * (2.51 * exposed + 0.03);
+    float3 denominator = exposed * (2.43 * exposed + 0.59) + 0.14;
+    return saturate(numerator / max(denominator, 1e-6));
+}
+
+float3 LinearToSrgb(float3 linearRgb)
+{
+    float3 safeRgb = saturate(linearRgb);
+    float3 lower = safeRgb * 12.92;
+    float3 upper = 1.055 * pow(safeRgb, 1.0 / 2.4) - 0.055;
+    return lerp(upper, lower, step(safeRgb, 0.0031308));
+}
+
+float3 PrepareDisplayRgb(float3 encodedRgb)
+{
+    bool isHdr10 = _VideoDynamicRange == VideoDynamicRangeHdr10
+        || _VideoTransfer == VideoTransferPq;
+
+    if (isHdr10)
+    {
+        float3 linearBt2020 = PqToLinear(saturate(encodedRgb));
+        float3 linearBt709 = ConvertBt2020ToBt709(linearBt2020);
+        return LinearToSrgb(ToneMapHdr10ToSdr(linearBt709));
+    }
+
+    if (_VideoTransfer == VideoTransferLinear)
+    {
+        return LinearToSrgb(encodedRgb);
+    }
+
+    return saturate(encodedRgb);
 }
 
 [numthreads(16, 16, 1)]
@@ -31,8 +159,6 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float y = YPlane.Load(int3(id.x, flippedY, 0));
     int2 uvPosition = int2(id.x / 2, flippedY / 2);
     float2 uv = UVPlane.Load(int3(uvPosition, 0));
-    float u = uv.x - 0.5;
-    float v = uv.y - 0.5;
-    float3 rgb = YUVToRGB(y, u, v);
-    Result[id.xy] = float4(rgb, 1.0);
+    float3 rgb = ConvertYuvToRgb(y, uv);
+    Result[id.xy] = float4(PrepareDisplayRgb(rgb), 1.0);
 }
