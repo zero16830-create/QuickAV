@@ -18,9 +18,11 @@ namespace UnityAV.Editor
     {
         private const string PullScenePath = "Assets/UnityAV/Validation/CodexPullValidation.generated.unity";
         private const string NativeScenePath = "Assets/UnityAV/Validation/CodexNativeVideoValidation.generated.unity";
+        private const string MediaPlayerAuditScenePath = "Assets/UnityAV/Validation/CodexMediaPlayerAudioAudit.generated.unity";
         private const string MaterialPath = "Assets/UnityAV/Materials/VideoMaterial.mat";
         private const string PullBuildPath = "Build/CodexPullValidation/CodexPullValidation.exe";
         private const string NativeBuildPath = "Build/CodexNativeVideoValidation/CodexNativeVideoValidation.exe";
+        private const string MediaPlayerAuditBuildPath = "Build/CodexMediaPlayerAudioAudit/CodexMediaPlayerAudioAudit.exe";
         private const string SampleUri = "SampleVideo_1280x720_10mb.mp4";
         private const int DefaultVideoWidth = 1280;
         private const int DefaultVideoHeight = 720;
@@ -64,6 +66,25 @@ namespace UnityAV.Editor
             AssetDatabase.Refresh();
 
             Debug.Log("[CodexValidationBuild] native_scene_created=" + NativeScenePath);
+        }
+
+        public static void CreateMediaPlayerAudioAuditScene()
+        {
+            DeleteGeneratedValidationScene(MediaPlayerAuditScenePath);
+
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+
+            var camera = CreateCamera();
+            var surface = CreateVideoSurface();
+            var player = CreateMediaPlayerAudioAuditPlayer();
+            CreateMediaPlayerAudioAuditDriver(player, surface.transform, camera);
+
+            Directory.CreateDirectory(Path.GetDirectoryName(MediaPlayerAuditScenePath) ?? "Assets/UnityAV/Validation");
+            EditorSceneManager.SaveScene(scene, MediaPlayerAuditScenePath);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            Debug.Log("[CodexValidationBuild] media_player_audit_scene_created=" + MediaPlayerAuditScenePath);
         }
 
         public static void BuildWindowsValidationPlayer()
@@ -168,6 +189,57 @@ namespace UnityAV.Editor
             Debug.Log("[CodexValidationBuild] native_build_succeeded=" + NativeBuildPath);
         }
 
+        public static void BuildWindowsMediaPlayerAudioAuditPlayer()
+        {
+            WindowsNativeRuntimePackager.ConfigureProjectRuntimeImportSettings();
+            WindowsNativeRuntimePackager.EnsureProjectRuntimeAvailable();
+            CreateMediaPlayerAudioAuditScene();
+
+            PrepareBuildOutput(MediaPlayerAuditBuildPath);
+            var previousFullScreenMode = PlayerSettings.fullScreenMode;
+            var previousDefaultScreenWidth = PlayerSettings.defaultScreenWidth;
+            var previousDefaultScreenHeight = PlayerSettings.defaultScreenHeight;
+            var previousResizableWindow = PlayerSettings.resizableWindow;
+            var previousDefaultIsNativeResolution = PlayerSettings.defaultIsNativeResolution;
+
+            PlayerSettings.fullScreenMode = FullScreenMode.Windowed;
+            PlayerSettings.defaultScreenWidth = DefaultVideoWidth;
+            PlayerSettings.defaultScreenHeight = DefaultVideoHeight;
+            PlayerSettings.resizableWindow = true;
+            PlayerSettings.defaultIsNativeResolution = false;
+
+            BuildReport report;
+            try
+            {
+                report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+                {
+                    scenes = new[] { MediaPlayerAuditScenePath },
+                    locationPathName = MediaPlayerAuditBuildPath,
+                    target = BuildTarget.StandaloneWindows64,
+                    options = BuildOptions.None,
+                });
+            }
+            finally
+            {
+                PlayerSettings.fullScreenMode = previousFullScreenMode;
+                PlayerSettings.defaultScreenWidth = previousDefaultScreenWidth;
+                PlayerSettings.defaultScreenHeight = previousDefaultScreenHeight;
+                PlayerSettings.resizableWindow = previousResizableWindow;
+                PlayerSettings.defaultIsNativeResolution = previousDefaultIsNativeResolution;
+                DeleteGeneratedValidationScene(MediaPlayerAuditScenePath);
+            }
+
+            if (report.summary.result != BuildResult.Succeeded)
+            {
+                throw new System.Exception(
+                    "Windows MediaPlayer 音频审计包构建失败: " + report.summary.result);
+            }
+
+            WindowsNativeRuntimePackager.PackageGstreamerRuntimeOrThrow(MediaPlayerAuditBuildPath);
+
+            Debug.Log("[CodexValidationBuild] media_player_audit_build_succeeded=" + MediaPlayerAuditBuildPath);
+        }
+
         private static Camera CreateCamera()
         {
             var cameraObject = new GameObject("Main Camera");
@@ -239,6 +311,19 @@ namespace UnityAV.Editor
             return player;
         }
 
+        private static MediaPlayer CreateMediaPlayerAudioAuditPlayer()
+        {
+            var playerObject = new GameObject("MediaPlayer Audio Audit Player");
+            var player = playerObject.AddComponent<MediaPlayer>();
+            player.Uri = SampleUri;
+            player.Loop = false;
+            player.AutoPlay = true;
+            player.Width = DefaultVideoWidth;
+            player.Height = DefaultVideoHeight;
+            player.TargetMaterial = AssetDatabase.LoadAssetAtPath<Material>(MaterialPath);
+            return player;
+        }
+
         private static void CreateDriver(MediaPlayerPull player, Transform surface, Camera camera)
         {
             var driver = player.gameObject.AddComponent<CodexValidationDriver>();
@@ -261,6 +346,19 @@ namespace UnityAV.Editor
             driver.PreferUnityNv12Compute = true;
             driver.RequireUnityCompute = false;
             driver.RequireStrictZeroCopy = true;
+        }
+
+        private static void CreateMediaPlayerAudioAuditDriver(
+            MediaPlayer player,
+            Transform surface,
+            Camera camera)
+        {
+            var driver = player.gameObject.AddComponent<CodexMediaPlayerAudioAuditDriver>();
+            driver.Player = player;
+            driver.ValidationSeconds = 12f;
+            driver.LogIntervalSeconds = 1f;
+            driver.VideoSurface = surface;
+            driver.ValidationCamera = camera;
         }
 
         private static void DeleteGeneratedValidationScene(string scenePath)
