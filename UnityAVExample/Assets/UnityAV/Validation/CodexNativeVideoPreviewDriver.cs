@@ -282,6 +282,20 @@ namespace UnityAV
                 out presentationSnapshot);
             MediaPlayer.PlayerRuntimeHealth healthSnapshot;
             var hasHealthSnapshot = Player.TryGetRuntimeHealth(out healthSnapshot);
+            MediaNativeInteropCommon.VideoFrameContractView frameContract;
+            var hasFrameContract = Player.TryGetLatestVideoFrameContract(out frameContract);
+            MediaNativeInteropCommon.VideoFrameContractView sourceFrameContract;
+            var hasSourceFrameContract = Player.TryGetLatestSourceVideoFrameContract(
+                out sourceFrameContract);
+            MediaNativeInteropCommon.PlaybackTimingContractView playbackTimingContract;
+            var hasPlaybackTimingContract = Player.TryGetPlaybackTimingContract(
+                out playbackTimingContract);
+            MediaNativeInteropCommon.AvSyncContractView avSyncContract;
+            var hasAvSyncContract = Player.TryGetAvSyncContract(out avSyncContract);
+            MediaNativeInteropCommon.NativeVideoBridgeDescriptorView bridgeDescriptor;
+            var hasBridgeDescriptor = Player.TryGetNativeVideoBridgeDescriptor(out bridgeDescriptor);
+            MediaNativeInteropCommon.NativeVideoPathSelectionView pathSelection;
+            var hasPathSelection = Player.TryGetNativeVideoPathSelection(out pathSelection);
             var attemptFps = cadenceSnapshot.AcquireAttemptCount / Mathf.Max(0.001f, elapsed);
             var presentedFps = cadenceSnapshot.PresentCount / Mathf.Max(0.001f, elapsed);
             var acquireMissFps = cadenceSnapshot.AcquireMissCount / Mathf.Max(0.001f, elapsed);
@@ -347,6 +361,20 @@ namespace UnityAV
                 + " health_snapshot_available=" + hasHealthSnapshot
                 + " health_current_time_sec=" + (hasHealthSnapshot ? healthSnapshot.CurrentTimeSec.ToString("F3") : "-1.000")
                 + " health_current_minus_frame_ms=" + healthCurrentMinusFrameMs.ToString("F1")
+                + " frame_contract_available=" + hasFrameContract
+                + " frame_contract=" + (hasFrameContract ? FormatVideoFrameContract(frameContract) : "unavailable")
+                + " source_frame_contract_available=" + hasSourceFrameContract
+                + " source_frame_contract="
+                + (hasSourceFrameContract ? FormatVideoFrameContract(sourceFrameContract) : "unavailable")
+                + " playback_contract_available=" + hasPlaybackTimingContract
+                + " playback_contract="
+                + (hasPlaybackTimingContract ? FormatPlaybackTimingContract(playbackTimingContract) : "unavailable")
+                + " av_sync_contract_available=" + hasAvSyncContract
+                + " av_sync_contract="
+                + (hasAvSyncContract ? FormatAvSyncContract(avSyncContract) : "unavailable")
+                + " bridge_descriptor_available=" + hasBridgeDescriptor
+                + " bridge_descriptor="
+                + (hasBridgeDescriptor ? FormatNativeVideoBridgeDescriptor(bridgeDescriptor) : "unavailable")
                 + " presentation_render_event_pass_attempt_count="
                 + (hasPresentationSnapshot ? presentationSnapshot.RenderEventPassAttemptCount : 0)
                 + " presentation_render_event_pass_success_count="
@@ -395,6 +423,12 @@ namespace UnityAV
                 + " audio_time_samples=" + audioTimeSamples
                 + " cadence_snapshot_available=" + hasCadenceSnapshot
                 + " backend=" + Player.ActualBackendKind);
+
+            Debug.Log(
+                "[CodexNativePreview] path_selection"
+                + " available=" + hasPathSelection
+                + " selection="
+                + (hasPathSelection ? FormatNativeVideoPathSelection(pathSelection) : "unavailable"));
 
             _lastDiagnosticRealtime = now;
             _updateCount = 0;
@@ -583,6 +617,122 @@ namespace UnityAV
                 default:
                     return false;
             }
+        }
+
+        private static string FormatVideoFrameContract(
+            MediaNativeInteropCommon.VideoFrameContractView contract)
+        {
+            var frameIndex = contract.HasFrameIndex ? contract.FrameIndex.ToString() : "none";
+            var nominalFps = contract.HasNominalFps
+                ? contract.NominalFps.ToString("F2", CultureInfo.InvariantCulture)
+                : "none";
+            var timelineOrigin = contract.HasTimelineOriginSec
+                ? contract.TimelineOriginSec.ToString("F3", CultureInfo.InvariantCulture)
+                : "none";
+            var dynamicRangeOverride = contract.HasColorDynamicRangeOverride
+                ? contract.ColorDynamicRangeOverride.ToString()
+                : "none";
+            return "memory=" + contract.MemoryKind
+                + ",surface=" + contract.SurfaceKind
+                + ",pixel=" + contract.PixelFormat
+                + ",size=" + contract.Width + "x" + contract.Height
+                + ",planes=" + contract.PlaneCount
+                + ",hw=" + contract.HardwareDecode
+                + ",zero_copy=" + contract.ZeroCopy
+                + ",cpu_fallback=" + contract.CpuFallback
+                + ",handles=" + contract.NativeHandlePresent + "/" + contract.AuxiliaryHandlePresent
+                + ",dynamic_range=" + contract.Color.DynamicRange
+                + ",dynamic_range_override=" + dynamicRangeOverride
+                + ",time=" + contract.TimeSec.ToString("F3", CultureInfo.InvariantCulture)
+                + ",frame_index=" + frameIndex
+                + ",nominal_fps=" + nominalFps
+                + ",timeline_origin=" + timelineOrigin
+                + ",seek_epoch=" + contract.SeekEpoch
+                + ",discontinuity=" + contract.Discontinuity;
+        }
+
+        private static string FormatPlaybackTimingContract(
+            MediaNativeInteropCommon.PlaybackTimingContractView contract)
+        {
+            var audioTime = contract.HasAudioTimeSec
+                ? contract.AudioTimeSec.ToString("F3", CultureInfo.InvariantCulture)
+                : "none";
+            var audioPresented = contract.HasAudioPresentedTimeSec
+                ? contract.AudioPresentedTimeSec.ToString("F3", CultureInfo.InvariantCulture)
+                : "none";
+            return "master=" + contract.MasterTimeSec.ToString("F3", CultureInfo.InvariantCulture)
+                + ",external=" + contract.ExternalTimeSec.ToString("F3", CultureInfo.InvariantCulture)
+                + ",audio=" + audioTime
+                + ",audio_presented=" + audioPresented
+                + ",audio_sink_delay_ms="
+                + (contract.AudioSinkDelaySec * 1000.0).ToString("F1", CultureInfo.InvariantCulture)
+                + ",has_audio_clock=" + contract.HasAudioClock;
+        }
+
+        private static string FormatAvSyncContract(
+            MediaNativeInteropCommon.AvSyncContractView contract)
+        {
+            var audioClock = contract.HasAudioClockSec
+                ? contract.AudioClockSec.ToString("F3", CultureInfo.InvariantCulture)
+                : "none";
+            var videoClock = contract.HasVideoClockSec
+                ? contract.VideoClockSec.ToString("F3", CultureInfo.InvariantCulture)
+                : "none";
+            return "master=" + contract.MasterClock
+                + ",audio_clock=" + audioClock
+                + ",video_clock=" + videoClock
+                + ",drift_ms=" + contract.DriftMs.ToString("F1", CultureInfo.InvariantCulture)
+                + ",warmup_complete=" + contract.StartupWarmupComplete
+                + ",drop_total=" + contract.DropTotal
+                + ",duplicate_total=" + contract.DuplicateTotal;
+        }
+
+        private static string FormatNativeVideoBridgeDescriptor(
+            MediaNativeInteropCommon.NativeVideoBridgeDescriptorView descriptor)
+        {
+            return "backend=" + descriptor.BackendKind
+                + ",target_platform=" + descriptor.TargetPlatformKind
+                + ",target_surface=" + descriptor.TargetSurfaceKind
+                + ",target_size=" + descriptor.TargetWidth + "x" + descriptor.TargetHeight
+                + ",target_pixel=" + descriptor.TargetPixelFormat
+                + ",target_flags=0x" + descriptor.TargetFlags.ToString("X", CultureInfo.InvariantCulture)
+                + ",platform=" + descriptor.PlatformKind
+                + ",surface=" + descriptor.SurfaceKind
+                + ",state=" + descriptor.State
+                + ",runtime=" + descriptor.RuntimeKind
+                + ",supported=" + descriptor.Supported
+                + ",hw=" + descriptor.HardwareDecodeSupported
+                + ",zero_copy=" + descriptor.ZeroCopySupported
+                + ",acquire_release=" + descriptor.AcquireReleaseSupported
+                + ",caps_flags=0x" + descriptor.CapsFlags.ToString("X", CultureInfo.InvariantCulture)
+                + ",target_valid=" + descriptor.TargetValid
+                + ",requested_external=" + descriptor.RequestedExternalTextureTarget
+                + ",direct_target_present=" + descriptor.DirectTargetPresentAllowed
+                + ",target_binding=" + descriptor.TargetBindingSupported
+                + ",external_texture_target=" + descriptor.ExternalTextureTargetSupported
+                + ",frame_acquire=" + descriptor.FrameAcquireSupported
+                + ",frame_release=" + descriptor.FrameReleaseSupported
+                + ",fallback_copy=" + descriptor.FallbackCopyPath
+                + ",source_surface_zero_copy=" + descriptor.SourceSurfaceZeroCopy
+                + ",direct_bindable=" + descriptor.PresentedFrameDirectBindable
+                + ",strict_zero_copy=" + descriptor.PresentedFrameStrictZeroCopy
+                + ",source_plane_textures=" + descriptor.SourcePlaneTexturesSupported
+                + ",source_plane_views=" + descriptor.SourcePlaneViewsSupported;
+        }
+
+        private static string FormatNativeVideoPathSelection(
+            MediaNativeInteropCommon.NativeVideoPathSelectionView selection)
+        {
+            return "kind=" + selection.Kind
+                + ",has_source_frame=" + selection.HasSourceFrame
+                + ",has_presented_frame=" + selection.HasPresentedFrame
+                + ",source_memory=" + selection.SourceMemoryKind
+                + ",presented_memory=" + selection.PresentedMemoryKind
+                + ",bridge_state=" + selection.BridgeState
+                + ",source_surface_zero_copy=" + selection.SourceSurfaceZeroCopy
+                + ",source_plane_textures=" + selection.SourcePlaneTexturesSupported
+                + ",target_zero_copy=" + selection.TargetZeroCopy
+                + ",cpu_fallback=" + selection.CpuFallback;
         }
     }
 }

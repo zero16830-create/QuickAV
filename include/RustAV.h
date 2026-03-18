@@ -17,8 +17,13 @@
 #define RUSTAV_PLAYER_HEALTH_SNAPSHOT_V2_VERSION 2u
 #define RUSTAV_PLAYER_OPEN_OPTIONS_VERSION 1u
 #define RUSTAV_STREAM_INFO_VERSION 1u
+#define RUSTAV_VIDEO_FRAME_CONTRACT_VERSION 1u
+#define RUSTAV_PLAYBACK_TIMING_CONTRACT_VERSION 1u
+#define RUSTAV_AV_SYNC_CONTRACT_VERSION 1u
 #define RUSTAV_NATIVE_VIDEO_TARGET_VERSION 1u
 #define RUSTAV_NATIVE_VIDEO_INTEROP_CAPS_VERSION 1u
+#define RUSTAV_NATIVE_VIDEO_BRIDGE_DESCRIPTOR_VERSION 1u
+#define RUSTAV_NATIVE_VIDEO_PATH_SELECTION_VERSION 1u
 #define RUSTAV_NATIVE_VIDEO_FRAME_VERSION 1u
 #define RUSTAV_NATIVE_VIDEO_PLANE_TEXTURES_VERSION 1u
 #define RUSTAV_MAKE_ABI_VERSION(major, minor, patch) \
@@ -177,6 +182,55 @@ typedef struct RustAVNativeVideoInteropCaps {
     uint32_t flags;
 } RustAVNativeVideoInteropCaps;
 
+typedef struct RustAVNativeVideoBridgeDescriptor {
+    uint32_t struct_size;
+    uint32_t struct_version;
+    int32_t backend_kind;
+    int32_t target_platform_kind;
+    int32_t target_surface_kind;
+    int32_t target_width;
+    int32_t target_height;
+    int32_t target_pixel_format;
+    uint32_t target_flags;
+    int32_t platform_kind;
+    int32_t surface_kind;
+    int32_t state;
+    int32_t runtime_kind;
+    int32_t supported;
+    int32_t hardware_decode_supported;
+    int32_t zero_copy_supported;
+    int32_t acquire_release_supported;
+    uint32_t caps_flags;
+    int32_t target_valid;
+    int32_t requested_external_texture_target;
+    int32_t direct_target_present_allowed;
+    int32_t target_binding_supported;
+    int32_t external_texture_target_supported;
+    int32_t frame_acquire_supported;
+    int32_t frame_release_supported;
+    int32_t fallback_copy_path;
+    int32_t source_surface_zero_copy;
+    int32_t presented_frame_direct_bindable;
+    int32_t presented_frame_strict_zero_copy;
+    int32_t source_plane_textures_supported;
+    int32_t source_plane_views_supported;
+} RustAVNativeVideoBridgeDescriptor;
+
+typedef struct RustAVNativeVideoPathSelection {
+    uint32_t struct_size;
+    uint32_t struct_version;
+    int32_t kind;
+    int32_t has_source_frame;
+    int32_t has_presented_frame;
+    int32_t source_memory_kind;
+    int32_t presented_memory_kind;
+    int32_t bridge_state;
+    int32_t source_surface_zero_copy;
+    int32_t source_plane_textures_supported;
+    int32_t target_zero_copy;
+    int32_t cpu_fallback;
+} RustAVNativeVideoPathSelection;
+
 typedef struct RustAVNativeVideoFrame {
     uint32_t struct_size;
     uint32_t struct_version;
@@ -323,6 +377,66 @@ typedef struct RustAVPlayerHealthSnapshotV2 {
     double source_last_activity_age_sec;
 } RustAVPlayerHealthSnapshotV2;
 
+typedef struct RustAVVideoFrameContract {
+    uint32_t struct_size;
+    uint32_t struct_version;
+    int32_t memory_kind;
+    int32_t surface_kind;
+    int32_t pixel_format;
+    int32_t width;
+    int32_t height;
+    int32_t plane_count;
+    int32_t hardware_decode;
+    int32_t zero_copy;
+    int32_t cpu_fallback;
+    int32_t native_handle_present;
+    int32_t auxiliary_handle_present;
+    int32_t color_range;
+    int32_t color_matrix;
+    int32_t color_primaries;
+    int32_t color_transfer;
+    int32_t color_bit_depth;
+    int32_t color_dynamic_range;
+    int32_t has_color_dynamic_range_override;
+    int32_t color_dynamic_range_override;
+    double time_sec;
+    int32_t has_frame_index;
+    int64_t frame_index;
+    int32_t has_nominal_fps;
+    double nominal_fps;
+    int32_t has_timeline_origin_sec;
+    double timeline_origin_sec;
+    uint64_t seek_epoch;
+    int32_t discontinuity;
+} RustAVVideoFrameContract;
+
+typedef struct RustAVPlaybackTimingContract {
+    uint32_t struct_size;
+    uint32_t struct_version;
+    double master_time_sec;
+    double external_time_sec;
+    int32_t has_audio_time_sec;
+    double audio_time_sec;
+    int32_t has_audio_presented_time_sec;
+    double audio_presented_time_sec;
+    double audio_sink_delay_sec;
+    int32_t has_audio_clock;
+} RustAVPlaybackTimingContract;
+
+typedef struct RustAVAvSyncContract {
+    uint32_t struct_size;
+    uint32_t struct_version;
+    int32_t master_clock;
+    int32_t has_audio_clock_sec;
+    double audio_clock_sec;
+    int32_t has_video_clock_sec;
+    double video_clock_sec;
+    double drift_ms;
+    int32_t startup_warmup_complete;
+    uint64_t drop_total;
+    uint64_t duplicate_total;
+} RustAVAvSyncContract;
+
 typedef void (RUSTAV_CALLBACK_CALL *RustAVLogCallback)(const char* message);
 typedef void (RUSTAV_CALL *RustAVRenderEventFunc)(int32_t eventId);
 
@@ -367,6 +481,24 @@ int32_t RUSTAV_CALL RustAV_PlayerSetAudioSinkDelaySeconds(int32_t id, double del
 int32_t RUSTAV_CALL RustAV_PlayerGetBackendKind(int32_t id);
 int32_t RUSTAV_CALL RustAV_PlayerGetHealthSnapshot(int32_t id, RustAVPlayerHealthSnapshot* outSnapshot);
 int32_t RUSTAV_CALL RustAV_PlayerGetHealthSnapshotV2(int32_t id, RustAVPlayerHealthSnapshotV2* outSnapshot);
+int32_t RUSTAV_CALL RustAV_PlayerGetLatestVideoFrameContract(
+    int32_t id,
+    RustAVVideoFrameContract* outContract);
+int32_t RUSTAV_CALL RustAV_PlayerGetLatestSourceVideoFrameContract(
+    int32_t id,
+    RustAVVideoFrameContract* outContract);
+int32_t RUSTAV_CALL RustAV_PlayerGetPlaybackTimingContract(
+    int32_t id,
+    RustAVPlaybackTimingContract* outContract);
+int32_t RUSTAV_CALL RustAV_PlayerGetAvSyncContract(
+    int32_t id,
+    RustAVAvSyncContract* outContract);
+int32_t RUSTAV_CALL RustAV_PlayerGetNativeVideoBridgeDescriptor(
+    int32_t id,
+    RustAVNativeVideoBridgeDescriptor* outDescriptor);
+int32_t RUSTAV_CALL RustAV_PlayerGetNativeVideoPathSelection(
+    int32_t id,
+    RustAVNativeVideoPathSelection* outSelection);
 int32_t RUSTAV_CALL RustAV_PlayerGetStreamInfo(int32_t id, int32_t streamIndex, RustAVStreamInfo* outInfo);
 int32_t RUSTAV_CALL RustAV_PlayerGetFrameMetaRGBA(int32_t id, RustAVFrameMeta* outMeta);
 int32_t RUSTAV_CALL RustAV_PlayerCopyFrameRGBA(int32_t id, uint8_t* destination, int32_t destinationLength);

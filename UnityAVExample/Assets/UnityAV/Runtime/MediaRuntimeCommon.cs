@@ -42,6 +42,15 @@ namespace UnityAV
         AndroidHardwareBuffer = 5,
     }
 
+    public enum NativeVideoPathKind
+    {
+        Unknown = 0,
+        NativeBridgeZeroCopy = 1,
+        NativeBridgePlanes = 2,
+        WgpuRenderCore = 3,
+        CpuFallback = 4,
+    }
+
     public enum NativeVideoTargetProviderKind
     {
         Auto = 0,
@@ -128,9 +137,14 @@ namespace UnityAV
     {
         internal const uint RustAVPlayerOpenOptionsVersion = 1u;
         internal const uint RustAVPlayerHealthSnapshotV2Version = 2u;
+        internal const uint RustAVVideoFrameContractVersion = 1u;
+        internal const uint RustAVPlaybackTimingContractVersion = 1u;
+        internal const uint RustAVAvSyncContractVersion = 1u;
         internal const uint RustAVVideoColorInfoVersion = 1u;
         internal const uint RustAVNativeVideoTargetVersion = 1u;
         internal const uint RustAVNativeVideoInteropCapsVersion = 1u;
+        internal const uint RustAVNativeVideoBridgeDescriptorVersion = 1u;
+        internal const uint RustAVNativeVideoPathSelectionVersion = 1u;
         internal const uint RustAVNativeVideoFrameVersion = 1u;
         internal const uint RustAVNativeVideoPlaneTexturesVersion = 1u;
         internal const uint RustAVNativeVideoPlaneViewsVersion = 1u;
@@ -164,6 +178,32 @@ namespace UnityAV
             Rgba32 = 1,
             Nv12 = 2,
             P010 = 3,
+        }
+
+        internal enum NativeVideoBridgeState
+        {
+            Unsupported = 0,
+            ContractPending = 1,
+            RuntimeReady = 2,
+        }
+
+        internal enum NativeVideoBridgeRuntimeKind
+        {
+            None = 0,
+            WindowsD3d11TextureInterop = 1,
+            IosMetalTexture = 2,
+            IosCvPixelBuffer = 3,
+            AndroidSurfaceTexture = 4,
+            AndroidHardwareBuffer = 5,
+        }
+
+        internal enum NativeVideoPath
+        {
+            Unknown = 0,
+            NativeBridgeZeroCopy = 1,
+            NativeBridgePlanes = 2,
+            WgpuRenderCore = 3,
+            CpuFallback = 4,
         }
 
         internal enum NativeVideoColorRange
@@ -220,6 +260,21 @@ namespace UnityAV
             Rg8Unorm = 2,
             R16Unorm = 3,
             Rg16Unorm = 4,
+        }
+
+        internal enum VideoFrameMemoryKind
+        {
+            Unknown = 0,
+            CpuPlanar = 1,
+            NativeSurface = 2,
+        }
+
+        internal enum AvSyncMasterClockKind
+        {
+            Unknown = 0,
+            Audio = 1,
+            Video = 2,
+            External = 3,
         }
 
         internal enum NativeVideoPlaneResourceKind
@@ -279,6 +334,59 @@ namespace UnityAV
             public int ZeroCopySupported;
             public int AcquireReleaseSupported;
             public uint Flags;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct RustAVNativeVideoBridgeDescriptor
+        {
+            public uint StructSize;
+            public uint StructVersion;
+            public int BackendKind;
+            public int TargetPlatformKind;
+            public int TargetSurfaceKind;
+            public int TargetWidth;
+            public int TargetHeight;
+            public int TargetPixelFormat;
+            public uint TargetFlags;
+            public int PlatformKind;
+            public int SurfaceKind;
+            public int State;
+            public int RuntimeKind;
+            public int Supported;
+            public int HardwareDecodeSupported;
+            public int ZeroCopySupported;
+            public int AcquireReleaseSupported;
+            public uint CapsFlags;
+            public int TargetValid;
+            public int RequestedExternalTextureTarget;
+            public int DirectTargetPresentAllowed;
+            public int TargetBindingSupported;
+            public int ExternalTextureTargetSupported;
+            public int FrameAcquireSupported;
+            public int FrameReleaseSupported;
+            public int FallbackCopyPath;
+            public int SourceSurfaceZeroCopy;
+            public int PresentedFrameDirectBindable;
+            public int PresentedFrameStrictZeroCopy;
+            public int SourcePlaneTexturesSupported;
+            public int SourcePlaneViewsSupported;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct RustAVNativeVideoPathSelection
+        {
+            public uint StructSize;
+            public uint StructVersion;
+            public int Kind;
+            public int HasSourceFrame;
+            public int HasPresentedFrame;
+            public int SourceMemoryKind;
+            public int PresentedMemoryKind;
+            public int BridgeState;
+            public int SourceSurfaceZeroCopy;
+            public int SourcePlaneTexturesSupported;
+            public int TargetZeroCopy;
+            public int CpuFallback;
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -380,6 +488,72 @@ namespace UnityAV
             public double SourceLastActivityAgeSec;
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct RustAVVideoFrameContract
+        {
+            public uint StructSize;
+            public uint StructVersion;
+            public int MemoryKind;
+            public int SurfaceKind;
+            public int PixelFormat;
+            public int Width;
+            public int Height;
+            public int PlaneCount;
+            public int HardwareDecode;
+            public int ZeroCopy;
+            public int CpuFallback;
+            public int NativeHandlePresent;
+            public int AuxiliaryHandlePresent;
+            public int ColorRange;
+            public int ColorMatrix;
+            public int ColorPrimaries;
+            public int ColorTransfer;
+            public int ColorBitDepth;
+            public int ColorDynamicRange;
+            public int HasColorDynamicRangeOverride;
+            public int ColorDynamicRangeOverride;
+            public double TimeSec;
+            public int HasFrameIndex;
+            public long FrameIndex;
+            public int HasNominalFps;
+            public double NominalFps;
+            public int HasTimelineOriginSec;
+            public double TimelineOriginSec;
+            public ulong SeekEpoch;
+            public int Discontinuity;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct RustAVPlaybackTimingContract
+        {
+            public uint StructSize;
+            public uint StructVersion;
+            public double MasterTimeSec;
+            public double ExternalTimeSec;
+            public int HasAudioTimeSec;
+            public double AudioTimeSec;
+            public int HasAudioPresentedTimeSec;
+            public double AudioPresentedTimeSec;
+            public double AudioSinkDelaySec;
+            public int HasAudioClock;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct RustAVAvSyncContract
+        {
+            public uint StructSize;
+            public uint StructVersion;
+            public int MasterClock;
+            public int HasAudioClockSec;
+            public double AudioClockSec;
+            public int HasVideoClockSec;
+            public double VideoClockSec;
+            public double DriftMs;
+            public int StartupWarmupComplete;
+            public ulong DropTotal;
+            public ulong DuplicateTotal;
+        }
+
         internal delegate int BackendRuntimeDiagnosticDelegate(
             int backendKind,
             string path,
@@ -391,11 +565,31 @@ namespace UnityAV
             int playerId,
             ref RustAVPlayerHealthSnapshotV2 snapshot);
 
+        internal delegate int GetVideoFrameContractDelegate(
+            int playerId,
+            ref RustAVVideoFrameContract contract);
+
+        internal delegate int GetPlaybackTimingContractDelegate(
+            int playerId,
+            ref RustAVPlaybackTimingContract contract);
+
+        internal delegate int GetAvSyncContractDelegate(
+            int playerId,
+            ref RustAVAvSyncContract contract);
+
         internal delegate int GetNativeVideoInteropCapsDelegate(
             int backendKind,
             string path,
             ref RustAVNativeVideoTarget target,
             ref RustAVNativeVideoInteropCaps caps);
+
+        internal delegate int GetNativeVideoBridgeDescriptorDelegate(
+            int playerId,
+            ref RustAVNativeVideoBridgeDescriptor descriptor);
+
+        internal delegate int GetNativeVideoPathSelectionDelegate(
+            int playerId,
+            ref RustAVNativeVideoPathSelection selection);
 
         internal delegate int GetNativeVideoColorInfoDelegate(
             int playerId,
@@ -461,6 +655,53 @@ namespace UnityAV
             public uint Flags;
         }
 
+        internal struct NativeVideoBridgeDescriptorView
+        {
+            public MediaBackendKind BackendKind;
+            public NativeVideoPlatformKind TargetPlatformKind;
+            public NativeVideoSurfaceKind TargetSurfaceKind;
+            public int TargetWidth;
+            public int TargetHeight;
+            public NativeVideoPixelFormat TargetPixelFormat;
+            public uint TargetFlags;
+            public NativeVideoPlatformKind PlatformKind;
+            public NativeVideoSurfaceKind SurfaceKind;
+            public NativeVideoBridgeState State;
+            public NativeVideoBridgeRuntimeKind RuntimeKind;
+            public bool Supported;
+            public bool HardwareDecodeSupported;
+            public bool ZeroCopySupported;
+            public bool AcquireReleaseSupported;
+            public uint CapsFlags;
+            public bool TargetValid;
+            public bool RequestedExternalTextureTarget;
+            public bool DirectTargetPresentAllowed;
+            public bool TargetBindingSupported;
+            public bool ExternalTextureTargetSupported;
+            public bool FrameAcquireSupported;
+            public bool FrameReleaseSupported;
+            public bool FallbackCopyPath;
+            public bool SourceSurfaceZeroCopy;
+            public bool PresentedFrameDirectBindable;
+            public bool PresentedFrameStrictZeroCopy;
+            public bool SourcePlaneTexturesSupported;
+            public bool SourcePlaneViewsSupported;
+        }
+
+        internal struct NativeVideoPathSelectionView
+        {
+            public NativeVideoPathKind Kind;
+            public bool HasSourceFrame;
+            public bool HasPresentedFrame;
+            public VideoFrameMemoryKind SourceMemoryKind;
+            public VideoFrameMemoryKind PresentedMemoryKind;
+            public NativeVideoBridgeState BridgeState;
+            public bool SourceSurfaceZeroCopy;
+            public bool SourcePlaneTexturesSupported;
+            public bool TargetZeroCopy;
+            public bool CpuFallback;
+        }
+
         internal struct NativeVideoFrameView
         {
             public NativeVideoSurfaceKind SurfaceKind;
@@ -524,6 +765,58 @@ namespace UnityAV
             public NativeVideoDynamicRange DynamicRange;
         }
 
+        internal struct VideoFrameContractView
+        {
+            public VideoFrameMemoryKind MemoryKind;
+            public NativeVideoSurfaceKind SurfaceKind;
+            public NativeVideoPixelFormat PixelFormat;
+            public int Width;
+            public int Height;
+            public int PlaneCount;
+            public bool HardwareDecode;
+            public bool ZeroCopy;
+            public bool CpuFallback;
+            public bool NativeHandlePresent;
+            public bool AuxiliaryHandlePresent;
+            public VideoColorInfoView Color;
+            public bool HasColorDynamicRangeOverride;
+            public NativeVideoDynamicRange ColorDynamicRangeOverride;
+            public double TimeSec;
+            public bool HasFrameIndex;
+            public long FrameIndex;
+            public bool HasNominalFps;
+            public double NominalFps;
+            public bool HasTimelineOriginSec;
+            public double TimelineOriginSec;
+            public ulong SeekEpoch;
+            public bool Discontinuity;
+        }
+
+        internal struct PlaybackTimingContractView
+        {
+            public double MasterTimeSec;
+            public double ExternalTimeSec;
+            public bool HasAudioTimeSec;
+            public double AudioTimeSec;
+            public bool HasAudioPresentedTimeSec;
+            public double AudioPresentedTimeSec;
+            public double AudioSinkDelaySec;
+            public bool HasAudioClock;
+        }
+
+        internal struct AvSyncContractView
+        {
+            public AvSyncMasterClockKind MasterClock;
+            public bool HasAudioClockSec;
+            public double AudioClockSec;
+            public bool HasVideoClockSec;
+            public double VideoClockSec;
+            public double DriftMs;
+            public bool StartupWarmupComplete;
+            public ulong DropTotal;
+            public ulong DuplicateTotal;
+        }
+
         internal static bool TryReadRuntimeHealth(
             GetPlayerHealthSnapshotDelegate getPlayerHealthSnapshot,
             int playerId,
@@ -563,6 +856,93 @@ namespace UnityAV
                     AudioPresentedTimeSec = snapshot.AudioPresentedTimeSec,
                     AudioSinkDelaySec = snapshot.AudioSinkDelaySec,
                 };
+                return true;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return false;
+            }
+            catch (DllNotFoundException)
+            {
+                return false;
+            }
+        }
+
+        internal static bool TryReadVideoFrameContract(
+            GetVideoFrameContractDelegate getVideoFrameContract,
+            int playerId,
+            out VideoFrameContractView contract)
+        {
+            contract = default(VideoFrameContractView);
+
+            try
+            {
+                var nativeContract = CreateVideoFrameContract();
+                var result = getVideoFrameContract(playerId, ref nativeContract);
+                if (result <= 0)
+                {
+                    return false;
+                }
+
+                contract = NormalizeVideoFrameContract(nativeContract);
+                return true;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return false;
+            }
+            catch (DllNotFoundException)
+            {
+                return false;
+            }
+        }
+
+        internal static bool TryReadPlaybackTimingContract(
+            GetPlaybackTimingContractDelegate getPlaybackTimingContract,
+            int playerId,
+            out PlaybackTimingContractView contract)
+        {
+            contract = default(PlaybackTimingContractView);
+
+            try
+            {
+                var nativeContract = CreatePlaybackTimingContract();
+                var result = getPlaybackTimingContract(playerId, ref nativeContract);
+                if (result < 0)
+                {
+                    return false;
+                }
+
+                contract = NormalizePlaybackTimingContract(nativeContract);
+                return true;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return false;
+            }
+            catch (DllNotFoundException)
+            {
+                return false;
+            }
+        }
+
+        internal static bool TryReadAvSyncContract(
+            GetAvSyncContractDelegate getAvSyncContract,
+            int playerId,
+            out AvSyncContractView contract)
+        {
+            contract = default(AvSyncContractView);
+
+            try
+            {
+                var nativeContract = CreateAvSyncContract();
+                var result = getAvSyncContract(playerId, ref nativeContract);
+                if (result < 0)
+                {
+                    return false;
+                }
+
+                contract = NormalizeAvSyncContract(nativeContract);
                 return true;
             }
             catch (EntryPointNotFoundException)
@@ -656,12 +1036,57 @@ namespace UnityAV
             };
         }
 
+        internal static RustAVNativeVideoBridgeDescriptor CreateNativeVideoBridgeDescriptor()
+        {
+            return new RustAVNativeVideoBridgeDescriptor
+            {
+                StructSize = (uint)Marshal.SizeOf(typeof(RustAVNativeVideoBridgeDescriptor)),
+                StructVersion = RustAVNativeVideoBridgeDescriptorVersion,
+            };
+        }
+
+        internal static RustAVNativeVideoPathSelection CreateNativeVideoPathSelection()
+        {
+            return new RustAVNativeVideoPathSelection
+            {
+                StructSize = (uint)Marshal.SizeOf(typeof(RustAVNativeVideoPathSelection)),
+                StructVersion = RustAVNativeVideoPathSelectionVersion,
+            };
+        }
+
         internal static RustAVVideoColorInfo CreateVideoColorInfo()
         {
             return new RustAVVideoColorInfo
             {
                 StructSize = (uint)Marshal.SizeOf(typeof(RustAVVideoColorInfo)),
                 StructVersion = RustAVVideoColorInfoVersion,
+            };
+        }
+
+        internal static RustAVVideoFrameContract CreateVideoFrameContract()
+        {
+            return new RustAVVideoFrameContract
+            {
+                StructSize = (uint)Marshal.SizeOf(typeof(RustAVVideoFrameContract)),
+                StructVersion = RustAVVideoFrameContractVersion,
+            };
+        }
+
+        internal static RustAVPlaybackTimingContract CreatePlaybackTimingContract()
+        {
+            return new RustAVPlaybackTimingContract
+            {
+                StructSize = (uint)Marshal.SizeOf(typeof(RustAVPlaybackTimingContract)),
+                StructVersion = RustAVPlaybackTimingContractVersion,
+            };
+        }
+
+        internal static RustAVAvSyncContract CreateAvSyncContract()
+        {
+            return new RustAVAvSyncContract
+            {
+                StructSize = (uint)Marshal.SizeOf(typeof(RustAVAvSyncContract)),
+                StructVersion = RustAVAvSyncContractVersion,
             };
         }
 
@@ -821,6 +1246,118 @@ namespace UnityAV
                 return false;
             }
             catch (DllNotFoundException)
+            {
+                return false;
+            }
+        }
+
+        internal static bool TryReadNativeVideoBridgeDescriptor(
+            GetNativeVideoBridgeDescriptorDelegate getNativeVideoBridgeDescriptor,
+            int playerId,
+            out NativeVideoBridgeDescriptorView descriptor)
+        {
+            descriptor = default(NativeVideoBridgeDescriptorView);
+
+            try
+            {
+                var nativeDescriptor = CreateNativeVideoBridgeDescriptor();
+                var result = getNativeVideoBridgeDescriptor(playerId, ref nativeDescriptor);
+                if (result <= 0)
+                {
+                    return false;
+                }
+
+                descriptor = new NativeVideoBridgeDescriptorView
+                {
+                    BackendKind =
+                        NormalizeBackendKind(nativeDescriptor.BackendKind, MediaBackendKind.Auto),
+                    TargetPlatformKind =
+                        NormalizeNativeVideoPlatformKind(nativeDescriptor.TargetPlatformKind),
+                    TargetSurfaceKind =
+                        NormalizeNativeVideoSurfaceKind(nativeDescriptor.TargetSurfaceKind),
+                    TargetWidth = nativeDescriptor.TargetWidth,
+                    TargetHeight = nativeDescriptor.TargetHeight,
+                    TargetPixelFormat =
+                        NormalizeNativeVideoPixelFormat(nativeDescriptor.TargetPixelFormat),
+                    TargetFlags = nativeDescriptor.TargetFlags,
+                    PlatformKind = NormalizeNativeVideoPlatformKind(nativeDescriptor.PlatformKind),
+                    SurfaceKind = NormalizeNativeVideoSurfaceKind(nativeDescriptor.SurfaceKind),
+                    State = NormalizeNativeVideoBridgeState(nativeDescriptor.State),
+                    RuntimeKind =
+                        NormalizeNativeVideoBridgeRuntimeKind(nativeDescriptor.RuntimeKind),
+                    Supported = nativeDescriptor.Supported != 0,
+                    HardwareDecodeSupported = nativeDescriptor.HardwareDecodeSupported != 0,
+                    ZeroCopySupported = nativeDescriptor.ZeroCopySupported != 0,
+                    AcquireReleaseSupported = nativeDescriptor.AcquireReleaseSupported != 0,
+                    CapsFlags = nativeDescriptor.CapsFlags,
+                    TargetValid = nativeDescriptor.TargetValid != 0,
+                    RequestedExternalTextureTarget =
+                        nativeDescriptor.RequestedExternalTextureTarget != 0,
+                    DirectTargetPresentAllowed =
+                        nativeDescriptor.DirectTargetPresentAllowed != 0,
+                    TargetBindingSupported = nativeDescriptor.TargetBindingSupported != 0,
+                    ExternalTextureTargetSupported =
+                        nativeDescriptor.ExternalTextureTargetSupported != 0,
+                    FrameAcquireSupported = nativeDescriptor.FrameAcquireSupported != 0,
+                    FrameReleaseSupported = nativeDescriptor.FrameReleaseSupported != 0,
+                    FallbackCopyPath = nativeDescriptor.FallbackCopyPath != 0,
+                    SourceSurfaceZeroCopy = nativeDescriptor.SourceSurfaceZeroCopy != 0,
+                    PresentedFrameDirectBindable =
+                        nativeDescriptor.PresentedFrameDirectBindable != 0,
+                    PresentedFrameStrictZeroCopy =
+                        nativeDescriptor.PresentedFrameStrictZeroCopy != 0,
+                    SourcePlaneTexturesSupported =
+                        nativeDescriptor.SourcePlaneTexturesSupported != 0,
+                    SourcePlaneViewsSupported = nativeDescriptor.SourcePlaneViewsSupported != 0,
+                };
+                return true;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return false;
+            }
+            catch (DllNotFoundException)
+            {
+                return false;
+            }
+        }
+
+        internal static bool TryReadNativeVideoPathSelection(
+            GetNativeVideoPathSelectionDelegate getNativeVideoPathSelection,
+            int playerId,
+            out NativeVideoPathSelectionView selection)
+        {
+            selection = default(NativeVideoPathSelectionView);
+
+            try
+            {
+                var nativeSelection = CreateNativeVideoPathSelection();
+                var result = getNativeVideoPathSelection(playerId, ref nativeSelection);
+                if (result < 0)
+                {
+                    return false;
+                }
+
+                selection = new NativeVideoPathSelectionView
+                {
+                    Kind = NormalizeNativeVideoPathKind(nativeSelection.Kind),
+                    HasSourceFrame = nativeSelection.HasSourceFrame != 0,
+                    HasPresentedFrame = nativeSelection.HasPresentedFrame != 0,
+                    SourceMemoryKind = NormalizeVideoFrameMemoryKind(nativeSelection.SourceMemoryKind),
+                    PresentedMemoryKind = NormalizeVideoFrameMemoryKind(nativeSelection.PresentedMemoryKind),
+                    BridgeState = NormalizeNativeVideoBridgeState(nativeSelection.BridgeState),
+                    SourceSurfaceZeroCopy = nativeSelection.SourceSurfaceZeroCopy != 0,
+                    SourcePlaneTexturesSupported = nativeSelection.SourcePlaneTexturesSupported != 0,
+                    TargetZeroCopy = nativeSelection.TargetZeroCopy != 0,
+                    CpuFallback = nativeSelection.CpuFallback != 0,
+                };
+                return true;
+            }
+            catch (DllNotFoundException)
+            {
+                return false;
+            }
+            catch (EntryPointNotFoundException)
             {
                 return false;
             }
@@ -1226,6 +1763,56 @@ namespace UnityAV
             }
         }
 
+        internal static NativeVideoBridgeState NormalizeNativeVideoBridgeState(int rawValue)
+        {
+            switch (rawValue)
+            {
+                case 1:
+                    return NativeVideoBridgeState.ContractPending;
+                case 2:
+                    return NativeVideoBridgeState.RuntimeReady;
+                default:
+                    return NativeVideoBridgeState.Unsupported;
+            }
+        }
+
+        internal static NativeVideoBridgeRuntimeKind NormalizeNativeVideoBridgeRuntimeKind(
+            int rawValue)
+        {
+            switch (rawValue)
+            {
+                case 1:
+                    return NativeVideoBridgeRuntimeKind.WindowsD3d11TextureInterop;
+                case 2:
+                    return NativeVideoBridgeRuntimeKind.IosMetalTexture;
+                case 3:
+                    return NativeVideoBridgeRuntimeKind.IosCvPixelBuffer;
+                case 4:
+                    return NativeVideoBridgeRuntimeKind.AndroidSurfaceTexture;
+                case 5:
+                    return NativeVideoBridgeRuntimeKind.AndroidHardwareBuffer;
+                default:
+                    return NativeVideoBridgeRuntimeKind.None;
+            }
+        }
+
+        internal static NativeVideoPathKind NormalizeNativeVideoPathKind(int rawValue)
+        {
+            switch (rawValue)
+            {
+                case 1:
+                    return NativeVideoPathKind.NativeBridgeZeroCopy;
+                case 2:
+                    return NativeVideoPathKind.NativeBridgePlanes;
+                case 3:
+                    return NativeVideoPathKind.WgpuRenderCore;
+                case 4:
+                    return NativeVideoPathKind.CpuFallback;
+                default:
+                    return NativeVideoPathKind.Unknown;
+            }
+        }
+
         internal static NativeVideoPixelFormat NormalizeNativeVideoPixelFormat(int rawValue)
         {
             switch (rawValue)
@@ -1333,6 +1920,34 @@ namespace UnityAV
             }
         }
 
+        internal static VideoFrameMemoryKind NormalizeVideoFrameMemoryKind(int rawValue)
+        {
+            switch (rawValue)
+            {
+                case 1:
+                    return VideoFrameMemoryKind.CpuPlanar;
+                case 2:
+                    return VideoFrameMemoryKind.NativeSurface;
+                default:
+                    return VideoFrameMemoryKind.Unknown;
+            }
+        }
+
+        internal static AvSyncMasterClockKind NormalizeAvSyncMasterClockKind(int rawValue)
+        {
+            switch (rawValue)
+            {
+                case 1:
+                    return AvSyncMasterClockKind.Audio;
+                case 2:
+                    return AvSyncMasterClockKind.Video;
+                case 3:
+                    return AvSyncMasterClockKind.External;
+                default:
+                    return AvSyncMasterClockKind.Unknown;
+            }
+        }
+
         internal static VideoColorInfoView NormalizeVideoColorInfo(RustAVVideoColorInfo info)
         {
             return new VideoColorInfoView
@@ -1343,6 +1958,78 @@ namespace UnityAV
                 Transfer = NormalizeNativeVideoTransferCharacteristic(info.Transfer),
                 BitDepth = info.BitDepth,
                 DynamicRange = NormalizeNativeVideoDynamicRange(info.DynamicRange),
+            };
+        }
+
+        internal static VideoFrameContractView NormalizeVideoFrameContract(
+            RustAVVideoFrameContract contract)
+        {
+            return new VideoFrameContractView
+            {
+                MemoryKind = NormalizeVideoFrameMemoryKind(contract.MemoryKind),
+                SurfaceKind = NormalizeNativeVideoSurfaceKind(contract.SurfaceKind),
+                PixelFormat = NormalizeNativeVideoPixelFormat(contract.PixelFormat),
+                Width = contract.Width,
+                Height = contract.Height,
+                PlaneCount = contract.PlaneCount,
+                HardwareDecode = contract.HardwareDecode != 0,
+                ZeroCopy = contract.ZeroCopy != 0,
+                CpuFallback = contract.CpuFallback != 0,
+                NativeHandlePresent = contract.NativeHandlePresent != 0,
+                AuxiliaryHandlePresent = contract.AuxiliaryHandlePresent != 0,
+                Color = new VideoColorInfoView
+                {
+                    Range = NormalizeNativeVideoColorRange(contract.ColorRange),
+                    Matrix = NormalizeNativeVideoColorMatrix(contract.ColorMatrix),
+                    Primaries = NormalizeNativeVideoColorPrimaries(contract.ColorPrimaries),
+                    Transfer = NormalizeNativeVideoTransferCharacteristic(contract.ColorTransfer),
+                    BitDepth = contract.ColorBitDepth,
+                    DynamicRange = NormalizeNativeVideoDynamicRange(contract.ColorDynamicRange),
+                },
+                HasColorDynamicRangeOverride = contract.HasColorDynamicRangeOverride != 0,
+                ColorDynamicRangeOverride =
+                    NormalizeNativeVideoDynamicRange(contract.ColorDynamicRangeOverride),
+                TimeSec = contract.TimeSec,
+                HasFrameIndex = contract.HasFrameIndex != 0,
+                FrameIndex = contract.FrameIndex,
+                HasNominalFps = contract.HasNominalFps != 0,
+                NominalFps = contract.NominalFps,
+                HasTimelineOriginSec = contract.HasTimelineOriginSec != 0,
+                TimelineOriginSec = contract.TimelineOriginSec,
+                SeekEpoch = contract.SeekEpoch,
+                Discontinuity = contract.Discontinuity != 0,
+            };
+        }
+
+        internal static PlaybackTimingContractView NormalizePlaybackTimingContract(
+            RustAVPlaybackTimingContract contract)
+        {
+            return new PlaybackTimingContractView
+            {
+                MasterTimeSec = contract.MasterTimeSec,
+                ExternalTimeSec = contract.ExternalTimeSec,
+                HasAudioTimeSec = contract.HasAudioTimeSec != 0,
+                AudioTimeSec = contract.AudioTimeSec,
+                HasAudioPresentedTimeSec = contract.HasAudioPresentedTimeSec != 0,
+                AudioPresentedTimeSec = contract.AudioPresentedTimeSec,
+                AudioSinkDelaySec = contract.AudioSinkDelaySec,
+                HasAudioClock = contract.HasAudioClock != 0,
+            };
+        }
+
+        internal static AvSyncContractView NormalizeAvSyncContract(RustAVAvSyncContract contract)
+        {
+            return new AvSyncContractView
+            {
+                MasterClock = NormalizeAvSyncMasterClockKind(contract.MasterClock),
+                HasAudioClockSec = contract.HasAudioClockSec != 0,
+                AudioClockSec = contract.AudioClockSec,
+                HasVideoClockSec = contract.HasVideoClockSec != 0,
+                VideoClockSec = contract.VideoClockSec,
+                DriftMs = contract.DriftMs,
+                StartupWarmupComplete = contract.StartupWarmupComplete != 0,
+                DropTotal = contract.DropTotal,
+                DuplicateTotal = contract.DuplicateTotal,
             };
         }
 

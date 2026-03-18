@@ -626,6 +626,16 @@ namespace UnityAV
             ref MediaNativeInteropCommon.RustAVNativeVideoTarget target,
             ref MediaNativeInteropCommon.RustAVNativeVideoInteropCaps caps);
 
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerGetNativeVideoBridgeDescriptor")]
+        private static extern int GetNativeVideoBridgeDescriptor(
+            int id,
+            ref MediaNativeInteropCommon.RustAVNativeVideoBridgeDescriptor descriptor);
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerGetNativeVideoPathSelection")]
+        private static extern int GetNativeVideoPathSelection(
+            int id,
+            ref MediaNativeInteropCommon.RustAVNativeVideoPathSelection selection);
+
         [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerCreateNativeVideoOutput")]
         private static extern int GetNativeVideoPlayer(
             string uri,
@@ -712,6 +722,26 @@ namespace UnityAV
         private static extern int GetPlayerHealthSnapshotV2(
             int id,
             ref MediaNativeInteropCommon.RustAVPlayerHealthSnapshotV2 snapshot);
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerGetLatestVideoFrameContract")]
+        private static extern int GetLatestVideoFrameContract(
+            int id,
+            ref MediaNativeInteropCommon.RustAVVideoFrameContract contract);
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerGetLatestSourceVideoFrameContract")]
+        private static extern int GetLatestSourceVideoFrameContract(
+            int id,
+            ref MediaNativeInteropCommon.RustAVVideoFrameContract contract);
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerGetPlaybackTimingContract")]
+        private static extern int GetPlaybackTimingContract(
+            int id,
+            ref MediaNativeInteropCommon.RustAVPlaybackTimingContract contract);
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerGetAvSyncContract")]
+        private static extern int GetAvSyncContract(
+            int id,
+            ref MediaNativeInteropCommon.RustAVAvSyncContract contract);
 
         [DllImport(NativePlugin.Name, EntryPoint = "RustAV_GetBackendRuntimeDiagnostic")]
         private static extern int GetBackendRuntimeDiagnostic(
@@ -888,6 +918,71 @@ namespace UnityAV
                 CurrentTimeSec = runtimeHealth.CurrentTimeSec,
             };
             return true;
+        }
+
+        internal bool TryGetLatestVideoFrameContract(
+            out MediaNativeInteropCommon.VideoFrameContractView contract)
+        {
+            contract = default(MediaNativeInteropCommon.VideoFrameContractView);
+            return ValidatePlayerId(_id)
+                && MediaNativeInteropCommon.TryReadVideoFrameContract(
+                    GetLatestVideoFrameContract,
+                    _id,
+                    out contract);
+        }
+
+        internal bool TryGetLatestSourceVideoFrameContract(
+            out MediaNativeInteropCommon.VideoFrameContractView contract)
+        {
+            contract = default(MediaNativeInteropCommon.VideoFrameContractView);
+            return ValidatePlayerId(_id)
+                && MediaNativeInteropCommon.TryReadVideoFrameContract(
+                    GetLatestSourceVideoFrameContract,
+                    _id,
+                    out contract);
+        }
+
+        internal bool TryGetPlaybackTimingContract(
+            out MediaNativeInteropCommon.PlaybackTimingContractView contract)
+        {
+            contract = default(MediaNativeInteropCommon.PlaybackTimingContractView);
+            return ValidatePlayerId(_id)
+                && MediaNativeInteropCommon.TryReadPlaybackTimingContract(
+                    GetPlaybackTimingContract,
+                    _id,
+                    out contract);
+        }
+
+        internal bool TryGetAvSyncContract(out MediaNativeInteropCommon.AvSyncContractView contract)
+        {
+            contract = default(MediaNativeInteropCommon.AvSyncContractView);
+            return ValidatePlayerId(_id)
+                && MediaNativeInteropCommon.TryReadAvSyncContract(
+                    GetAvSyncContract,
+                    _id,
+                    out contract);
+        }
+
+        internal bool TryGetNativeVideoBridgeDescriptor(
+            out MediaNativeInteropCommon.NativeVideoBridgeDescriptorView descriptor)
+        {
+            descriptor = default(MediaNativeInteropCommon.NativeVideoBridgeDescriptorView);
+            return ValidatePlayerId(_id)
+                && MediaNativeInteropCommon.TryReadNativeVideoBridgeDescriptor(
+                    GetNativeVideoBridgeDescriptor,
+                    _id,
+                    out descriptor);
+        }
+
+        internal bool TryGetNativeVideoPathSelection(
+            out MediaNativeInteropCommon.NativeVideoPathSelectionView selection)
+        {
+            selection = default(MediaNativeInteropCommon.NativeVideoPathSelectionView);
+            return ValidatePlayerId(_id)
+                && MediaNativeInteropCommon.TryReadNativeVideoPathSelection(
+                    GetNativeVideoPathSelection,
+                    _id,
+                    out selection);
         }
 
         public bool TryGetNativeVideoInteropInfo(out NativeVideoInteropInfo info)

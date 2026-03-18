@@ -539,6 +539,43 @@ namespace UnityAV
                 + (hasPresentationSnapshot ? presentationSnapshot.DirectShaderPlaneTexturesUsabilityFailureCount : 0)
                 + " presentation_direct_shader_material_failure_count="
                 + (hasPresentationSnapshot ? presentationSnapshot.DirectShaderMaterialFailureCount : 0)
+                + " frame_contract_available=" + snapshot.HasFrameContract
+                + " frame_contract_memory=" + snapshot.FrameContractMemoryKind
+                + " frame_contract_dynamic_range=" + snapshot.FrameContractDynamicRange
+                + " frame_contract_nominal_fps=" + snapshot.FrameContractNominalFps.ToString("F2")
+                + " frame_contract_zero_copy=" + snapshot.FrameContractZeroCopy
+                + " source_contract_available=" + snapshot.HasSourceFrameContract
+                + " source_contract_memory=" + snapshot.SourceFrameContractMemoryKind
+                + " source_contract_dynamic_range=" + snapshot.SourceFrameContractDynamicRange
+                + " source_contract_nominal_fps=" + snapshot.SourceFrameContractNominalFps.ToString("F2")
+                + " playback_contract_available=" + snapshot.HasPlaybackTimingContract
+                + " playback_contract_master_sec=" + snapshot.PlaybackContractMasterTimeSec.ToString("F3")
+                + " playback_contract_external_sec=" + snapshot.PlaybackContractExternalTimeSec.ToString("F3")
+                + " playback_contract_has_audio_clock=" + snapshot.PlaybackContractHasAudioClock
+                + " av_sync_contract_available=" + snapshot.HasAvSyncContract
+                + " av_sync_contract_master=" + snapshot.AvSyncContractMasterClock
+                + " av_sync_contract_drift_ms=" + snapshot.AvSyncContractDriftMs.ToString("F1")
+                + " av_sync_contract_warmup_complete=" + snapshot.AvSyncContractWarmupComplete
+                + " av_sync_contract_drop_total=" + snapshot.AvSyncContractDropTotal
+                + " av_sync_contract_duplicate_total=" + snapshot.AvSyncContractDuplicateTotal
+                + " bridge_descriptor_available=" + snapshot.HasBridgeDescriptor
+                + " bridge_descriptor_state=" + snapshot.BridgeDescriptorState
+                + " bridge_descriptor_runtime=" + snapshot.BridgeDescriptorRuntimeKind
+                + " bridge_descriptor_zero_copy=" + snapshot.BridgeDescriptorZeroCopySupported
+                + " bridge_descriptor_direct_bindable="
+                + snapshot.BridgeDescriptorDirectBindable
+                + " bridge_descriptor_source_plane_textures="
+                + snapshot.BridgeDescriptorSourcePlaneTexturesSupported
+                + " bridge_descriptor_fallback_copy=" + snapshot.BridgeDescriptorFallbackCopyPath
+                + " path_selection_available=" + snapshot.HasPathSelection
+                + " path_selection_kind=" + snapshot.PathSelectionKind
+                + " path_selection_source_memory=" + snapshot.PathSelectionSourceMemoryKind
+                + " path_selection_presented_memory="
+                + snapshot.PathSelectionPresentedMemoryKind
+                + " path_selection_target_zero_copy=" + snapshot.PathSelectionTargetZeroCopy
+                + " path_selection_source_plane_textures="
+                + snapshot.PathSelectionSourcePlaneTexturesSupported
+                + " path_selection_cpu_fallback=" + snapshot.PathSelectionCpuFallback
                 + " presentation_direct_shader_exception_count="
                 + (hasPresentationSnapshot ? presentationSnapshot.DirectShaderExceptionCount : 0)
                 + " presentation_compute_attempt_count="
@@ -953,6 +990,20 @@ namespace UnityAV
                 && HasNativeVideoFrameFlag(
                     sourcePlaneTexturesInfo.Flags,
                     MediaNativeInteropCommon.NativeVideoFrameFlagZeroCopy);
+            MediaNativeInteropCommon.VideoFrameContractView frameContract;
+            var hasFrameContract = Player.TryGetLatestVideoFrameContract(out frameContract);
+            MediaNativeInteropCommon.VideoFrameContractView sourceFrameContract;
+            var hasSourceFrameContract = Player.TryGetLatestSourceVideoFrameContract(
+                out sourceFrameContract);
+            MediaNativeInteropCommon.PlaybackTimingContractView playbackTimingContract;
+            var hasPlaybackTimingContract = Player.TryGetPlaybackTimingContract(
+                out playbackTimingContract);
+            MediaNativeInteropCommon.AvSyncContractView avSyncContract;
+            var hasAvSyncContract = Player.TryGetAvSyncContract(out avSyncContract);
+            MediaNativeInteropCommon.NativeVideoBridgeDescriptorView bridgeDescriptor;
+            var hasBridgeDescriptor = Player.TryGetNativeVideoBridgeDescriptor(out bridgeDescriptor);
+            MediaNativeInteropCommon.NativeVideoPathSelectionView pathSelection;
+            var hasPathSelection = Player.TryGetNativeVideoPathSelection(out pathSelection);
 
             var snapshot = new ValidationSnapshot
             {
@@ -998,6 +1049,62 @@ namespace UnityAV
                 SourcePixelFormat = hasNativeSourceFrame ? sourceFrameInfo.PixelFormat : NativeVideoPixelFormatKind.Unknown,
                 SourceFlags = hasNativeSourceFrame ? sourceFrameInfo.Flags : 0u,
                 SourcePlaneTextureFlags = hasSourcePlaneTextures ? sourcePlaneTexturesInfo.Flags : 0u,
+                HasFrameContract = hasFrameContract,
+                FrameContractMemoryKind = hasFrameContract ? frameContract.MemoryKind.ToString() : "Unavailable",
+                FrameContractDynamicRange =
+                    hasFrameContract ? frameContract.Color.DynamicRange.ToString() : "Unavailable",
+                FrameContractNominalFps =
+                    hasFrameContract && frameContract.HasNominalFps ? frameContract.NominalFps : 0.0,
+                FrameContractZeroCopy = hasFrameContract && frameContract.ZeroCopy,
+                HasSourceFrameContract = hasSourceFrameContract,
+                SourceFrameContractMemoryKind =
+                    hasSourceFrameContract ? sourceFrameContract.MemoryKind.ToString() : "Unavailable",
+                SourceFrameContractDynamicRange =
+                    hasSourceFrameContract ? sourceFrameContract.Color.DynamicRange.ToString() : "Unavailable",
+                SourceFrameContractNominalFps =
+                    hasSourceFrameContract && sourceFrameContract.HasNominalFps
+                        ? sourceFrameContract.NominalFps
+                        : 0.0,
+                HasPlaybackTimingContract = hasPlaybackTimingContract,
+                PlaybackContractMasterTimeSec =
+                    hasPlaybackTimingContract ? playbackTimingContract.MasterTimeSec : 0.0,
+                PlaybackContractExternalTimeSec =
+                    hasPlaybackTimingContract ? playbackTimingContract.ExternalTimeSec : 0.0,
+                PlaybackContractHasAudioClock =
+                    hasPlaybackTimingContract && playbackTimingContract.HasAudioClock,
+                HasAvSyncContract = hasAvSyncContract,
+                AvSyncContractMasterClock =
+                    hasAvSyncContract ? avSyncContract.MasterClock.ToString() : "Unavailable",
+                AvSyncContractDriftMs = hasAvSyncContract ? avSyncContract.DriftMs : 0.0,
+                AvSyncContractWarmupComplete =
+                    hasAvSyncContract && avSyncContract.StartupWarmupComplete,
+                AvSyncContractDropTotal = hasAvSyncContract ? avSyncContract.DropTotal : 0ul,
+                AvSyncContractDuplicateTotal =
+                    hasAvSyncContract ? avSyncContract.DuplicateTotal : 0ul,
+                HasBridgeDescriptor = hasBridgeDescriptor,
+                BridgeDescriptorState =
+                    hasBridgeDescriptor ? bridgeDescriptor.State.ToString() : "Unavailable",
+                BridgeDescriptorRuntimeKind =
+                    hasBridgeDescriptor ? bridgeDescriptor.RuntimeKind.ToString() : "Unavailable",
+                BridgeDescriptorZeroCopySupported =
+                    hasBridgeDescriptor && bridgeDescriptor.ZeroCopySupported,
+                BridgeDescriptorDirectBindable =
+                    hasBridgeDescriptor && bridgeDescriptor.PresentedFrameDirectBindable,
+                BridgeDescriptorSourcePlaneTexturesSupported =
+                    hasBridgeDescriptor && bridgeDescriptor.SourcePlaneTexturesSupported,
+                BridgeDescriptorFallbackCopyPath =
+                    hasBridgeDescriptor && bridgeDescriptor.FallbackCopyPath,
+                HasPathSelection = hasPathSelection,
+                PathSelectionKind = hasPathSelection ? pathSelection.Kind.ToString() : "Unavailable",
+                PathSelectionSourceMemoryKind =
+                    hasPathSelection ? pathSelection.SourceMemoryKind.ToString() : "Unavailable",
+                PathSelectionPresentedMemoryKind =
+                    hasPathSelection ? pathSelection.PresentedMemoryKind.ToString() : "Unavailable",
+                PathSelectionTargetZeroCopy =
+                    hasPathSelection && pathSelection.TargetZeroCopy,
+                PathSelectionSourcePlaneTexturesSupported =
+                    hasPathSelection && pathSelection.SourcePlaneTexturesSupported,
+                PathSelectionCpuFallback = hasPathSelection && pathSelection.CpuFallback,
             };
             snapshot.StrictZeroCopyActive = EvaluateStrictZeroCopyObserved(snapshot);
             return snapshot;
@@ -1332,6 +1439,39 @@ namespace UnityAV
             public NativeVideoPixelFormatKind SourcePixelFormat;
             public uint SourceFlags;
             public uint SourcePlaneTextureFlags;
+            public bool HasFrameContract;
+            public string FrameContractMemoryKind;
+            public string FrameContractDynamicRange;
+            public double FrameContractNominalFps;
+            public bool FrameContractZeroCopy;
+            public bool HasSourceFrameContract;
+            public string SourceFrameContractMemoryKind;
+            public string SourceFrameContractDynamicRange;
+            public double SourceFrameContractNominalFps;
+            public bool HasPlaybackTimingContract;
+            public double PlaybackContractMasterTimeSec;
+            public double PlaybackContractExternalTimeSec;
+            public bool PlaybackContractHasAudioClock;
+            public bool HasAvSyncContract;
+            public string AvSyncContractMasterClock;
+            public double AvSyncContractDriftMs;
+            public bool AvSyncContractWarmupComplete;
+            public ulong AvSyncContractDropTotal;
+            public ulong AvSyncContractDuplicateTotal;
+            public bool HasBridgeDescriptor;
+            public string BridgeDescriptorState;
+            public string BridgeDescriptorRuntimeKind;
+            public bool BridgeDescriptorZeroCopySupported;
+            public bool BridgeDescriptorDirectBindable;
+            public bool BridgeDescriptorSourcePlaneTexturesSupported;
+            public bool BridgeDescriptorFallbackCopyPath;
+            public bool HasPathSelection;
+            public string PathSelectionKind;
+            public string PathSelectionSourceMemoryKind;
+            public string PathSelectionPresentedMemoryKind;
+            public bool PathSelectionTargetZeroCopy;
+            public bool PathSelectionSourcePlaneTexturesSupported;
+            public bool PathSelectionCpuFallback;
         }
     }
 }

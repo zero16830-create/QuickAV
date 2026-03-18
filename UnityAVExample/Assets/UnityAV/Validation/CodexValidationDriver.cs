@@ -224,7 +224,7 @@ namespace UnityAV
             var snapshot = CaptureSnapshot();
 
             Debug.Log(string.Format(
-                "[CodexValidation] time={0:F3}s texture={1} audioPlaying={2} started={3} startupElapsed={4:F3}s sourceState={5} sourcePackets={6} sourceTimeouts={7} sourceReconnects={8} window={9}x{10} textureSize={11}x{12} fullscreen={13} mode={14} backend={15} requested_renderer={16} actual_renderer={17}",
+                "[CodexValidation] time={0:F3}s texture={1} audioPlaying={2} started={3} startupElapsed={4:F3}s sourceState={5} sourcePackets={6} sourceTimeouts={7} sourceReconnects={8} window={9}x{10} textureSize={11}x{12} fullscreen={13} mode={14} backend={15} requested_renderer={16} actual_renderer={17} frame_contract_available={18} frame_contract_memory={19} frame_contract_dynamic_range={20} frame_contract_nominal_fps={21:F2} playback_contract_available={22} playback_contract_master_sec={23:F3} av_sync_contract_available={24} av_sync_contract_master={25} av_sync_contract_drift_ms={26:F1} bridge_descriptor_available={27} bridge_descriptor_state={28} bridge_descriptor_runtime={29} bridge_descriptor_zero_copy={30} bridge_descriptor_direct_bindable={31} bridge_descriptor_source_plane_textures={32} bridge_descriptor_fallback_copy={33} path_selection_available={34} path_selection_kind={35} path_selection_source_memory={36} path_selection_presented_memory={37} path_selection_target_zero_copy={38} path_selection_source_plane_textures={39} path_selection_cpu_fallback={40}",
                 snapshot.PlaybackTime,
                 snapshot.HasTexture,
                 snapshot.AudioPlaying,
@@ -242,7 +242,30 @@ namespace UnityAV
                 Screen.fullScreenMode,
                 Player.ActualBackendKind,
                 Player.VideoRenderer,
-                Player.ActualVideoRenderer));
+                Player.ActualVideoRenderer,
+                snapshot.HasFrameContract,
+                snapshot.FrameContractMemoryKind,
+                snapshot.FrameContractDynamicRange,
+                snapshot.FrameContractNominalFps,
+                snapshot.HasPlaybackTimingContract,
+                snapshot.PlaybackContractMasterTimeSec,
+                snapshot.HasAvSyncContract,
+                snapshot.AvSyncContractMasterClock,
+                snapshot.AvSyncContractDriftMs,
+                snapshot.HasBridgeDescriptor,
+                snapshot.BridgeDescriptorState,
+                snapshot.BridgeDescriptorRuntimeKind,
+                snapshot.BridgeDescriptorZeroCopySupported,
+                snapshot.BridgeDescriptorDirectBindable,
+                snapshot.BridgeDescriptorSourcePlaneTexturesSupported,
+                snapshot.BridgeDescriptorFallbackCopyPath,
+                snapshot.HasPathSelection,
+                snapshot.PathSelectionKind,
+                snapshot.PathSelectionSourceMemoryKind,
+                snapshot.PathSelectionPresentedMemoryKind,
+                snapshot.PathSelectionTargetZeroCopy,
+                snapshot.PathSelectionSourcePlaneTexturesSupported,
+                snapshot.PathSelectionCpuFallback));
             if (snapshot.HasAvSyncSample)
             {
                 Debug.Log(string.Format(
@@ -311,6 +334,17 @@ namespace UnityAV
             var avSyncDeltaMilliseconds = hasAvSyncSample
                 ? (audioPresentedTimeSec - referencePlaybackTime) * 1000.0
                 : 0.0;
+            MediaNativeInteropCommon.VideoFrameContractView frameContract;
+            var hasFrameContract = Player.TryGetLatestVideoFrameContract(out frameContract);
+            MediaNativeInteropCommon.PlaybackTimingContractView playbackTimingContract;
+            var hasPlaybackTimingContract = Player.TryGetPlaybackTimingContract(
+                out playbackTimingContract);
+            MediaNativeInteropCommon.AvSyncContractView avSyncContract;
+            var hasAvSyncContract = Player.TryGetAvSyncContract(out avSyncContract);
+            MediaNativeInteropCommon.NativeVideoBridgeDescriptorView bridgeDescriptor;
+            var hasBridgeDescriptor = Player.TryGetNativeVideoBridgeDescriptor(out bridgeDescriptor);
+            MediaNativeInteropCommon.NativeVideoPathSelectionView pathSelection;
+            var hasPathSelection = Player.TryGetNativeVideoPathSelection(out pathSelection);
             var hasRealtimeLatencySample = false;
             var realtimeLatencyMilliseconds = 0.0;
             var publisherElapsedTimeSec = 0.0;
@@ -355,6 +389,42 @@ namespace UnityAV
                 AudioPresentedTimeSec = audioPresentedTimeSec,
                 AudioPipelineDelaySec = audioPipelineDelaySec,
                 AvSyncDeltaMilliseconds = avSyncDeltaMilliseconds,
+                HasFrameContract = hasFrameContract,
+                FrameContractMemoryKind = hasFrameContract ? frameContract.MemoryKind.ToString() : "Unavailable",
+                FrameContractDynamicRange =
+                    hasFrameContract ? frameContract.Color.DynamicRange.ToString() : "Unavailable",
+                FrameContractNominalFps =
+                    hasFrameContract && frameContract.HasNominalFps ? frameContract.NominalFps : 0.0,
+                HasPlaybackTimingContract = hasPlaybackTimingContract,
+                PlaybackContractMasterTimeSec =
+                    hasPlaybackTimingContract ? playbackTimingContract.MasterTimeSec : 0.0,
+                HasAvSyncContract = hasAvSyncContract,
+                AvSyncContractMasterClock =
+                    hasAvSyncContract ? avSyncContract.MasterClock.ToString() : "Unavailable",
+                AvSyncContractDriftMs = hasAvSyncContract ? avSyncContract.DriftMs : 0.0,
+                HasBridgeDescriptor = hasBridgeDescriptor,
+                BridgeDescriptorState =
+                    hasBridgeDescriptor ? bridgeDescriptor.State.ToString() : "Unavailable",
+                BridgeDescriptorRuntimeKind =
+                    hasBridgeDescriptor ? bridgeDescriptor.RuntimeKind.ToString() : "Unavailable",
+                BridgeDescriptorZeroCopySupported =
+                    hasBridgeDescriptor && bridgeDescriptor.ZeroCopySupported,
+                BridgeDescriptorDirectBindable =
+                    hasBridgeDescriptor && bridgeDescriptor.PresentedFrameDirectBindable,
+                BridgeDescriptorSourcePlaneTexturesSupported =
+                    hasBridgeDescriptor && bridgeDescriptor.SourcePlaneTexturesSupported,
+                BridgeDescriptorFallbackCopyPath =
+                    hasBridgeDescriptor && bridgeDescriptor.FallbackCopyPath,
+                HasPathSelection = hasPathSelection,
+                PathSelectionKind = hasPathSelection ? pathSelection.Kind.ToString() : "Unavailable",
+                PathSelectionSourceMemoryKind =
+                    hasPathSelection ? pathSelection.SourceMemoryKind.ToString() : "Unavailable",
+                PathSelectionPresentedMemoryKind =
+                    hasPathSelection ? pathSelection.PresentedMemoryKind.ToString() : "Unavailable",
+                PathSelectionTargetZeroCopy = hasPathSelection && pathSelection.TargetZeroCopy,
+                PathSelectionSourcePlaneTexturesSupported =
+                    hasPathSelection && pathSelection.SourcePlaneTexturesSupported,
+                PathSelectionCpuFallback = hasPathSelection && pathSelection.CpuFallback,
                 HasRealtimeLatencySample = hasRealtimeLatencySample,
                 RealtimeLatencyMilliseconds = realtimeLatencyMilliseconds,
                 PublisherElapsedTimeSec = publisherElapsedTimeSec,
@@ -719,6 +789,29 @@ namespace UnityAV
             public double AudioPresentedTimeSec;
             public double AudioPipelineDelaySec;
             public double AvSyncDeltaMilliseconds;
+            public bool HasFrameContract;
+            public string FrameContractMemoryKind;
+            public string FrameContractDynamicRange;
+            public double FrameContractNominalFps;
+            public bool HasPlaybackTimingContract;
+            public double PlaybackContractMasterTimeSec;
+            public bool HasAvSyncContract;
+            public string AvSyncContractMasterClock;
+            public double AvSyncContractDriftMs;
+            public bool HasBridgeDescriptor;
+            public string BridgeDescriptorState;
+            public string BridgeDescriptorRuntimeKind;
+            public bool BridgeDescriptorZeroCopySupported;
+            public bool BridgeDescriptorDirectBindable;
+            public bool BridgeDescriptorSourcePlaneTexturesSupported;
+            public bool BridgeDescriptorFallbackCopyPath;
+            public bool HasPathSelection;
+            public string PathSelectionKind;
+            public string PathSelectionSourceMemoryKind;
+            public string PathSelectionPresentedMemoryKind;
+            public bool PathSelectionTargetZeroCopy;
+            public bool PathSelectionSourcePlaneTexturesSupported;
+            public bool PathSelectionCpuFallback;
             public bool HasRealtimeLatencySample;
             public double RealtimeLatencyMilliseconds;
             public double PublisherElapsedTimeSec;
