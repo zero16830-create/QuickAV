@@ -300,13 +300,56 @@ namespace UnityAV
                     snapshot.WgpuSourceZeroCopy,
                     snapshot.WgpuCpuFallback));
             }
+            if (snapshot.HasPlaybackTimingContract)
+            {
+                Debug.Log(string.Format(
+                    "[CodexValidation] playback_contract master_sec={0:F3} external_sec={1:F3} has_audio_time_sec={2} audio_time_sec={3:F3} has_audio_presented_time_sec={4} audio_presented_time_sec={5:F3} audio_sink_delay_ms={6:F1} has_audio_clock={7}",
+                    snapshot.PlaybackContractMasterTimeSec,
+                    snapshot.PlaybackContractExternalTimeSec,
+                    snapshot.PlaybackContractHasAudioTimeSec,
+                    snapshot.PlaybackContractAudioTimeSec,
+                    snapshot.PlaybackContractHasAudioPresentedTimeSec,
+                    snapshot.PlaybackContractAudioPresentedTimeSec,
+                    snapshot.PlaybackContractAudioSinkDelaySec * 1000.0,
+                    snapshot.PlaybackContractHasAudioClock));
+            }
+            if (snapshot.HasAvSyncContract)
+            {
+                Debug.Log(string.Format(
+                    "[CodexValidation] av_sync_contract master={0} has_audio_clock_sec={1} audio_clock_sec={2:F3} has_video_clock_sec={3} video_clock_sec={4:F3} clock_delta_ms={5:F1} drift_ms={6:F1} warmup_complete={7} drop_total={8} duplicate_total={9}",
+                    snapshot.AvSyncContractMasterClock,
+                    snapshot.AvSyncContractHasAudioClockSec,
+                    snapshot.AvSyncContractAudioClockSec,
+                    snapshot.AvSyncContractHasVideoClockSec,
+                    snapshot.AvSyncContractVideoClockSec,
+                    snapshot.AvSyncContractClockDeltaMs,
+                    snapshot.AvSyncContractDriftMs,
+                    snapshot.AvSyncContractStartupWarmupComplete,
+                    snapshot.AvSyncContractDropTotal,
+                    snapshot.AvSyncContractDuplicateTotal));
+                if (snapshot.AvSyncContractHasAudioClockSec
+                    && snapshot.AvSyncContractHasVideoClockSec)
+                {
+                    Debug.Log(string.Format(
+                        "[CodexValidation] av_sync_contract_sample delta_ms={0:F1} audio_clock_sec={1:F3} video_clock_sec={2:F3}",
+                        snapshot.AvSyncContractClockDeltaMs,
+                        snapshot.AvSyncContractAudioClockSec,
+                        snapshot.AvSyncContractVideoClockSec));
+                }
+            }
             if (snapshot.HasAvSyncSample)
             {
                 Debug.Log(string.Format(
-                    "[CodexValidation] av_sync delta_ms={0:F1} audio_presented_sec={1:F3} playback_sec={2:F3} audio_pipeline_delay_ms={3:F1}",
+                    "[CodexValidation] av_sync delta_ms={0:F1} audio_presented_sec={1:F3} reference_sec={2:F3} reference_kind={3} playback_sec={4:F3} presented_video_sec={5:F3} contract_audio_time_sec={6:F3} contract_audio_presented_sec={7:F3} contract_audio_sink_delay_ms={8:F1} audio_pipeline_delay_ms={9:F1}",
                     snapshot.AvSyncDeltaMilliseconds,
                     snapshot.AudioPresentedTimeSec,
+                    snapshot.ReferencePlaybackTimeSec,
+                    snapshot.ReferencePlaybackKind,
                     snapshot.PlaybackTime,
+                    snapshot.PresentedVideoTimeSec,
+                    snapshot.PlaybackContractAudioTimeSec,
+                    snapshot.PlaybackContractAudioPresentedTimeSec,
+                    snapshot.PlaybackContractAudioSinkDelaySec * 1000.0,
                     snapshot.AudioPipelineDelaySec * 1000.0));
             }
             if (snapshot.HasRealtimeLatencySample)
@@ -364,6 +407,23 @@ namespace UnityAV
                 }
             }
 
+            var referencePlaybackKind = hasPresentedVideoTime
+                ? "presented_video"
+                : "playback_time";
+            if (hasHealth)
+            {
+                if (playbackTime < 0.0 && referencePlaybackTime >= 0.0)
+                {
+                    referencePlaybackKind = "health_current_time";
+                }
+                else if (health.IsRealtime
+                    && playbackTime >= 0.0
+                    && health.CurrentTimeSec > playbackTime + RealtimeReferenceLagToleranceSeconds)
+                {
+                    referencePlaybackKind = "health_current_time";
+                }
+            }
+
             var hasAvSyncSample = hasAudioPresentation && referencePlaybackTime >= 0.0;
             var avSyncDeltaMilliseconds = hasAvSyncSample
                 ? (audioPresentedTimeSec - referencePlaybackTime) * 1000.0
@@ -375,6 +435,17 @@ namespace UnityAV
                 out playbackTimingContract);
             MediaNativeInteropCommon.AvSyncContractView avSyncContract;
             var hasAvSyncContract = Player.TryGetAvSyncContract(out avSyncContract);
+            var hasAvSyncContractAudioClockSec = hasAvSyncContract && avSyncContract.HasAudioClockSec;
+            var avSyncContractAudioClockSec = hasAvSyncContractAudioClockSec
+                ? avSyncContract.AudioClockSec
+                : 0.0;
+            var hasAvSyncContractVideoClockSec = hasAvSyncContract && avSyncContract.HasVideoClockSec;
+            var avSyncContractVideoClockSec = hasAvSyncContractVideoClockSec
+                ? avSyncContract.VideoClockSec
+                : 0.0;
+            var avSyncContractClockDeltaMs = hasAvSyncContractAudioClockSec && hasAvSyncContractVideoClockSec
+                ? (avSyncContractAudioClockSec - avSyncContractVideoClockSec) * 1000.0
+                : 0.0;
             MediaNativeInteropCommon.NativeVideoBridgeDescriptorView bridgeDescriptor;
             var hasBridgeDescriptor = Player.TryGetNativeVideoBridgeDescriptor(out bridgeDescriptor);
             MediaNativeInteropCommon.NativeVideoPathSelectionView pathSelection;
@@ -427,6 +498,10 @@ namespace UnityAV
                 AudioPresentedTimeSec = audioPresentedTimeSec,
                 AudioPipelineDelaySec = audioPipelineDelaySec,
                 AvSyncDeltaMilliseconds = avSyncDeltaMilliseconds,
+                HasPresentedVideoTime = hasPresentedVideoTime,
+                PresentedVideoTimeSec = hasPresentedVideoTime ? presentedVideoTimeSec : -1.0,
+                ReferencePlaybackTimeSec = referencePlaybackTime,
+                ReferencePlaybackKind = referencePlaybackKind,
                 HasFrameContract = hasFrameContract,
                 FrameContractMemoryKind = hasFrameContract ? frameContract.MemoryKind.ToString() : "Unavailable",
                 FrameContractDynamicRange =
@@ -436,10 +511,37 @@ namespace UnityAV
                 HasPlaybackTimingContract = hasPlaybackTimingContract,
                 PlaybackContractMasterTimeSec =
                     hasPlaybackTimingContract ? playbackTimingContract.MasterTimeSec : 0.0,
+                PlaybackContractExternalTimeSec =
+                    hasPlaybackTimingContract ? playbackTimingContract.ExternalTimeSec : 0.0,
+                PlaybackContractHasAudioTimeSec =
+                    hasPlaybackTimingContract && playbackTimingContract.HasAudioTimeSec,
+                PlaybackContractAudioTimeSec =
+                    hasPlaybackTimingContract && playbackTimingContract.HasAudioTimeSec
+                        ? playbackTimingContract.AudioTimeSec
+                        : 0.0,
+                PlaybackContractHasAudioPresentedTimeSec =
+                    hasPlaybackTimingContract && playbackTimingContract.HasAudioPresentedTimeSec,
+                PlaybackContractAudioPresentedTimeSec =
+                    hasPlaybackTimingContract && playbackTimingContract.HasAudioPresentedTimeSec
+                        ? playbackTimingContract.AudioPresentedTimeSec
+                        : 0.0,
+                PlaybackContractAudioSinkDelaySec =
+                    hasPlaybackTimingContract ? playbackTimingContract.AudioSinkDelaySec : 0.0,
+                PlaybackContractHasAudioClock =
+                    hasPlaybackTimingContract && playbackTimingContract.HasAudioClock,
                 HasAvSyncContract = hasAvSyncContract,
                 AvSyncContractMasterClock =
                     hasAvSyncContract ? avSyncContract.MasterClock.ToString() : "Unavailable",
+                AvSyncContractHasAudioClockSec = hasAvSyncContractAudioClockSec,
+                AvSyncContractAudioClockSec = avSyncContractAudioClockSec,
+                AvSyncContractHasVideoClockSec = hasAvSyncContractVideoClockSec,
+                AvSyncContractVideoClockSec = avSyncContractVideoClockSec,
+                AvSyncContractClockDeltaMs = avSyncContractClockDeltaMs,
                 AvSyncContractDriftMs = hasAvSyncContract ? avSyncContract.DriftMs : 0.0,
+                AvSyncContractStartupWarmupComplete =
+                    hasAvSyncContract && avSyncContract.StartupWarmupComplete,
+                AvSyncContractDropTotal = hasAvSyncContract ? avSyncContract.DropTotal : 0UL,
+                AvSyncContractDuplicateTotal = hasAvSyncContract ? avSyncContract.DuplicateTotal : 0UL,
                 HasBridgeDescriptor = hasBridgeDescriptor,
                 BridgeDescriptorState =
                     hasBridgeDescriptor ? bridgeDescriptor.State.ToString() : "Unavailable",
@@ -862,15 +964,34 @@ namespace UnityAV
             public double AudioPresentedTimeSec;
             public double AudioPipelineDelaySec;
             public double AvSyncDeltaMilliseconds;
+            public bool HasPresentedVideoTime;
+            public double PresentedVideoTimeSec;
+            public double ReferencePlaybackTimeSec;
+            public string ReferencePlaybackKind;
             public bool HasFrameContract;
             public string FrameContractMemoryKind;
             public string FrameContractDynamicRange;
             public double FrameContractNominalFps;
             public bool HasPlaybackTimingContract;
             public double PlaybackContractMasterTimeSec;
+            public double PlaybackContractExternalTimeSec;
+            public bool PlaybackContractHasAudioTimeSec;
+            public double PlaybackContractAudioTimeSec;
+            public bool PlaybackContractHasAudioPresentedTimeSec;
+            public double PlaybackContractAudioPresentedTimeSec;
+            public double PlaybackContractAudioSinkDelaySec;
+            public bool PlaybackContractHasAudioClock;
             public bool HasAvSyncContract;
             public string AvSyncContractMasterClock;
+            public bool AvSyncContractHasAudioClockSec;
+            public double AvSyncContractAudioClockSec;
+            public bool AvSyncContractHasVideoClockSec;
+            public double AvSyncContractVideoClockSec;
+            public double AvSyncContractClockDeltaMs;
             public double AvSyncContractDriftMs;
+            public bool AvSyncContractStartupWarmupComplete;
+            public ulong AvSyncContractDropTotal;
+            public ulong AvSyncContractDuplicateTotal;
             public bool HasBridgeDescriptor;
             public string BridgeDescriptorState;
             public string BridgeDescriptorRuntimeKind;
