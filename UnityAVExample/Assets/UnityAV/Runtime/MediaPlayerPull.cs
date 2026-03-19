@@ -321,6 +321,16 @@ namespace UnityAV
             int id,
             ref MediaNativeInteropCommon.RustAVNativeVideoPathSelection selection);
 
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerGetWgpuRenderDescriptor")]
+        private static extern int GetWgpuRenderDescriptor(
+            int id,
+            ref MediaNativeInteropCommon.RustAVWgpuRenderDescriptor descriptor);
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerGetWgpuRenderStateView")]
+        private static extern int GetWgpuRenderStateView(
+            int id,
+            ref MediaNativeInteropCommon.RustAVWgpuRenderStateView state);
+
         [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerGetLatestSourceVideoFrameContract")]
         private static extern int GetLatestSourceVideoFrameContract(
             int id,
@@ -628,6 +638,28 @@ namespace UnityAV
                     GetNativeVideoPathSelection,
                     _id,
                     out selection);
+        }
+
+        internal bool TryGetWgpuRenderDescriptor(
+            out MediaNativeInteropCommon.WgpuRenderDescriptorView descriptor)
+        {
+            descriptor = default(MediaNativeInteropCommon.WgpuRenderDescriptorView);
+            return ValidatePlayerId(_id)
+                && MediaNativeInteropCommon.TryReadWgpuRenderDescriptor(
+                    GetWgpuRenderDescriptor,
+                    _id,
+                    out descriptor);
+        }
+
+        internal bool TryGetWgpuRenderStateView(
+            out MediaNativeInteropCommon.WgpuRenderStateView state)
+        {
+            state = default(MediaNativeInteropCommon.WgpuRenderStateView);
+            return ValidatePlayerId(_id)
+                && MediaNativeInteropCommon.TryReadWgpuRenderStateView(
+                    GetWgpuRenderStateView,
+                    _id,
+                    out state);
         }
 
         /// <summary>

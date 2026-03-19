@@ -231,6 +231,42 @@ typedef struct RustAVNativeVideoPathSelection {
     int32_t cpu_fallback;
 } RustAVNativeVideoPathSelection;
 
+typedef struct RustAVWgpuRenderDescriptor {
+    uint32_t struct_size;
+    uint32_t struct_version;
+    int32_t output_width;
+    int32_t output_height;
+    int32_t runtime_ready;
+    int32_t supports_yuv420p;
+    int32_t supports_nv12;
+    int32_t supports_p010;
+    int32_t supports_rgba32;
+    int32_t supports_external_texture_rgba;
+    int32_t supports_external_texture_yu12;
+    int32_t readback_export_supported;
+} RustAVWgpuRenderDescriptor;
+
+typedef struct RustAVWgpuRenderStateView {
+    uint32_t struct_size;
+    uint32_t struct_version;
+    int32_t has_source_contract;
+    int32_t has_presented_contract;
+    int32_t source_memory_kind;
+    int32_t presented_memory_kind;
+    int32_t source_pixel_format;
+    int32_t presented_pixel_format;
+    int32_t render_path;
+    int32_t external_texture_format;
+    int32_t has_rendered_frame;
+    int64_t rendered_frame_index;
+    double rendered_time_sec;
+    int32_t has_render_error;
+    int32_t render_error_kind;
+    int32_t upload_plane_count;
+    int32_t source_zero_copy;
+    int32_t cpu_fallback;
+} RustAVWgpuRenderStateView;
+
 typedef struct RustAVNativeVideoFrame {
     uint32_t struct_size;
     uint32_t struct_version;
@@ -499,6 +535,12 @@ int32_t RUSTAV_CALL RustAV_PlayerGetNativeVideoBridgeDescriptor(
 int32_t RUSTAV_CALL RustAV_PlayerGetNativeVideoPathSelection(
     int32_t id,
     RustAVNativeVideoPathSelection* outSelection);
+int32_t RUSTAV_CALL RustAV_PlayerGetWgpuRenderDescriptor(
+    int32_t id,
+    RustAVWgpuRenderDescriptor* outDescriptor);
+int32_t RUSTAV_CALL RustAV_PlayerGetWgpuRenderStateView(
+    int32_t id,
+    RustAVWgpuRenderStateView* outState);
 int32_t RUSTAV_CALL RustAV_PlayerGetStreamInfo(int32_t id, int32_t streamIndex, RustAVStreamInfo* outInfo);
 int32_t RUSTAV_CALL RustAV_PlayerGetFrameMetaRGBA(int32_t id, RustAVFrameMeta* outMeta);
 int32_t RUSTAV_CALL RustAV_PlayerCopyFrameRGBA(int32_t id, uint8_t* destination, int32_t destinationLength);

@@ -266,6 +266,40 @@ namespace UnityAV
                 snapshot.PathSelectionTargetZeroCopy,
                 snapshot.PathSelectionSourcePlaneTexturesSupported,
                 snapshot.PathSelectionCpuFallback));
+            if (snapshot.HasWgpuRenderDescriptor)
+            {
+                Debug.Log(string.Format(
+                    "[CodexValidation] wgpu_descriptor runtime_ready={0} output_width={1} output_height={2} supports_yuv420p={3} supports_nv12={4} supports_p010={5} supports_rgba32={6} supports_external_texture_rgba={7} supports_external_texture_yu12={8} readback_export_supported={9}",
+                    snapshot.WgpuRuntimeReady,
+                    snapshot.WgpuOutputWidth,
+                    snapshot.WgpuOutputHeight,
+                    snapshot.WgpuSupportsYuv420p,
+                    snapshot.WgpuSupportsNv12,
+                    snapshot.WgpuSupportsP010,
+                    snapshot.WgpuSupportsRgba32,
+                    snapshot.WgpuSupportsExternalTextureRgba,
+                    snapshot.WgpuSupportsExternalTextureYu12,
+                    snapshot.WgpuReadbackExportSupported));
+            }
+            if (snapshot.HasWgpuRenderState)
+            {
+                Debug.Log(string.Format(
+                    "[CodexValidation] wgpu_state render_path={0} source_memory={1} presented_memory={2} source_pixel_format={3} presented_pixel_format={4} external_texture_format={5} has_rendered_frame={6} rendered_frame_index={7} rendered_time_sec={8:F3} has_render_error={9} render_error_kind={10} upload_plane_count={11} source_zero_copy={12} cpu_fallback={13}",
+                    snapshot.WgpuRenderPath,
+                    snapshot.WgpuSourceMemoryKind,
+                    snapshot.WgpuPresentedMemoryKind,
+                    snapshot.WgpuSourcePixelFormat,
+                    snapshot.WgpuPresentedPixelFormat,
+                    snapshot.WgpuExternalTextureFormat,
+                    snapshot.WgpuHasRenderedFrame,
+                    snapshot.WgpuRenderedFrameIndex,
+                    snapshot.WgpuRenderedTimeSec,
+                    snapshot.WgpuHasRenderError,
+                    snapshot.WgpuRenderErrorKind,
+                    snapshot.WgpuUploadPlaneCount,
+                    snapshot.WgpuSourceZeroCopy,
+                    snapshot.WgpuCpuFallback));
+            }
             if (snapshot.HasAvSyncSample)
             {
                 Debug.Log(string.Format(
@@ -345,6 +379,10 @@ namespace UnityAV
             var hasBridgeDescriptor = Player.TryGetNativeVideoBridgeDescriptor(out bridgeDescriptor);
             MediaNativeInteropCommon.NativeVideoPathSelectionView pathSelection;
             var hasPathSelection = Player.TryGetNativeVideoPathSelection(out pathSelection);
+            MediaNativeInteropCommon.WgpuRenderDescriptorView wgpuDescriptor;
+            var hasWgpuRenderDescriptor = Player.TryGetWgpuRenderDescriptor(out wgpuDescriptor);
+            MediaNativeInteropCommon.WgpuRenderStateView wgpuState;
+            var hasWgpuRenderState = Player.TryGetWgpuRenderStateView(out wgpuState);
             var hasRealtimeLatencySample = false;
             var realtimeLatencyMilliseconds = 0.0;
             var publisherElapsedTimeSec = 0.0;
@@ -425,6 +463,41 @@ namespace UnityAV
                 PathSelectionSourcePlaneTexturesSupported =
                     hasPathSelection && pathSelection.SourcePlaneTexturesSupported,
                 PathSelectionCpuFallback = hasPathSelection && pathSelection.CpuFallback,
+                HasWgpuRenderDescriptor = hasWgpuRenderDescriptor,
+                WgpuRuntimeReady = hasWgpuRenderDescriptor && wgpuDescriptor.RuntimeReady,
+                WgpuOutputWidth = hasWgpuRenderDescriptor ? wgpuDescriptor.OutputWidth : 0,
+                WgpuOutputHeight = hasWgpuRenderDescriptor ? wgpuDescriptor.OutputHeight : 0,
+                WgpuSupportsYuv420p = hasWgpuRenderDescriptor && wgpuDescriptor.SupportsYuv420p,
+                WgpuSupportsNv12 = hasWgpuRenderDescriptor && wgpuDescriptor.SupportsNv12,
+                WgpuSupportsP010 = hasWgpuRenderDescriptor && wgpuDescriptor.SupportsP010,
+                WgpuSupportsRgba32 = hasWgpuRenderDescriptor && wgpuDescriptor.SupportsRgba32,
+                WgpuSupportsExternalTextureRgba =
+                    hasWgpuRenderDescriptor && wgpuDescriptor.SupportsExternalTextureRgba,
+                WgpuSupportsExternalTextureYu12 =
+                    hasWgpuRenderDescriptor && wgpuDescriptor.SupportsExternalTextureYu12,
+                WgpuReadbackExportSupported =
+                    hasWgpuRenderDescriptor && wgpuDescriptor.ReadbackExportSupported,
+                HasWgpuRenderState = hasWgpuRenderState,
+                WgpuRenderPath = hasWgpuRenderState ? wgpuState.RenderPath.ToString() : "Unavailable",
+                WgpuSourceMemoryKind =
+                    hasWgpuRenderState ? wgpuState.SourceMemoryKind.ToString() : "Unavailable",
+                WgpuPresentedMemoryKind =
+                    hasWgpuRenderState ? wgpuState.PresentedMemoryKind.ToString() : "Unavailable",
+                WgpuSourcePixelFormat =
+                    hasWgpuRenderState ? wgpuState.SourcePixelFormat.ToString() : "Unavailable",
+                WgpuPresentedPixelFormat =
+                    hasWgpuRenderState ? wgpuState.PresentedPixelFormat.ToString() : "Unavailable",
+                WgpuExternalTextureFormat =
+                    hasWgpuRenderState ? wgpuState.ExternalTextureFormat.ToString() : "Unavailable",
+                WgpuHasRenderedFrame = hasWgpuRenderState && wgpuState.HasRenderedFrame,
+                WgpuRenderedFrameIndex = hasWgpuRenderState ? wgpuState.RenderedFrameIndex : 0,
+                WgpuRenderedTimeSec = hasWgpuRenderState ? wgpuState.RenderedTimeSec : 0.0,
+                WgpuHasRenderError = hasWgpuRenderState && wgpuState.HasRenderError,
+                WgpuRenderErrorKind =
+                    hasWgpuRenderState ? wgpuState.RenderErrorKind.ToString() : "Unavailable",
+                WgpuUploadPlaneCount = hasWgpuRenderState ? wgpuState.UploadPlaneCount : 0,
+                WgpuSourceZeroCopy = hasWgpuRenderState && wgpuState.SourceZeroCopy,
+                WgpuCpuFallback = hasWgpuRenderState && wgpuState.CpuFallback,
                 HasRealtimeLatencySample = hasRealtimeLatencySample,
                 RealtimeLatencyMilliseconds = realtimeLatencyMilliseconds,
                 PublisherElapsedTimeSec = publisherElapsedTimeSec,
@@ -812,6 +885,32 @@ namespace UnityAV
             public bool PathSelectionTargetZeroCopy;
             public bool PathSelectionSourcePlaneTexturesSupported;
             public bool PathSelectionCpuFallback;
+            public bool HasWgpuRenderDescriptor;
+            public bool WgpuRuntimeReady;
+            public int WgpuOutputWidth;
+            public int WgpuOutputHeight;
+            public bool WgpuSupportsYuv420p;
+            public bool WgpuSupportsNv12;
+            public bool WgpuSupportsP010;
+            public bool WgpuSupportsRgba32;
+            public bool WgpuSupportsExternalTextureRgba;
+            public bool WgpuSupportsExternalTextureYu12;
+            public bool WgpuReadbackExportSupported;
+            public bool HasWgpuRenderState;
+            public string WgpuRenderPath;
+            public string WgpuSourceMemoryKind;
+            public string WgpuPresentedMemoryKind;
+            public string WgpuSourcePixelFormat;
+            public string WgpuPresentedPixelFormat;
+            public string WgpuExternalTextureFormat;
+            public bool WgpuHasRenderedFrame;
+            public long WgpuRenderedFrameIndex;
+            public double WgpuRenderedTimeSec;
+            public bool WgpuHasRenderError;
+            public string WgpuRenderErrorKind;
+            public int WgpuUploadPlaneCount;
+            public bool WgpuSourceZeroCopy;
+            public bool WgpuCpuFallback;
             public bool HasRealtimeLatencySample;
             public double RealtimeLatencyMilliseconds;
             public double PublisherElapsedTimeSec;

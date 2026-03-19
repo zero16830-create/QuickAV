@@ -148,6 +148,8 @@ namespace UnityAV
         internal const uint RustAVNativeVideoFrameVersion = 1u;
         internal const uint RustAVNativeVideoPlaneTexturesVersion = 1u;
         internal const uint RustAVNativeVideoPlaneViewsVersion = 1u;
+        internal const uint RustAVWgpuRenderDescriptorVersion = 1u;
+        internal const uint RustAVWgpuRenderStateViewVersion = 1u;
         internal const int BackendDiagnosticBufferLength = 512;
         internal const uint NativeVideoTargetFlagNone = 0u;
         internal const uint NativeVideoTargetFlagExternalTexture = 1u << 0;
@@ -204,6 +206,37 @@ namespace UnityAV
             NativeBridgePlanes = 2,
             WgpuRenderCore = 3,
             CpuFallback = 4,
+        }
+
+        internal enum WgpuRenderPath
+        {
+            CpuPlanar = 0,
+            NativeSurfaceBridge = 1,
+        }
+
+        internal enum WgpuExternalTextureFormat
+        {
+            None = 0,
+            Rgba = 1,
+            Yu12 = 2,
+            Nv12 = 3,
+        }
+
+        internal enum WgpuRenderError
+        {
+            None = 0,
+            NativeSurfaceImportPending = 1,
+            UnsupportedSourceFormat = 2,
+            InvalidPlaneCount = 3,
+            InvalidPlaneData = 4,
+            UnsupportedTextureFormat = 5,
+            UnsupportedOutputFormat = 6,
+            AdapterUnavailable = 7,
+            RequestDevice = 8,
+            PollFailed = 9,
+            MapFailed = 10,
+            ReadbackFailed = 11,
+            Other = 12,
         }
 
         internal enum NativeVideoColorRange
@@ -386,6 +419,46 @@ namespace UnityAV
             public int SourceSurfaceZeroCopy;
             public int SourcePlaneTexturesSupported;
             public int TargetZeroCopy;
+            public int CpuFallback;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct RustAVWgpuRenderDescriptor
+        {
+            public uint StructSize;
+            public uint StructVersion;
+            public int OutputWidth;
+            public int OutputHeight;
+            public int RuntimeReady;
+            public int SupportsYuv420p;
+            public int SupportsNv12;
+            public int SupportsP010;
+            public int SupportsRgba32;
+            public int SupportsExternalTextureRgba;
+            public int SupportsExternalTextureYu12;
+            public int ReadbackExportSupported;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct RustAVWgpuRenderStateView
+        {
+            public uint StructSize;
+            public uint StructVersion;
+            public int HasSourceContract;
+            public int HasPresentedContract;
+            public int SourceMemoryKind;
+            public int PresentedMemoryKind;
+            public int SourcePixelFormat;
+            public int PresentedPixelFormat;
+            public int RenderPath;
+            public int ExternalTextureFormat;
+            public int HasRenderedFrame;
+            public long RenderedFrameIndex;
+            public double RenderedTimeSec;
+            public int HasRenderError;
+            public int RenderErrorKind;
+            public int UploadPlaneCount;
+            public int SourceZeroCopy;
             public int CpuFallback;
         }
 
@@ -591,6 +664,14 @@ namespace UnityAV
             int playerId,
             ref RustAVNativeVideoPathSelection selection);
 
+        internal delegate int GetWgpuRenderDescriptorDelegate(
+            int playerId,
+            ref RustAVWgpuRenderDescriptor descriptor);
+
+        internal delegate int GetWgpuRenderStateViewDelegate(
+            int playerId,
+            ref RustAVWgpuRenderStateView state);
+
         internal delegate int GetNativeVideoColorInfoDelegate(
             int playerId,
             ref RustAVVideoColorInfo info);
@@ -699,6 +780,40 @@ namespace UnityAV
             public bool SourceSurfaceZeroCopy;
             public bool SourcePlaneTexturesSupported;
             public bool TargetZeroCopy;
+            public bool CpuFallback;
+        }
+
+        internal struct WgpuRenderDescriptorView
+        {
+            public int OutputWidth;
+            public int OutputHeight;
+            public bool RuntimeReady;
+            public bool SupportsYuv420p;
+            public bool SupportsNv12;
+            public bool SupportsP010;
+            public bool SupportsRgba32;
+            public bool SupportsExternalTextureRgba;
+            public bool SupportsExternalTextureYu12;
+            public bool ReadbackExportSupported;
+        }
+
+        internal struct WgpuRenderStateView
+        {
+            public bool HasSourceContract;
+            public bool HasPresentedContract;
+            public VideoFrameMemoryKind SourceMemoryKind;
+            public VideoFrameMemoryKind PresentedMemoryKind;
+            public NativeVideoPixelFormat SourcePixelFormat;
+            public NativeVideoPixelFormat PresentedPixelFormat;
+            public WgpuRenderPath RenderPath;
+            public WgpuExternalTextureFormat ExternalTextureFormat;
+            public bool HasRenderedFrame;
+            public long RenderedFrameIndex;
+            public double RenderedTimeSec;
+            public bool HasRenderError;
+            public WgpuRenderError RenderErrorKind;
+            public int UploadPlaneCount;
+            public bool SourceZeroCopy;
             public bool CpuFallback;
         }
 
@@ -1054,6 +1169,24 @@ namespace UnityAV
             };
         }
 
+        internal static RustAVWgpuRenderDescriptor CreateWgpuRenderDescriptor()
+        {
+            return new RustAVWgpuRenderDescriptor
+            {
+                StructSize = (uint)Marshal.SizeOf(typeof(RustAVWgpuRenderDescriptor)),
+                StructVersion = RustAVWgpuRenderDescriptorVersion,
+            };
+        }
+
+        internal static RustAVWgpuRenderStateView CreateWgpuRenderStateView()
+        {
+            return new RustAVWgpuRenderStateView
+            {
+                StructSize = (uint)Marshal.SizeOf(typeof(RustAVWgpuRenderStateView)),
+                StructVersion = RustAVWgpuRenderStateViewVersion,
+            };
+        }
+
         internal static RustAVVideoColorInfo CreateVideoColorInfo()
         {
             return new RustAVVideoColorInfo
@@ -1358,6 +1491,102 @@ namespace UnityAV
                 return false;
             }
             catch (EntryPointNotFoundException)
+            {
+                return false;
+            }
+        }
+
+        internal static bool TryReadWgpuRenderDescriptor(
+            GetWgpuRenderDescriptorDelegate getWgpuRenderDescriptor,
+            int playerId,
+            out WgpuRenderDescriptorView descriptor)
+        {
+            descriptor = default(WgpuRenderDescriptorView);
+
+            try
+            {
+                var nativeDescriptor = CreateWgpuRenderDescriptor();
+                var result = getWgpuRenderDescriptor(playerId, ref nativeDescriptor);
+                if (result < 0)
+                {
+                    return false;
+                }
+
+                descriptor = new WgpuRenderDescriptorView
+                {
+                    OutputWidth = nativeDescriptor.OutputWidth,
+                    OutputHeight = nativeDescriptor.OutputHeight,
+                    RuntimeReady = nativeDescriptor.RuntimeReady != 0,
+                    SupportsYuv420p = nativeDescriptor.SupportsYuv420p != 0,
+                    SupportsNv12 = nativeDescriptor.SupportsNv12 != 0,
+                    SupportsP010 = nativeDescriptor.SupportsP010 != 0,
+                    SupportsRgba32 = nativeDescriptor.SupportsRgba32 != 0,
+                    SupportsExternalTextureRgba =
+                        nativeDescriptor.SupportsExternalTextureRgba != 0,
+                    SupportsExternalTextureYu12 =
+                        nativeDescriptor.SupportsExternalTextureYu12 != 0,
+                    ReadbackExportSupported =
+                        nativeDescriptor.ReadbackExportSupported != 0,
+                };
+                return true;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return false;
+            }
+            catch (DllNotFoundException)
+            {
+                return false;
+            }
+        }
+
+        internal static bool TryReadWgpuRenderStateView(
+            GetWgpuRenderStateViewDelegate getWgpuRenderStateView,
+            int playerId,
+            out WgpuRenderStateView state)
+        {
+            state = default(WgpuRenderStateView);
+
+            try
+            {
+                var nativeState = CreateWgpuRenderStateView();
+                var result = getWgpuRenderStateView(playerId, ref nativeState);
+                if (result < 0)
+                {
+                    return false;
+                }
+
+                state = new WgpuRenderStateView
+                {
+                    HasSourceContract = nativeState.HasSourceContract != 0,
+                    HasPresentedContract = nativeState.HasPresentedContract != 0,
+                    SourceMemoryKind =
+                        NormalizeVideoFrameMemoryKind(nativeState.SourceMemoryKind),
+                    PresentedMemoryKind =
+                        NormalizeVideoFrameMemoryKind(nativeState.PresentedMemoryKind),
+                    SourcePixelFormat =
+                        NormalizeNativeVideoPixelFormat(nativeState.SourcePixelFormat),
+                    PresentedPixelFormat =
+                        NormalizeNativeVideoPixelFormat(nativeState.PresentedPixelFormat),
+                    RenderPath = NormalizeWgpuRenderPath(nativeState.RenderPath),
+                    ExternalTextureFormat =
+                        NormalizeWgpuExternalTextureFormat(nativeState.ExternalTextureFormat),
+                    HasRenderedFrame = nativeState.HasRenderedFrame != 0,
+                    RenderedFrameIndex = nativeState.RenderedFrameIndex,
+                    RenderedTimeSec = nativeState.RenderedTimeSec,
+                    HasRenderError = nativeState.HasRenderError != 0,
+                    RenderErrorKind = NormalizeWgpuRenderError(nativeState.RenderErrorKind),
+                    UploadPlaneCount = nativeState.UploadPlaneCount,
+                    SourceZeroCopy = nativeState.SourceZeroCopy != 0,
+                    CpuFallback = nativeState.CpuFallback != 0,
+                };
+                return true;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return false;
+            }
+            catch (DllNotFoundException)
             {
                 return false;
             }
@@ -1810,6 +2039,65 @@ namespace UnityAV
                     return NativeVideoPathKind.CpuFallback;
                 default:
                     return NativeVideoPathKind.Unknown;
+            }
+        }
+
+        internal static WgpuRenderPath NormalizeWgpuRenderPath(int rawValue)
+        {
+            switch (rawValue)
+            {
+                case 1:
+                    return WgpuRenderPath.NativeSurfaceBridge;
+                default:
+                    return WgpuRenderPath.CpuPlanar;
+            }
+        }
+
+        internal static WgpuExternalTextureFormat NormalizeWgpuExternalTextureFormat(int rawValue)
+        {
+            switch (rawValue)
+            {
+                case 1:
+                    return WgpuExternalTextureFormat.Rgba;
+                case 2:
+                    return WgpuExternalTextureFormat.Yu12;
+                case 3:
+                    return WgpuExternalTextureFormat.Nv12;
+                default:
+                    return WgpuExternalTextureFormat.None;
+            }
+        }
+
+        internal static WgpuRenderError NormalizeWgpuRenderError(int rawValue)
+        {
+            switch (rawValue)
+            {
+                case 1:
+                    return WgpuRenderError.NativeSurfaceImportPending;
+                case 2:
+                    return WgpuRenderError.UnsupportedSourceFormat;
+                case 3:
+                    return WgpuRenderError.InvalidPlaneCount;
+                case 4:
+                    return WgpuRenderError.InvalidPlaneData;
+                case 5:
+                    return WgpuRenderError.UnsupportedTextureFormat;
+                case 6:
+                    return WgpuRenderError.UnsupportedOutputFormat;
+                case 7:
+                    return WgpuRenderError.AdapterUnavailable;
+                case 8:
+                    return WgpuRenderError.RequestDevice;
+                case 9:
+                    return WgpuRenderError.PollFailed;
+                case 10:
+                    return WgpuRenderError.MapFailed;
+                case 11:
+                    return WgpuRenderError.ReadbackFailed;
+                case 12:
+                    return WgpuRenderError.Other;
+                default:
+                    return WgpuRenderError.None;
             }
         }
 
