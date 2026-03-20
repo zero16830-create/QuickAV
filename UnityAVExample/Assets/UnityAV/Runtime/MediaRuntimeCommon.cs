@@ -1,6 +1,8 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using UnityEngine;
@@ -704,6 +706,9 @@ namespace UnityAV
             public bool IsRealtime;
             public bool CanSeek;
             public bool IsLooping;
+            public int StreamCount;
+            public int VideoDecoderCount;
+            public bool HasAudioDecoder;
             public long SourcePacketCount;
             public long SourceTimeoutCount;
             public long SourceReconnectCount;
@@ -960,6 +965,9 @@ namespace UnityAV
                     IsRealtime = snapshot.IsRealtime != 0,
                     CanSeek = snapshot.CanSeek != 0,
                     IsLooping = snapshot.IsLooping != 0,
+                    StreamCount = snapshot.StreamCount,
+                    VideoDecoderCount = snapshot.VideoDecoderCount,
+                    HasAudioDecoder = snapshot.HasAudioDecoder != 0,
                     SourcePacketCount = snapshot.SourcePacketCount,
                     SourceTimeoutCount = snapshot.SourceTimeoutCount,
                     SourceReconnectCount = snapshot.SourceReconnectCount,
@@ -1382,6 +1390,18 @@ namespace UnityAV
             {
                 return false;
             }
+        }
+
+        internal static MediaBackendKind ResolveRuntimePreferredBackend(MediaBackendKind preferredBackend)
+        {
+            if (preferredBackend != MediaBackendKind.Auto)
+            {
+                return preferredBackend;
+            }
+
+            return Application.platform == RuntimePlatform.Android
+                ? MediaBackendKind.Ffmpeg
+                : preferredBackend;
         }
 
         internal static bool TryReadNativeVideoBridgeDescriptor(
@@ -2515,6 +2535,10 @@ namespace UnityAV
     internal static class MediaSourceResolver
     {
         private const string PreparedStreamingAssetsRootName = "RustAVPreparedStreamingAssets";
+        private const string PreparedStreamingAssetsTempExtension = ".downloading";
+        private const int UnityWebRequestStartupRetryFrames = 90;
+        private const int StreamingAssetCopyChunkSize = 64 * 1024;
+        private const int StreamingAssetCopyYieldThresholdBytes = 2 * 1024 * 1024;
 
         internal sealed class PreparedMediaSource
         {
@@ -2653,6 +2677,39 @@ namespace UnityAV
                 Directory.CreateDirectory(preparedDirectory);
             }
 
+            var preparedTempPath = preparedPath + PreparedStreamingAssetsTempExtension;
+            TryDeleteFile(preparedTempPath);
+
+            if (Application.platform == RuntimePlatform.Android)
+            {
+                var androidStageSucceeded = false;
+                Exception androidStageError = null;
+                yield return StageAndroidStreamingAssetToFile(
+                    uri,
+                    preparedTempPath,
+                    () => androidStageSucceeded = true,
+                    ex => androidStageError = ex);
+
+                if (androidStageSucceeded)
+                {
+                    TryDeleteFile(preparedPath);
+                    File.Move(preparedTempPath, preparedPath);
+                    onResolved(
+                        new PreparedMediaSource(
+                            uri,
+                            preparedPath,
+                            false,
+                            true));
+                    yield break;
+                }
+
+                if (androidStageError != null)
+                {
+                    onError(androidStageError);
+                    yield break;
+                }
+            }
+
             var requestType = Type.GetType(
                 "UnityEngine.Networking.UnityWebRequest, UnityEngine.UnityWebRequestModule");
             if (requestType == null)
@@ -2669,6 +2726,8 @@ namespace UnityAV
             var errorProperty = requestType.GetProperty("error");
             var downloadHandlerProperty = requestType.GetProperty("downloadHandler");
             var disposeMethod = requestType.GetMethod("Dispose", Type.EmptyTypes);
+            var downloadHandlerFileType = Type.GetType(
+                "UnityEngine.Networking.DownloadHandlerFile, UnityEngine.UnityWebRequestModule");
             var successValue = resultProperty != null
                 ? Enum.Parse(resultProperty.PropertyType, "Success")
                 : null;
@@ -2686,18 +2745,111 @@ namespace UnityAV
                 yield break;
             }
 
-            var request = getMethod.Invoke(null, new object[] { streamingAssetSource });
+            var request = default(object);
+            Exception requestCreateError = null;
+            for (var attempt = 0; attempt < UnityWebRequestStartupRetryFrames; attempt++)
+            {
+                var shouldRetryRequestCreate = false;
+                try
+                {
+                    request = getMethod.Invoke(null, new object[] { streamingAssetSource });
+                    requestCreateError = null;
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    requestCreateError = UnwrapReflectionException(ex);
+                    if (!IsUnityWebRequestStartupUnavailable(requestCreateError)
+                        || attempt >= UnityWebRequestStartupRetryFrames - 1)
+                    {
+                        break;
+                    }
+
+                    shouldRetryRequestCreate = true;
+                }
+
+                if (shouldRetryRequestCreate)
+                {
+                    yield return null;
+                }
+            }
+
             if (request == null)
             {
                 onError(
-                    new InvalidOperationException(
+                    requestCreateError
+                    ?? new InvalidOperationException(
                         "UnityWebRequest.Get 返回空对象。"));
                 yield break;
             }
 
+            var usingDownloadHandlerFile = false;
+            if (downloadHandlerFileType != null
+                && downloadHandlerProperty != null
+                && downloadHandlerProperty.CanWrite)
+            {
+                var downloadHandlerFile = Activator.CreateInstance(
+                    downloadHandlerFileType,
+                    new object[] { preparedTempPath });
+                if (downloadHandlerFile != null)
+                {
+                    var removeFileOnAbortProperty =
+                        downloadHandlerFileType.GetProperty("removeFileOnAbort");
+                    if (removeFileOnAbortProperty != null && removeFileOnAbortProperty.CanWrite)
+                    {
+                        removeFileOnAbortProperty.SetValue(downloadHandlerFile, true, null);
+                    }
+
+                    var previousDownloadHandler = downloadHandlerProperty.GetValue(request, null);
+                    var previousDisposable = previousDownloadHandler as IDisposable;
+                    if (previousDisposable != null)
+                    {
+                        previousDisposable.Dispose();
+                    }
+
+                    downloadHandlerProperty.SetValue(request, downloadHandlerFile, null);
+                    usingDownloadHandlerFile = true;
+                }
+            }
+
+            var downloadSucceeded = false;
             try
             {
-                var asyncOperation = sendWebRequestMethod.Invoke(request, null);
+                object asyncOperation = null;
+                Exception sendError = null;
+                for (var attempt = 0; attempt < UnityWebRequestStartupRetryFrames; attempt++)
+                {
+                    var shouldRetrySend = false;
+                    try
+                    {
+                        asyncOperation = sendWebRequestMethod.Invoke(request, null);
+                        sendError = null;
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        sendError = UnwrapReflectionException(ex);
+                        if (!IsUnityWebRequestStartupUnavailable(sendError)
+                            || attempt >= UnityWebRequestStartupRetryFrames - 1)
+                        {
+                            break;
+                        }
+
+                        shouldRetrySend = true;
+                    }
+
+                    if (shouldRetrySend)
+                    {
+                        yield return null;
+                    }
+                }
+
+                if (sendError != null)
+                {
+                    onError(sendError);
+                    yield break;
+                }
+
                 if (asyncOperation != null)
                 {
                     yield return asyncOperation;
@@ -2716,31 +2868,63 @@ namespace UnityAV
                     yield break;
                 }
 
-                var downloadHandler = downloadHandlerProperty.GetValue(request, null);
-                if (downloadHandler == null)
+                if (usingDownloadHandlerFile)
                 {
-                    onError(
-                        new IOException(
-                            "UnityWebRequest 缺少 DownloadHandler。"));
-                    yield break;
+                    if (!File.Exists(preparedTempPath))
+                    {
+                        onError(
+                            new IOException(
+                                "打包媒体资源分段落盘失败，临时文件不存在。"));
+                        yield break;
+                    }
+
+                    var preparedInfo = new FileInfo(preparedTempPath);
+                    if (preparedInfo.Length <= 0)
+                    {
+                        onError(
+                            new IOException(
+                                "打包媒体资源下载结果为空。"));
+                        yield break;
+                    }
+
+                    TryDeleteFile(preparedPath);
+                    File.Move(preparedTempPath, preparedPath);
+                }
+                else
+                {
+                    var downloadHandler = downloadHandlerProperty.GetValue(request, null);
+                    if (downloadHandler == null)
+                    {
+                        onError(
+                            new IOException(
+                                "UnityWebRequest 缺少 DownloadHandler。"));
+                        yield break;
+                    }
+
+                    var dataProperty = downloadHandler.GetType().GetProperty("data");
+                    var data = dataProperty != null
+                        ? dataProperty.GetValue(downloadHandler, null) as byte[]
+                        : null;
+                    if (data == null || data.Length == 0)
+                    {
+                        onError(
+                            new IOException(
+                                "打包媒体资源下载结果为空。"));
+                        yield break;
+                    }
+
+                    File.WriteAllBytes(preparedPath, data);
                 }
 
-                var dataProperty = downloadHandler.GetType().GetProperty("data");
-                var data = dataProperty != null
-                    ? dataProperty.GetValue(downloadHandler, null) as byte[]
-                    : null;
-                if (data == null || data.Length == 0)
-                {
-                    onError(
-                        new IOException(
-                            "打包媒体资源下载结果为空。"));
-                    yield break;
-                }
-
-                File.WriteAllBytes(preparedPath, data);
+                downloadSucceeded = true;
             }
             finally
             {
+                if (!downloadSucceeded)
+                {
+                    TryDeleteFile(preparedTempPath);
+                }
+
                 var disposable = request as IDisposable;
                 if (disposable != null)
                 {
@@ -2755,9 +2939,420 @@ namespace UnityAV
             onResolved(
                 new PreparedMediaSource(
                     uri,
-                    preparedPath,
-                    false,
-                    true));
+                preparedPath,
+                false,
+                true));
+        }
+
+        private static IEnumerator StageAndroidStreamingAssetToFile(
+            string uri,
+            string preparedTempPath,
+            Action onSuccess,
+            Action<Exception> onError)
+        {
+            object inputStream = null;
+            FileStream outputStream = null;
+            Exception stageError = null;
+
+            var relativePath = NormalizeRelativePath(uri);
+            try
+            {
+                var unityPlayerClass = CreateAndroidJavaClass("com.unity3d.player.UnityPlayer");
+                if (unityPlayerClass == null)
+                {
+                    stageError =
+                        new InvalidOperationException(
+                            "Android JNI 模块不可用，无法准备打包媒体资源。");
+                }
+                else
+                {
+                    using (var unityPlayerDisposable = unityPlayerClass as IDisposable)
+                    {
+                        var activity = AndroidJavaGetStaticObject(unityPlayerClass, "currentActivity");
+                        if (activity == null)
+                        {
+                            stageError =
+                                new InvalidOperationException(
+                                    "Android currentActivity 不可用，无法准备打包媒体资源。");
+                        }
+                        else
+                        {
+                            using (var activityDisposable = activity as IDisposable)
+                            {
+                                var assetManager = AndroidJavaCallObject(activity, "getAssets");
+                                if (assetManager == null)
+                                {
+                                    stageError =
+                                        new InvalidOperationException(
+                                            "Android AssetManager 不可用，无法准备打包媒体资源。");
+                                }
+                                else
+                                {
+                                    using (var assetManagerDisposable = assetManager as IDisposable)
+                                    {
+                                        inputStream = AndroidJavaCallObject(
+                                            assetManager,
+                                            "open",
+                                            relativePath);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (stageError == null && inputStream == null)
+                {
+                    stageError =
+                        new IOException(
+                            "Android AssetInputStream 打开失败。");
+                }
+
+                if (stageError == null)
+                {
+                    outputStream = new FileStream(
+                        preparedTempPath,
+                        FileMode.Create,
+                        FileAccess.Write,
+                        FileShare.None);
+                }
+            }
+            catch (Exception ex)
+            {
+                stageError =
+                    new IOException(
+                        "Android 打包媒体资源复制失败: " + ex.Message,
+                        ex);
+            }
+
+            if (stageError != null)
+            {
+                if (outputStream != null)
+                {
+                    outputStream.Dispose();
+                    outputStream = null;
+                }
+
+                if (inputStream != null)
+                {
+                    var disposableInputStream = inputStream as IDisposable;
+                    if (disposableInputStream != null)
+                    {
+                        disposableInputStream.Dispose();
+                    }
+                }
+
+                onError(stageError);
+                yield break;
+            }
+
+            try
+            {
+                var buffer = new byte[StreamingAssetCopyChunkSize];
+                var copiedSinceYield = 0;
+                while (true)
+                {
+                    int bytesRead;
+                    try
+                    {
+                        bytesRead = AndroidJavaCallInt(inputStream, "read", buffer);
+                    }
+                    catch (Exception ex)
+                    {
+                        stageError =
+                            new IOException(
+                                "Android 打包媒体资源读取失败: " + ex.Message,
+                                ex);
+                        break;
+                    }
+
+                    if (bytesRead < 0)
+                    {
+                        break;
+                    }
+
+                    if (bytesRead == 0)
+                    {
+                        yield return null;
+                        continue;
+                    }
+
+                    outputStream.Write(buffer, 0, bytesRead);
+                    copiedSinceYield += bytesRead;
+                    if (copiedSinceYield >= StreamingAssetCopyYieldThresholdBytes)
+                    {
+                        copiedSinceYield = 0;
+                        yield return null;
+                    }
+                }
+
+                if (stageError != null)
+                {
+                    onError(stageError);
+                    yield break;
+                }
+
+                outputStream.Flush();
+                if (outputStream.Length <= 0)
+                {
+                    onError(
+                        new IOException(
+                            "Android 打包媒体资源复制结果为空。"));
+                    yield break;
+                }
+
+                onSuccess();
+            }
+            finally
+            {
+                if (outputStream != null)
+                {
+                    outputStream.Dispose();
+                }
+
+                if (inputStream != null)
+                {
+                    try
+                    {
+                        AndroidJavaCallVoid(inputStream, "close");
+                    }
+                    catch
+                    {
+                    }
+
+                    var disposableInputStream = inputStream as IDisposable;
+                    if (disposableInputStream != null)
+                    {
+                        disposableInputStream.Dispose();
+                    }
+                }
+            }
+        }
+
+        internal static bool TryReadAndroidIntentStringExtra(string extraName, out string value)
+        {
+            value = string.Empty;
+            if (Application.platform != RuntimePlatform.Android
+                || string.IsNullOrEmpty(extraName))
+            {
+                return false;
+            }
+
+            try
+            {
+                var unityPlayerClass = CreateAndroidJavaClass("com.unity3d.player.UnityPlayer");
+                if (unityPlayerClass == null)
+                {
+                    return false;
+                }
+
+                using (var unityPlayerDisposable = unityPlayerClass as IDisposable)
+                {
+                    var activity = AndroidJavaGetStaticObject(unityPlayerClass, "currentActivity");
+                    if (activity == null)
+                    {
+                        return false;
+                    }
+
+                    using (var activityDisposable = activity as IDisposable)
+                    {
+                        var intent = AndroidJavaCallObject(activity, "getIntent");
+                        if (intent == null)
+                        {
+                            return false;
+                        }
+
+                        using (var intentDisposable = intent as IDisposable)
+                        {
+                            if (!AndroidJavaCallBool(intent, "hasExtra", extraName))
+                            {
+                                return false;
+                            }
+
+                            var rawValue = AndroidJavaCallString(intent, "getStringExtra", extraName);
+                            if (string.IsNullOrEmpty(rawValue))
+                            {
+                                return false;
+                            }
+
+                            value = rawValue;
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning(
+                    "[MediaRuntimeCommon] android_intent_extra_read_failed"
+                    + " extra=" + extraName
+                    + " error=" + ex.GetType().Name
+                    + " message=" + ex.Message);
+                value = string.Empty;
+                return false;
+            }
+        }
+
+        private static object CreateAndroidJavaClass(string className)
+        {
+            var androidJavaClassType = Type.GetType(
+                "UnityEngine.AndroidJavaClass, UnityEngine.AndroidJNIModule");
+            return androidJavaClassType != null
+                ? Activator.CreateInstance(androidJavaClassType, new object[] { className })
+                : null;
+        }
+
+        private static object CreateAndroidJavaObject(string className, params object[] args)
+        {
+            var androidJavaObjectType = GetAndroidJavaObjectRuntimeType();
+            return androidJavaObjectType != null
+                ? Activator.CreateInstance(
+                    androidJavaObjectType,
+                    new object[] { className, args ?? new object[0] })
+                : null;
+        }
+
+        private static object AndroidJavaGetStaticObject(object javaClass, string fieldName)
+        {
+            if (javaClass == null)
+            {
+                return null;
+            }
+
+            var method = javaClass
+                .GetType()
+                .GetMethods()
+                .FirstOrDefault(candidate =>
+                    string.Equals(candidate.Name, "GetStatic", StringComparison.Ordinal)
+                    && candidate.IsGenericMethodDefinition
+                    && candidate.GetParameters().Length == 1);
+            method = method != null
+                ? method.MakeGenericMethod(GetAndroidJavaObjectRuntimeType())
+                : null;
+            return method != null
+                ? method.Invoke(javaClass, new object[] { fieldName })
+                : null;
+        }
+
+        private static object AndroidJavaCallObject(object javaObject, string methodName, params object[] args)
+        {
+            return AndroidJavaCallGeneric(GetAndroidJavaObjectRuntimeType(), javaObject, methodName, args);
+        }
+
+        private static int AndroidJavaCallInt(object javaObject, string methodName, params object[] args)
+        {
+            var result = AndroidJavaCallGeneric(typeof(int), javaObject, methodName, args);
+            return result is int value ? value : 0;
+        }
+
+        private static bool AndroidJavaCallBool(object javaObject, string methodName, params object[] args)
+        {
+            var result = AndroidJavaCallGeneric(typeof(bool), javaObject, methodName, args);
+            return result is bool value && value;
+        }
+
+        private static string AndroidJavaCallString(object javaObject, string methodName, params object[] args)
+        {
+            var result = AndroidJavaCallGeneric(typeof(string), javaObject, methodName, args);
+            return result as string ?? string.Empty;
+        }
+
+        private static void AndroidJavaCallVoid(object javaObject, string methodName, params object[] args)
+        {
+            if (javaObject == null)
+            {
+                return;
+            }
+
+            var method = javaObject
+                .GetType()
+                .GetMethods()
+                .FirstOrDefault(candidate =>
+                    string.Equals(candidate.Name, "Call", StringComparison.Ordinal)
+                    && !candidate.IsGenericMethod
+                    && candidate.GetParameters().Length == 2
+                    && candidate.GetParameters()[0].ParameterType == typeof(string)
+                    && candidate.GetParameters()[1].ParameterType == typeof(object[]));
+            method?.Invoke(javaObject, new object[] { methodName, args });
+        }
+
+        private static object AndroidJavaCallGeneric(
+            Type returnType,
+            object javaObject,
+            string methodName,
+            params object[] args)
+        {
+            if (javaObject == null || returnType == null)
+            {
+                return null;
+            }
+
+            var method = javaObject
+                .GetType()
+                .GetMethods()
+                .FirstOrDefault(candidate =>
+                    string.Equals(candidate.Name, "Call", StringComparison.Ordinal)
+                    && candidate.IsGenericMethodDefinition
+                    && candidate.GetParameters().Length == 2
+                    && candidate.GetParameters()[0].ParameterType == typeof(string)
+                    && candidate.GetParameters()[1].ParameterType == typeof(object[]));
+            if (method == null)
+            {
+                throw new MissingMethodException("AndroidJavaObject.Call<T> 不可用。");
+            }
+
+            return method.MakeGenericMethod(returnType).Invoke(
+                javaObject,
+                new object[] { methodName, args });
+        }
+
+        private static Type GetAndroidJavaObjectRuntimeType()
+        {
+            return Type.GetType(
+                "UnityEngine.AndroidJavaObject, UnityEngine.AndroidJNIModule");
+        }
+
+        private static Exception UnwrapReflectionException(Exception exception)
+        {
+            var current = exception;
+            while (current is System.Reflection.TargetInvocationException
+                   && current.InnerException != null)
+            {
+                current = current.InnerException;
+            }
+
+            return current;
+        }
+
+        private static bool IsUnityWebRequestStartupUnavailable(Exception exception)
+        {
+            if (exception == null)
+            {
+                return false;
+            }
+
+            var message = exception.Message;
+            return !string.IsNullOrEmpty(message)
+                && message.IndexOf(
+                    "UnityWebRequest system is not yet available",
+                    StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static void TryDeleteFile(string path)
+        {
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                return;
+            }
+
+            try
+            {
+                File.Delete(path);
+            }
+            catch
+            {
+                // 临时文件清理由后续下载覆盖或下次启动重试兜底。
+            }
         }
 
         private static bool TryResolveAbsolutePath(
@@ -2770,6 +3365,16 @@ namespace UnityAV
 
             if (Path.IsPathRooted(uri))
             {
+                if (Application.platform == RuntimePlatform.Android)
+                {
+                    string androidResolvedPath;
+                    if (TryResolveAndroidReadableAbsolutePath(uri, out androidResolvedPath))
+                    {
+                        resolvedPath = androidResolvedPath;
+                        return true;
+                    }
+                }
+
                 resolvedPath = Path.GetFullPath(uri);
                 if (!File.Exists(resolvedPath))
                 {
@@ -2790,6 +3395,16 @@ namespace UnityAV
             }
 
             resolvedPath = parsedUri.LocalPath;
+            if (Application.platform == RuntimePlatform.Android)
+            {
+                string androidResolvedPath;
+                if (TryResolveAndroidReadableAbsolutePath(resolvedPath, out androidResolvedPath))
+                {
+                    resolvedPath = androidResolvedPath;
+                    return true;
+                }
+            }
+
             if (!File.Exists(resolvedPath))
             {
                 error = new FileNotFoundException(resolvedPath + " not found.");
@@ -2840,11 +3455,7 @@ namespace UnityAV
         private static string BuildPreparedStreamingAssetPath(string uri)
         {
             var normalizedRelativePath = NormalizeRelativePath(uri);
-            var preparedRoot = Path.GetFullPath(
-                Path.Combine(
-                    Application.persistentDataPath,
-                    PreparedStreamingAssetsRootName,
-                    BuildPreparedSourceNamespaceKey()));
+            var preparedRoot = GetPreparedStreamingAssetsRootPath();
             var preparedPath = Path.GetFullPath(
                 Path.Combine(
                     preparedRoot,
@@ -2857,6 +3468,381 @@ namespace UnityAV
             }
 
             return preparedPath;
+        }
+
+        private static string GetPreparedStreamingAssetsRootPath()
+        {
+            var rootBasePath = Application.persistentDataPath;
+            if (Application.platform == RuntimePlatform.Android)
+            {
+                string androidFilesDirectory;
+                if (TryGetAndroidInternalFilesDirectory(out androidFilesDirectory))
+                {
+                    rootBasePath = androidFilesDirectory;
+                }
+            }
+
+            return Path.GetFullPath(
+                Path.Combine(
+                    rootBasePath,
+                    PreparedStreamingAssetsRootName,
+                    BuildPreparedSourceNamespaceKey()));
+        }
+
+        private static bool TryGetAndroidInternalFilesDirectory(out string path)
+        {
+            path = string.Empty;
+            if (Application.platform != RuntimePlatform.Android)
+            {
+                return false;
+            }
+
+            try
+            {
+                var unityPlayerClass = CreateAndroidJavaClass("com.unity3d.player.UnityPlayer");
+                if (unityPlayerClass == null)
+                {
+                    return false;
+                }
+
+                using (var unityPlayerDisposable = unityPlayerClass as IDisposable)
+                {
+                    var activity = AndroidJavaGetStaticObject(unityPlayerClass, "currentActivity");
+                    if (activity == null)
+                    {
+                        return false;
+                    }
+
+                    using (var activityDisposable = activity as IDisposable)
+                    {
+                        var filesDir = AndroidJavaCallObject(activity, "getFilesDir");
+                        if (filesDir == null)
+                        {
+                            return false;
+                        }
+
+                        using (var filesDirDisposable = filesDir as IDisposable)
+                        {
+                            var absolutePath = AndroidJavaCallString(filesDir, "getAbsolutePath");
+                            if (string.IsNullOrEmpty(absolutePath))
+                            {
+                                return false;
+                            }
+
+                            path = absolutePath;
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning(
+                    "[MediaRuntimeCommon] android_internal_files_dir_failed"
+                    + " error=" + ex.GetType().Name
+                    + " message=" + ex.Message);
+                path = string.Empty;
+                return false;
+            }
+        }
+
+        private static bool TryGetAndroidExternalFilesDirectory(out string path)
+        {
+            path = string.Empty;
+            if (Application.platform != RuntimePlatform.Android)
+            {
+                return false;
+            }
+
+            try
+            {
+                var unityPlayerClass = CreateAndroidJavaClass("com.unity3d.player.UnityPlayer");
+                if (unityPlayerClass == null)
+                {
+                    return false;
+                }
+
+                using (var unityPlayerDisposable = unityPlayerClass as IDisposable)
+                {
+                    var activity = AndroidJavaGetStaticObject(unityPlayerClass, "currentActivity");
+                    if (activity == null)
+                    {
+                        return false;
+                    }
+
+                    using (var activityDisposable = activity as IDisposable)
+                    {
+                        var externalFilesDir = AndroidJavaCallObject(
+                            activity,
+                            "getExternalFilesDir",
+                            new object[] { null });
+                        if (externalFilesDir == null)
+                        {
+                            return false;
+                        }
+
+                        using (var externalFilesDirDisposable = externalFilesDir as IDisposable)
+                        {
+                            var absolutePath = AndroidJavaCallString(
+                                externalFilesDir,
+                                "getAbsolutePath");
+                            if (string.IsNullOrEmpty(absolutePath))
+                            {
+                                return false;
+                            }
+
+                            path = absolutePath.Replace('\\', '/');
+                            Debug.Log(
+                                "[MediaRuntimeCommon] android_external_files_dir=" + path);
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning(
+                    "[MediaRuntimeCommon] android_external_files_dir_failed"
+                    + " error=" + ex.GetType().Name
+                    + " message=" + ex.Message);
+                path = string.Empty;
+                return false;
+            }
+        }
+
+        private static bool TryResolveAndroidReadableAbsolutePath(
+            string uri,
+            out string resolvedPath)
+        {
+            resolvedPath = string.Empty;
+            if (Application.platform != RuntimePlatform.Android || string.IsNullOrEmpty(uri))
+            {
+                return false;
+            }
+
+            var normalizedInput = uri.Replace('\\', '/');
+            var candidates = new List<string>();
+            AddDistinctAndroidPathCandidate(candidates, normalizedInput);
+
+            const string SdcardPrefix = "/sdcard/";
+            const string StoragePrefix = "/storage/emulated/0/";
+            var packageIdentifier = Application.identifier ?? string.Empty;
+
+            if (normalizedInput.StartsWith(SdcardPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                AddDistinctAndroidPathCandidate(
+                    candidates,
+                    StoragePrefix + normalizedInput.Substring(SdcardPrefix.Length));
+            }
+            else if (normalizedInput.StartsWith(StoragePrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                AddDistinctAndroidPathCandidate(
+                    candidates,
+                    SdcardPrefix + normalizedInput.Substring(StoragePrefix.Length));
+            }
+
+            string internalFilesDirectory;
+            if (TryGetAndroidInternalFilesDirectory(out internalFilesDirectory))
+            {
+                Debug.Log(
+                    "[MediaRuntimeCommon] android_absolute_path_probe"
+                    + " input=" + normalizedInput
+                    + " internalFilesDir=" + internalFilesDirectory);
+
+                var packageInternalUserPrefix = "/data/user/0/"
+                    + packageIdentifier
+                    + "/files/";
+                var packageInternalDataPrefix = "/data/data/"
+                    + packageIdentifier
+                    + "/files/";
+
+                if (normalizedInput.StartsWith(packageInternalUserPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    AddDistinctAndroidPathCandidate(
+                        candidates,
+                        CombineAndroidPath(
+                            internalFilesDirectory,
+                            normalizedInput.Substring(packageInternalUserPrefix.Length)));
+                }
+
+                if (normalizedInput.StartsWith(packageInternalDataPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    AddDistinctAndroidPathCandidate(
+                        candidates,
+                        CombineAndroidPath(
+                            internalFilesDirectory,
+                            normalizedInput.Substring(packageInternalDataPrefix.Length)));
+                }
+
+                if (!normalizedInput.StartsWith(StoragePrefix, StringComparison.OrdinalIgnoreCase)
+                    && !normalizedInput.StartsWith(SdcardPrefix, StringComparison.OrdinalIgnoreCase)
+                    && !normalizedInput.StartsWith("/data/", StringComparison.OrdinalIgnoreCase))
+                {
+                    AddDistinctAndroidPathCandidate(
+                        candidates,
+                        CombineAndroidPath(
+                            internalFilesDirectory,
+                            normalizedInput.TrimStart('/')));
+                }
+            }
+
+            string externalFilesDirectory;
+            if (TryGetAndroidExternalFilesDirectory(out externalFilesDirectory))
+            {
+                Debug.Log(
+                    "[MediaRuntimeCommon] android_absolute_path_probe"
+                    + " input=" + normalizedInput
+                    + " externalFilesDir=" + externalFilesDirectory);
+                var packageExternalPrefix = StoragePrefix
+                    + "Android/data/"
+                    + packageIdentifier
+                    + "/files/";
+                var packageSdcardPrefix = SdcardPrefix
+                    + "Android/data/"
+                    + packageIdentifier
+                    + "/files/";
+
+                if (normalizedInput.StartsWith(packageExternalPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    AddDistinctAndroidPathCandidate(
+                        candidates,
+                        CombineAndroidPath(
+                            externalFilesDirectory,
+                            normalizedInput.Substring(packageExternalPrefix.Length)));
+                }
+
+                if (normalizedInput.StartsWith(packageSdcardPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    AddDistinctAndroidPathCandidate(
+                        candidates,
+                        CombineAndroidPath(
+                            externalFilesDirectory,
+                            normalizedInput.Substring(packageSdcardPrefix.Length)));
+                }
+            }
+
+            for (var index = 0; index < candidates.Count; index++)
+            {
+                string androidReadablePath;
+                if (TryGetAndroidReadableFilePath(candidates[index], out androidReadablePath))
+                {
+                    Debug.Log(
+                        "[MediaRuntimeCommon] android_absolute_path_resolved"
+                        + " input=" + normalizedInput
+                        + " candidate=" + candidates[index]
+                        + " resolved=" + androidReadablePath);
+                    resolvedPath = androidReadablePath;
+                    return true;
+                }
+            }
+
+            Debug.LogWarning(
+                "[MediaRuntimeCommon] android_absolute_path_probe_failed"
+                + " input=" + normalizedInput
+                + " candidates=" + string.Join(" | ", candidates.ToArray()));
+            return false;
+        }
+
+        private static void AddDistinctAndroidPathCandidate(
+            List<string> candidates,
+            string candidate)
+        {
+            if (candidates == null || string.IsNullOrEmpty(candidate))
+            {
+                return;
+            }
+
+            var normalizedCandidate = candidate.Replace('\\', '/');
+            for (var index = 0; index < candidates.Count; index++)
+            {
+                if (string.Equals(
+                    candidates[index],
+                    normalizedCandidate,
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+            }
+
+            candidates.Add(normalizedCandidate);
+        }
+
+        private static string CombineAndroidPath(string root, string relativePath)
+        {
+            var normalizedRoot = (root ?? string.Empty).Replace('\\', '/').TrimEnd('/');
+            var normalizedRelativePath = (relativePath ?? string.Empty)
+                .Replace('\\', '/')
+                .TrimStart('/');
+            return string.IsNullOrEmpty(normalizedRelativePath)
+                ? normalizedRoot
+                : normalizedRoot + "/" + normalizedRelativePath;
+        }
+
+        private static bool TryGetAndroidReadableFilePath(
+            string path,
+            out string resolvedPath)
+        {
+            resolvedPath = string.Empty;
+            if (Application.platform != RuntimePlatform.Android || string.IsNullOrEmpty(path))
+            {
+                return false;
+            }
+
+            try
+            {
+                var file = CreateAndroidJavaObject("java.io.File", path);
+                if (file == null)
+                {
+                    return false;
+                }
+
+                using (var fileDisposable = file as IDisposable)
+                {
+                    var exists = AndroidJavaCallBool(file, "exists");
+                    var canRead = AndroidJavaCallBool(file, "canRead");
+                    Debug.Log(
+                        "[MediaRuntimeCommon] android_file_probe"
+                        + " path=" + path
+                        + " exists=" + exists
+                        + " canRead=" + canRead);
+                    if (!exists || !canRead)
+                    {
+                        return false;
+                    }
+
+                    var canonicalPath = string.Empty;
+                    try
+                    {
+                        canonicalPath = AndroidJavaCallString(file, "getCanonicalPath");
+                    }
+                    catch
+                    {
+                    }
+
+                    if (string.IsNullOrEmpty(canonicalPath))
+                    {
+                        canonicalPath = AndroidJavaCallString(file, "getAbsolutePath");
+                    }
+
+                    if (string.IsNullOrEmpty(canonicalPath))
+                    {
+                        return false;
+                    }
+
+                    resolvedPath = canonicalPath.Replace('\\', '/');
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning(
+                    "[MediaRuntimeCommon] android_readable_file_probe_failed"
+                    + " path=" + path
+                    + " error=" + ex.GetType().Name
+                    + " message=" + ex.Message);
+                resolvedPath = string.Empty;
+                return false;
+            }
         }
 
         private static string EncodeRelativeUriPath(string relativePath)

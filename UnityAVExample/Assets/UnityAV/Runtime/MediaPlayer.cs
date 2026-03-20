@@ -1609,8 +1609,10 @@ namespace UnityAV
                         resolvedNativeSurfaceKind)
                     + " size=" + Width + "x" + Height);
 
+                var runtimePreferredBackend =
+                    MediaNativeInteropCommon.ResolveRuntimePreferredBackend(PreferredBackend);
                 var openOptions = MediaNativeInteropCommon.CreateOpenOptions(
-                    PreferredBackend,
+                    runtimePreferredBackend,
                     StrictBackend);
                 var nativeTargetExtraFlags = ResolveNativeVideoTargetExtraFlags();
                 var nativeTarget = MediaNativeInteropCommon.CreateNativeVideoTarget(
@@ -1686,7 +1688,7 @@ namespace UnityAV
                 }
                 else
                 {
-                    var diagnostic = ReadBackendRuntimeDiagnostic(uri);
+                    var diagnostic = ReadBackendRuntimeDiagnostic(uri, runtimePreferredBackend);
                     if (string.IsNullOrEmpty(diagnostic))
                     {
                         throw new Exception($"Failed to create player with error: {_id}");
@@ -3808,11 +3810,13 @@ namespace UnityAV
             }
         }
 
-        private string ReadBackendRuntimeDiagnostic(string uri)
+        private string ReadBackendRuntimeDiagnostic(
+            string uri,
+            MediaBackendKind runtimePreferredBackend)
         {
             return MediaNativeInteropCommon.ReadBackendRuntimeDiagnostic(
                 GetBackendRuntimeDiagnostic,
-                PreferredBackend,
+                runtimePreferredBackend,
                 uri,
                 EnableAudio);
         }
@@ -3822,10 +3826,13 @@ namespace UnityAV
             ref MediaNativeInteropCommon.RustAVNativeVideoTarget nativeTarget,
             ref MediaNativeInteropCommon.RustAVPlayerOpenOptions openOptions)
         {
+            var runtimePreferredBackend =
+                MediaNativeInteropCommon.ResolveRuntimePreferredBackend(PreferredBackend);
             Debug.Log(
                 "[MediaPlayer] native_video_create_begin"
                 + " uri=" + uri
                 + " backend=" + PreferredBackend
+                + " effective_backend=" + runtimePreferredBackend
                 + " strict_backend=" + StrictBackend
                 + " texture_type=" + (_targetTexture != null ? _targetTexture.GetType().Name : "null")
                 + " target_handle=0x" + nativeTarget.TargetHandle.ToString("X")
@@ -3855,7 +3862,7 @@ namespace UnityAV
             MediaNativeInteropCommon.NativeVideoInteropCapsView capsView;
             if (!MediaNativeInteropCommon.TryReadNativeVideoInteropCaps(
                 GetNativeVideoInteropCaps,
-                PreferredBackend,
+                runtimePreferredBackend,
                 uri,
                 ref nativeTarget,
                 out capsView))

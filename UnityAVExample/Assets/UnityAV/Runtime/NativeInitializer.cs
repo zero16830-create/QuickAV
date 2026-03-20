@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using AOT;
 using UnityEngine;
 
 namespace UnityAV
@@ -155,16 +156,19 @@ namespace UnityAV
             }
         }
 
+        [MonoPInvokeCallback(typeof(LogDelegate))]
         private static void DebugLogThunk(IntPtr message)
         {
             Debug.Log("rustav_native: " + PtrToString(message));
         }
 
+        [MonoPInvokeCallback(typeof(LogDelegate))]
         private static void WarningLogThunk(IntPtr message)
         {
             Debug.LogWarning("rustav_native: " + PtrToString(message));
         }
 
+        [MonoPInvokeCallback(typeof(LogDelegate))]
         private static void ErrorMethodThunk(IntPtr message)
         {
             Debug.LogError("rustav_native: " + PtrToString(message));

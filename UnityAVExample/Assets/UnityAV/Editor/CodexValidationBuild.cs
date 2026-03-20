@@ -22,12 +22,17 @@ namespace UnityAV.Editor
         private const string NativePreviewScenePath = "Assets/UnityAV/Validation/CodexNativeVideoPreview.generated.unity";
         private const string MaterialPath = "Assets/UnityAV/Materials/VideoMaterial.mat";
         private const string PullBuildPath = "Build/CodexPullValidation/CodexPullValidation.exe";
+        private const string AndroidPullBuildPath = "Build/CodexPullValidationAndroid/CodexPullValidation.apk";
         private const string NativeBuildPath = "Build/CodexNativeVideoValidation/CodexNativeVideoValidation.exe";
         private const string MediaPlayerAuditBuildPath = "Build/CodexMediaPlayerAudioAudit/CodexMediaPlayerAudioAudit.exe";
         private const string NativePreviewBuildPath = "Build/CodexNativeVideoPreview/CodexNativeVideoPreview.exe";
         private const string SampleUri = "SampleVideo_1280x720_10mb.mp4";
         private const int DefaultVideoWidth = 1280;
         private const int DefaultVideoHeight = 720;
+        private const string DefaultAndroidValidationProductName = "RustAVValidation";
+        private const string DefaultAndroidValidationCompanyName = "zero16832";
+        private const string DefaultAndroidValidationApplicationIdentifier = "com.zero16832.rustavvalidation";
+        private const string DefaultAndroidValidationArchitectures = "ARM64";
         private const int BuildOutputDeleteRetryCount = 10;
         private const int BuildOutputDeleteRetryDelayMs = 500;
         private const int BuildOutputLockContextLimit = 5;
@@ -157,6 +162,105 @@ namespace UnityAV.Editor
             WindowsNativeRuntimePackager.PackageGstreamerRuntimeOrThrow(PullBuildPath);
 
             Debug.Log("[CodexValidationBuild] build_succeeded=" + PullBuildPath);
+        }
+
+        public static void BuildAndroidValidationPlayerFromCi()
+        {
+            var args = new BuildArguments(Environment.GetCommandLineArgs());
+            var outputPath = args.Get("rustavOutput", AndroidPullBuildPath);
+            var version = args.Get("rustavVersion", "0.1.0");
+            var applicationIdentifier = args.Get(
+                "rustavApplicationIdentifier",
+                DefaultAndroidValidationApplicationIdentifier);
+            var androidVersionCode = args.GetInt("rustavAndroidVersionCode", 1);
+            var androidArchitectures = ParseAndroidArchitectures(
+                args.Get(
+                    "rustavAndroidArchitectures",
+                    DefaultAndroidValidationArchitectures));
+            var androidAppBundle = args.GetBool("rustavAndroidAppBundle", false);
+
+            CreatePullValidationScene();
+            PrepareSingleFileBuildOutput(outputPath);
+
+            PlayerSettings.productName = DefaultAndroidValidationProductName;
+            PlayerSettings.companyName = DefaultAndroidValidationCompanyName;
+            PlayerSettings.bundleVersion = version;
+            PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android, applicationIdentifier);
+            PlayerSettings.Android.bundleVersionCode = Math.Max(1, androidVersionCode);
+            PlayerSettings.SetScriptingBackend(
+                UnityEditor.Build.NamedBuildTarget.Android,
+                ScriptingImplementation.IL2CPP);
+            PlayerSettings.Android.targetArchitectures = androidArchitectures;
+            EditorUserBuildSettings.buildAppBundle = androidAppBundle;
+
+            BuildReport report;
+            try
+            {
+                report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+                {
+                    scenes = new[] { PullScenePath },
+                    locationPathName = outputPath,
+                    target = BuildTarget.Android,
+                    options = BuildOptions.Development,
+                });
+            }
+            finally
+            {
+                DeleteGeneratedValidationScene(PullScenePath);
+            }
+
+            if (report.summary.result != BuildResult.Succeeded)
+            {
+                throw new Exception(
+                    "Android Pull 验证包构建失败: " + report.summary.result);
+            }
+
+            Debug.Log("[CodexValidationBuild] android_pull_build_succeeded=" + outputPath);
+        }
+
+        private static AndroidArchitecture ParseAndroidArchitectures(string rawValue)
+        {
+            var value = rawValue ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return AndroidArchitecture.ARM64;
+            }
+
+            var result = 0;
+            var tokens = value.Split(new[] { ',', ';', '|', '+' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var token in tokens)
+            {
+                switch (token.Trim().ToUpperInvariant())
+                {
+                    case "ARM64":
+                    case "ARM64-V8A":
+                        result |= (int)AndroidArchitecture.ARM64;
+                        break;
+                    case "ARMV7":
+                    case "ARMEABI-V7A":
+                        result |= (int)AndroidArchitecture.ARMv7;
+                        break;
+                    case "X86":
+                        result |= (int)AndroidArchitecture.X86;
+                        break;
+                    case "X86_64":
+                    case "X64":
+                        result |= (int)AndroidArchitecture.X86_64;
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException(
+                            nameof(rawValue),
+                            rawValue,
+                            "不支持的 Android 架构参数");
+                }
+            }
+
+            if (result == 0)
+            {
+                return AndroidArchitecture.ARM64;
+            }
+
+            return (AndroidArchitecture)result;
         }
 
         public static void BuildWindowsNativeVideoValidationPlayer()
@@ -483,6 +587,30 @@ namespace UnityAV.Editor
             Directory.CreateDirectory(buildDirectory);
         }
 
+        private static void PrepareSingleFileBuildOutput(string buildPath)
+        {
+            if (string.IsNullOrWhiteSpace(buildPath))
+            {
+                return;
+            }
+
+            if (File.Exists(buildPath))
+            {
+                File.Delete(buildPath);
+            }
+
+            if (Directory.Exists(buildPath))
+            {
+                Directory.Delete(buildPath, true);
+            }
+
+            var buildDirectory = Path.GetDirectoryName(buildPath);
+            if (!string.IsNullOrWhiteSpace(buildDirectory))
+            {
+                Directory.CreateDirectory(buildDirectory);
+            }
+        }
+
         private static void StopRunningValidationPlayer(string buildPath)
         {
             var exePath = Path.GetFullPath(buildPath);
@@ -680,6 +808,47 @@ namespace UnityAV.Editor
             catch (UnauthorizedAccessException)
             {
                 return $"{filePath} ({ex.GetType().Name}: {ex.Message}; metadata=unavailable)";
+            }
+        }
+
+        private sealed class BuildArguments
+        {
+            private readonly string[] _args;
+
+            public BuildArguments(string[] args)
+            {
+                _args = args ?? Array.Empty<string>();
+            }
+
+            public string Get(string key, string fallback)
+            {
+                var prefix = "-" + key + "=";
+                foreach (var arg in _args)
+                {
+                    if (!string.IsNullOrEmpty(arg)
+                        && arg.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return arg.Substring(prefix.Length);
+                    }
+                }
+
+                return fallback;
+            }
+
+            public int GetInt(string key, int fallback)
+            {
+                int parsed;
+                return int.TryParse(Get(key, string.Empty), out parsed)
+                    ? parsed
+                    : fallback;
+            }
+
+            public bool GetBool(string key, bool fallback)
+            {
+                bool parsed;
+                return bool.TryParse(Get(key, string.Empty), out parsed)
+                    ? parsed
+                    : fallback;
             }
         }
     }

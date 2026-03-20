@@ -17,6 +17,7 @@ namespace UnityAV
         private const int DefaultHeight = 1024;
         private const int InvalidPlayerId = -1;
         private const int FileAudioStartThresholdMilliseconds = 400;
+        private const int AndroidFileAudioStartThresholdMilliseconds = 600;
         private const int RealtimeAudioStartThresholdMilliseconds = 120;
         private const int StreamingAudioClipLengthSeconds = 1800;
         private const int RealtimeAudioStartupGraceMilliseconds = 750;
@@ -26,6 +27,7 @@ namespace UnityAV
         private const double RealtimeObservedAudioClockClampSeconds = 0.180;
         private const int RealtimeAudioRingCapacityMilliseconds = 750;
         private const int FileAudioBufferedCeilingMilliseconds = 1000;
+        private const int AndroidFileAudioBufferedCeilingMilliseconds = 2500;
         private const int RealtimeAudioBufferedCeilingMilliseconds = 60;
         private const int MaxAudioCopyBytes = 64 * 1024;
         private const int MaxAudioCopyIterations = 16;
@@ -91,6 +93,9 @@ namespace UnityAV
             public bool IsRealtime;
             public bool CanSeek;
             public bool IsLooping;
+            public int StreamCount;
+            public int VideoDecoderCount;
+            public bool HasAudioDecoder;
             public long SourcePacketCount;
             public long SourceTimeoutCount;
             public long SourceReconnectCount;
@@ -202,6 +207,7 @@ namespace UnityAV
         private int _audioWriteIndex;
         private int _audioBufferedSamples;
         private int _audioChannels;
+        private int _audioSourceSampleRate;
         private int _audioSampleRate;
         private int _audioBytesPerSample;
         private bool _playRequested;
@@ -235,6 +241,7 @@ namespace UnityAV
         private float _lastVideoDiagnosticRealtimeAt = -1f;
         private float _nextVideoDiagnosticRealtimeAt;
         private readonly object _audioLock = new object();
+        private float[] _audioPlaybackFloats = new float[0];
 
         [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerCreatePullRGBA")]
         private static extern int CreatePlayerPullRGBA(string uri, int targetWidth, int targetHeight);
@@ -564,6 +571,9 @@ namespace UnityAV
                 IsRealtime = runtimeHealth.IsRealtime,
                 CanSeek = runtimeHealth.CanSeek,
                 IsLooping = runtimeHealth.IsLooping,
+                StreamCount = runtimeHealth.StreamCount,
+                VideoDecoderCount = runtimeHealth.VideoDecoderCount,
+                HasAudioDecoder = runtimeHealth.HasAudioDecoder,
                 SourcePacketCount = runtimeHealth.SourcePacketCount,
                 SourceTimeoutCount = runtimeHealth.SourceTimeoutCount,
                 SourceReconnectCount = runtimeHealth.SourceReconnectCount,
@@ -996,14 +1006,14 @@ namespace UnityAV
         private double BufferedAudioSecondsFromBytes(int bufferedBytes)
         {
             if (bufferedBytes <= 0
-                || _audioSampleRate <= 0
+                || _audioSourceSampleRate <= 0
                 || _audioChannels <= 0
                 || _audioBytesPerSample <= 0)
             {
                 return 0.0;
             }
 
-            var bytesPerSecond = _audioSampleRate * _audioChannels * _audioBytesPerSample;
+            var bytesPerSecond = _audioSourceSampleRate * _audioChannels * _audioBytesPerSample;
             if (bytesPerSecond <= 0)
             {
                 return 0.0;
@@ -1077,6 +1087,7 @@ namespace UnityAV
                 + " native_high_water_ms=" + nativeHighWaterMilliseconds.ToString("F1")
                 + " buffered_ms=" + bufferedMilliseconds.ToString("F1")
                 + " high_water_ms=" + highWaterMilliseconds.ToString("F1")
+                + " source_hz=" + _audioSourceSampleRate
                 + " clip_hz=" + _audioSampleRate
                 + " output_hz=" + AudioSettings.outputSampleRate
                 + " dsp_buffer=" + dspBufferLength + "x" + dspBufferCount
@@ -1262,7 +1273,27 @@ namespace UnityAV
                 }
 
                 Buffer.BlockCopy(_audioBytes, 0, _audioFloats, 0, copied);
-                WriteAudioSamples(_audioFloats, sampleCount, meta.TimeSec);
+                var playbackSamples = _audioFloats;
+                var playbackSampleCount = sampleCount;
+                if (_audioSourceSampleRate > 0
+                    && _audioSampleRate > 0
+                    && _audioSourceSampleRate != _audioSampleRate)
+                {
+                    playbackSampleCount = ResampleInterleavedAudioForPlayback(
+                        _audioFloats,
+                        sampleCount,
+                        _audioSourceSampleRate,
+                        _audioSampleRate,
+                        _audioChannels);
+                    if (playbackSampleCount <= 0)
+                    {
+                        break;
+                    }
+
+                    playbackSamples = _audioPlaybackFloats;
+                }
+
+                WriteAudioSamples(playbackSamples, playbackSampleCount, meta.TimeSec);
 
                 if (copied < bytesToCopy)
                 {
@@ -1331,15 +1362,18 @@ namespace UnityAV
                 return false;
             }
 
+            var playbackSampleRate = DeterminePlaybackSampleRate(meta.SampleRate);
             if (_audioClip != null
-                && _audioSampleRate == meta.SampleRate
+                && _audioSourceSampleRate == meta.SampleRate
+                && _audioSampleRate == playbackSampleRate
                 && _audioChannels == meta.Channels
                 && _audioBytesPerSample == meta.BytesPerSample)
             {
                 return true;
             }
 
-            _audioSampleRate = meta.SampleRate;
+            _audioSourceSampleRate = meta.SampleRate;
+            _audioSampleRate = playbackSampleRate;
             _audioChannels = meta.Channels;
             _audioBytesPerSample = meta.BytesPerSample;
 
@@ -1380,6 +1414,15 @@ namespace UnityAV
 
             _audioSource.clip = _audioClip;
             _audioSource.loop = true;
+            if (_audioSourceSampleRate != _audioSampleRate)
+            {
+                Debug.Log(
+                    "[MediaPlayerPull] audio_rate_bridge source_hz="
+                    + _audioSourceSampleRate
+                    + " clip_hz=" + _audioSampleRate
+                    + " output_hz=" + AudioSettings.outputSampleRate
+                    + " realtime=" + _isRealtimeSource);
+            }
             return true;
         }
 
@@ -1480,7 +1523,7 @@ namespace UnityAV
 
             var steadyStateMilliseconds = _isRealtimeSource
                 ? RealtimeAudioBufferedCeilingMilliseconds
-                : FileAudioBufferedCeilingMilliseconds;
+                : GetFileAudioBufferedCeilingMilliseconds();
             var steadyStateSamples = (_audioSampleRate * _audioChannels * steadyStateMilliseconds) / 1000;
             steadyStateSamples = Math.Max(steadyStateSamples, _audioChannels);
 
@@ -1614,7 +1657,7 @@ namespace UnityAV
         {
             var thresholdMilliseconds = _isRealtimeSource
                 ? RealtimeAudioStartThresholdMilliseconds
-                : FileAudioStartThresholdMilliseconds;
+                : GetFileAudioStartThresholdMilliseconds();
             var thresholdSamples = (_audioSampleRate * _audioChannels
                 * thresholdMilliseconds) / 1000;
             if (!_isRealtimeSource)
@@ -1760,6 +1803,115 @@ namespace UnityAV
             return 1.0 / (_audioSampleRate * _audioChannels);
         }
 
+        private int GetFileAudioStartThresholdMilliseconds()
+        {
+            if (IsAndroidFileAudioOutputRateBridgeActive())
+            {
+                return AndroidFileAudioStartThresholdMilliseconds;
+            }
+
+            return FileAudioStartThresholdMilliseconds;
+        }
+
+        private int GetFileAudioBufferedCeilingMilliseconds()
+        {
+            if (IsAndroidFileAudioOutputRateBridgeActive())
+            {
+                return AndroidFileAudioBufferedCeilingMilliseconds;
+            }
+
+            return FileAudioBufferedCeilingMilliseconds;
+        }
+
+        private bool IsAndroidFileAudioOutputRateBridgeActive()
+        {
+            return !_isRealtimeSource
+                && Application.platform == RuntimePlatform.Android
+                && _audioSourceSampleRate > 0
+                && _audioSampleRate > 0
+                && _audioSourceSampleRate != _audioSampleRate;
+        }
+
+        private int DeterminePlaybackSampleRate(int sourceSampleRate)
+        {
+            if (sourceSampleRate <= 0)
+            {
+                return sourceSampleRate;
+            }
+
+            if (_isRealtimeSource || Application.platform != RuntimePlatform.Android)
+            {
+                return sourceSampleRate;
+            }
+
+            var outputSampleRate = AudioSettings.outputSampleRate;
+            if (outputSampleRate <= 0 || outputSampleRate >= sourceSampleRate)
+            {
+                return sourceSampleRate;
+            }
+
+            if (sourceSampleRate % outputSampleRate != 0)
+            {
+                return sourceSampleRate;
+            }
+
+            return outputSampleRate;
+        }
+
+        private int ResampleInterleavedAudioForPlayback(
+            float[] source,
+            int sourceSampleCount,
+            int sourceSampleRate,
+            int playbackSampleRate,
+            int channels)
+        {
+            if (source == null
+                || sourceSampleCount <= 0
+                || sourceSampleRate <= 0
+                || playbackSampleRate <= 0
+                || channels <= 0
+                || sourceSampleRate == playbackSampleRate)
+            {
+                return sourceSampleCount;
+            }
+
+            var sourceFrameCount = sourceSampleCount / channels;
+            if (sourceFrameCount <= 1)
+            {
+                return sourceSampleCount;
+            }
+
+            var playbackFrameCount =
+                (int)Math.Round(sourceFrameCount * (double)playbackSampleRate / sourceSampleRate);
+            playbackFrameCount = Math.Max(playbackFrameCount, 1);
+            var playbackSampleCount = playbackFrameCount * channels;
+            if (_audioPlaybackFloats.Length != playbackSampleCount)
+            {
+                _audioPlaybackFloats = new float[playbackSampleCount];
+            }
+
+            var frameScale = (double)sourceSampleRate / playbackSampleRate;
+            for (var frameIndex = 0; frameIndex < playbackFrameCount; frameIndex++)
+            {
+                var sourceFramePosition = frameIndex * frameScale;
+                var sourceFrame0 = Math.Min((int)sourceFramePosition, sourceFrameCount - 1);
+                var sourceFrame1 = Math.Min(sourceFrame0 + 1, sourceFrameCount - 1);
+                var blend = sourceFramePosition - sourceFrame0;
+                var destinationOffset = frameIndex * channels;
+                var sourceOffset0 = sourceFrame0 * channels;
+                var sourceOffset1 = sourceFrame1 * channels;
+                for (var channelIndex = 0; channelIndex < channels; channelIndex++)
+                {
+                    var sample0 = source[sourceOffset0 + channelIndex];
+                    var sample1 = source[sourceOffset1 + channelIndex];
+                    _audioPlaybackFloats[destinationOffset + channelIndex] =
+                        (float)(sample0 + ((sample1 - sample0) * blend));
+                }
+            }
+
+            return playbackSampleCount;
+        }
+
         private void RefreshBufferedAudioTailLocked()
         {
             if (_audioBufferedSamples <= 0 || _nextBufferedAudioTimeSec < 0.0)
@@ -1878,8 +2030,10 @@ namespace UnityAV
         {
             try
             {
+                var runtimePreferredBackend =
+                    MediaNativeInteropCommon.ResolveRuntimePreferredBackend(PreferredBackend);
                 var options = MediaNativeInteropCommon.CreateOpenOptions(
-                    PreferredBackend,
+                    runtimePreferredBackend,
                     StrictBackend);
                 if (VideoRenderer == PullVideoRendererKind.Wgpu)
                 {
@@ -1913,9 +2067,11 @@ namespace UnityAV
 
         private string ReadBackendRuntimeDiagnostic(string uri)
         {
+            var runtimePreferredBackend =
+                MediaNativeInteropCommon.ResolveRuntimePreferredBackend(PreferredBackend);
             return MediaNativeInteropCommon.ReadBackendRuntimeDiagnostic(
                 GetBackendRuntimeDiagnostic,
-                PreferredBackend,
+                runtimePreferredBackend,
                 uri,
                 EnableAudio);
         }
@@ -1926,11 +2082,11 @@ namespace UnityAV
             {
                 return MediaNativeInteropCommon.NormalizeBackendKind(
                     GetPlayerBackendKind(_id),
-                    PreferredBackend);
+                    MediaNativeInteropCommon.ResolveRuntimePreferredBackend(PreferredBackend));
             }
             catch (EntryPointNotFoundException)
             {
-                return PreferredBackend;
+                return MediaNativeInteropCommon.ResolveRuntimePreferredBackend(PreferredBackend);
             }
         }
     }

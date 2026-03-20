@@ -1,5 +1,8 @@
 using System;
 using System.Collections;
+using System.IO;
+using System.Linq;
+using System.Text;
 using UnityEngine;
 
 namespace UnityAV
@@ -25,9 +28,22 @@ namespace UnityAV
         public string LoopArgumentName = "-loop=";
         public string ValidationSecondsArgumentName = "-validationSeconds=";
         public string StartupTimeoutSecondsArgumentName = "-startupTimeoutSeconds=";
+        public string RequireAudioOutputArgumentName = "-requireAudioOutput=";
         public string WindowWidthArgumentName = "-windowWidth=";
         public string WindowHeightArgumentName = "-windowHeight=";
         public string PublisherStartUnixMsArgumentName = "-publisherStartUnixMs=";
+        public string AndroidUriExtraName = "rustavUri";
+        public string AndroidBackendExtraName = "rustavBackend";
+        public string AndroidVideoRendererExtraName = "rustavVideoRenderer";
+        public string AndroidLoopExtraName = "rustavLoop";
+        public string AndroidValidationSecondsExtraName = "rustavValidationSeconds";
+        public string AndroidStartupTimeoutSecondsExtraName = "rustavStartupTimeoutSeconds";
+        public string AndroidRequireAudioOutputExtraName = "rustavRequireAudioOutput";
+        public string AndroidWindowWidthExtraName = "rustavWindowWidth";
+        public string AndroidWindowHeightExtraName = "rustavWindowHeight";
+        public string AndroidPublisherStartUnixMsExtraName = "rustavPublisherStartUnixMs";
+        public string SummaryFileName = "codex-validation-summary.txt";
+        public bool RequireAudioOutput = true;
         public bool ForceWindowedMode = true;
         public Transform VideoSurface;
         public Camera ValidationCamera;
@@ -50,6 +66,8 @@ namespace UnityAV
         private bool _observedTextureDuringWindow;
         private bool _observedAudioDuringWindow;
         private bool _observedStartedDuringWindow;
+        private Renderer _videoSurfaceRenderer;
+        private Material _videoSurfaceRuntimeMaterial;
 
         private void Awake()
         {
@@ -63,14 +81,14 @@ namespace UnityAV
                 return;
             }
 
-            var overrideUri = TryReadStringArgument(UriArgumentName);
+            var overrideUri = TryReadOverrideValue(UriArgumentName, AndroidUriExtraName);
             if (!string.IsNullOrEmpty(overrideUri))
             {
                 Player.Uri = overrideUri;
                 Debug.Log("[CodexValidation] override uri=" + overrideUri);
             }
 
-            var overrideBackend = TryReadStringArgument(BackendArgumentName);
+            var overrideBackend = TryReadOverrideValue(BackendArgumentName, AndroidBackendExtraName);
             MediaBackendKind parsedBackend;
             if (TryParseBackend(overrideBackend, out parsedBackend))
             {
@@ -81,7 +99,9 @@ namespace UnityAV
                     + " strict=" + Player.StrictBackend);
             }
 
-            var overrideVideoRenderer = TryReadStringArgument(VideoRendererArgumentName);
+            var overrideVideoRenderer = TryReadOverrideValue(
+                VideoRendererArgumentName,
+                AndroidVideoRendererExtraName);
             MediaPlayerPull.PullVideoRendererKind parsedVideoRenderer;
             if (TryParseVideoRenderer(overrideVideoRenderer, out parsedVideoRenderer))
             {
@@ -90,7 +110,11 @@ namespace UnityAV
             }
 
             bool hasExplicitLoopValue;
-            Player.Loop = TryReadBoolArgument(LoopArgumentName, Player.Loop, out hasExplicitLoopValue);
+            Player.Loop = TryReadBoolArgument(
+                LoopArgumentName,
+                AndroidLoopExtraName,
+                Player.Loop,
+                out hasExplicitLoopValue);
             if (hasExplicitLoopValue)
             {
                 Debug.Log("[CodexValidation] override loop=" + Player.Loop);
@@ -98,17 +122,34 @@ namespace UnityAV
 
             ValidationSeconds = TryReadFloatArgument(
                 ValidationSecondsArgumentName,
+                AndroidValidationSecondsExtraName,
                 ValidationSeconds);
             StartupTimeoutSeconds = TryReadFloatArgument(
                 StartupTimeoutSecondsArgumentName,
+                AndroidStartupTimeoutSecondsExtraName,
                 StartupTimeoutSeconds);
+            bool hasExplicitRequireAudioOutput;
+            RequireAudioOutput = TryReadBoolArgument(
+                RequireAudioOutputArgumentName,
+                AndroidRequireAudioOutputExtraName,
+                RequireAudioOutput,
+                out hasExplicitRequireAudioOutput);
             _publisherStartUnixMs = TryReadLongArgument(
                 PublisherStartUnixMsArgumentName,
+                AndroidPublisherStartUnixMsExtraName,
                 -1L,
                 out _hasPublisherStartUnixMs);
 
-            _requestedWindowWidth = TryReadIntArgument(WindowWidthArgumentName, Player.Width, out _hasExplicitWindowWidth);
-            _requestedWindowHeight = TryReadIntArgument(WindowHeightArgumentName, Player.Height, out _hasExplicitWindowHeight);
+            _requestedWindowWidth = TryReadIntArgument(
+                WindowWidthArgumentName,
+                AndroidWindowWidthExtraName,
+                Player.Width,
+                out _hasExplicitWindowWidth);
+            _requestedWindowHeight = TryReadIntArgument(
+                WindowHeightArgumentName,
+                AndroidWindowHeightExtraName,
+                Player.Height,
+                out _hasExplicitWindowHeight);
 
             if (_requestedWindowWidth > 0)
             {
@@ -149,12 +190,13 @@ namespace UnityAV
             _startTime = _lastLogTime;
             Debug.Log(
                 string.Format(
-                    "[CodexValidation] start validation seconds={0:F1} requestedWindow={1}x{2} explicitWindow={3} video_renderer={4}",
+                    "[CodexValidation] start validation seconds={0:F1} requestedWindow={1}x{2} explicitWindow={3} video_renderer={4} require_audio_output={5}",
                     ValidationSeconds,
                     Player.Width,
                     Player.Height,
                     HasExplicitWindowOverride(),
-                    Player.VideoRenderer));
+                    Player.VideoRenderer,
+                    RequireAudioOutput));
 
             if (HasExplicitWindowOverride())
             {
@@ -175,7 +217,7 @@ namespace UnityAV
                 {
                     var startupElapsed = now - startTime;
                     var outputsReady = snapshot.HasTexture
-                        && (!Player.EnableAudio || snapshot.AudioPlaying);
+                        && (!RequireAudioOutput || !Player.EnableAudio || snapshot.AudioPlaying);
                     if (outputsReady)
                     {
                         StartValidationWindow(
@@ -214,8 +256,9 @@ namespace UnityAV
             }
 
             var finalSnapshot = EmitStatus();
-            var validationPassed = EvaluateValidationResult(finalSnapshot);
-            var exitCode = validationPassed ? 0 : 2;
+            var validationResult = EvaluateValidationResult(finalSnapshot);
+            WriteValidationSummary(validationResult, finalSnapshot);
+            var exitCode = validationResult.Passed ? 0 : 2;
             yield return QuitAfterDelay(0.5f, exitCode);
         }
 
@@ -266,6 +309,18 @@ namespace UnityAV
                 snapshot.PathSelectionTargetZeroCopy,
                 snapshot.PathSelectionSourcePlaneTexturesSupported,
                 snapshot.PathSelectionCpuFallback));
+            if (snapshot.HasRuntimeHealth)
+            {
+                Debug.Log(string.Format(
+                    "[CodexValidation] runtime_health state={0} runtime_state={1} playback_intent={2} stream_count={3} video_decoder_count={4} has_audio_decoder={5} source_last_activity_age_sec={6:F3}",
+                    snapshot.RuntimeStatePublic,
+                    snapshot.RuntimeStateInternal,
+                    snapshot.PlaybackIntent,
+                    snapshot.StreamCount,
+                    snapshot.VideoDecoderCount,
+                    snapshot.HasAudioDecoder,
+                    snapshot.SourceLastActivityAgeSec));
+            }
             if (snapshot.HasWgpuRenderDescriptor)
             {
                 Debug.Log(string.Format(
@@ -373,6 +428,7 @@ namespace UnityAV
 
         private ValidationSnapshot CaptureSnapshot()
         {
+            TrySyncVisibleSurfaceMaterial();
             var playbackTime = SafeReadPlaybackTime();
             var hasTexture = Player.HasPresentedVideoFrame
                 && Player.TargetMaterial != null
@@ -490,10 +546,18 @@ namespace UnityAV
                 Started = Player.HasStartedPlayback,
                 TextureWidth = textureWidth,
                 TextureHeight = textureHeight,
+                HasRuntimeHealth = hasHealth,
+                RuntimeStatePublic = hasHealth ? health.State : -1,
+                RuntimeStateInternal = hasHealth ? health.RuntimeState : -1,
+                PlaybackIntent = hasHealth ? health.PlaybackIntent : -1,
+                StreamCount = hasHealth ? health.StreamCount : -1,
+                VideoDecoderCount = hasHealth ? health.VideoDecoderCount : -1,
+                HasAudioDecoder = hasHealth && health.HasAudioDecoder,
                 SourceState = hasHealth ? health.SourceConnectionState.ToString() : "Unavailable",
                 SourcePackets = hasHealth ? health.SourcePacketCount.ToString() : "-1",
                 SourceTimeouts = hasHealth ? health.SourceTimeoutCount.ToString() : "-1",
                 SourceReconnects = hasHealth ? health.SourceReconnectCount.ToString() : "-1",
+                SourceLastActivityAgeSec = hasHealth ? health.SourceLastActivityAgeSec : -1.0,
                 HasAvSyncSample = hasAvSyncSample,
                 AudioPresentedTimeSec = audioPresentedTimeSec,
                 AudioPipelineDelaySec = audioPipelineDelaySec,
@@ -638,7 +702,7 @@ namespace UnityAV
             }
         }
 
-        private bool EvaluateValidationResult(ValidationSnapshot finalSnapshot)
+        private ValidationResultInfo EvaluateValidationResult(ValidationSnapshot finalSnapshot)
         {
             RecordValidationObservation(finalSnapshot);
 
@@ -653,28 +717,36 @@ namespace UnityAV
             {
                 Debug.LogError(
                     "[CodexValidation] result=failed reason=startup-timeout-no-playback");
-                return false;
+                return ValidationResultInfo.Failed(
+                    "startup-timeout-no-playback",
+                    playbackAdvance);
             }
 
             if (!_observedStartedDuringWindow)
             {
                 Debug.LogError(
                     "[CodexValidation] result=failed reason=playback-not-started");
-                return false;
+                return ValidationResultInfo.Failed(
+                    "playback-not-started",
+                    playbackAdvance);
             }
 
             if (!_observedTextureDuringWindow)
             {
                 Debug.LogError(
                     "[CodexValidation] result=failed reason=missing-video-frame");
-                return false;
+                return ValidationResultInfo.Failed(
+                    "missing-video-frame",
+                    playbackAdvance);
             }
 
-            if (!_observedAudioDuringWindow)
+            if (RequireAudioOutput && Player.EnableAudio && !_observedAudioDuringWindow)
             {
                 Debug.LogError(
                     "[CodexValidation] result=failed reason=audio-not-playing");
-                return false;
+                return ValidationResultInfo.Failed(
+                    "audio-not-playing",
+                    playbackAdvance);
             }
 
             if (playbackAdvance < MinimumPlaybackAdvanceSeconds)
@@ -683,7 +755,9 @@ namespace UnityAV
                     string.Format(
                         "[CodexValidation] result=failed reason=playback-stalled advance={0:F3}s",
                         playbackAdvance));
-                return false;
+                return ValidationResultInfo.Failed(
+                    "playback-stalled",
+                    playbackAdvance);
             }
 
             Debug.Log(
@@ -694,7 +768,68 @@ namespace UnityAV
                     finalSnapshot.SourceTimeouts,
                     finalSnapshot.SourceReconnects));
             Debug.Log("[CodexValidation] complete");
-            return true;
+            return ValidationResultInfo.PassedWithAdvance(playbackAdvance);
+        }
+
+        private void WriteValidationSummary(
+            ValidationResultInfo result,
+            ValidationSnapshot finalSnapshot)
+        {
+            try
+            {
+                var summaryPath = Path.Combine(
+                    Application.persistentDataPath,
+                    SummaryFileName);
+                var builder = new StringBuilder();
+                builder.AppendLine("validation_result=" + (result.Passed ? "passed" : "failed"));
+                builder.AppendLine("reason=" + result.Reason);
+                builder.AppendLine("uri=" + (Player != null ? Player.Uri : string.Empty));
+                builder.AppendLine("requested_backend=" + (Player != null ? Player.PreferredBackend.ToString() : "Unavailable"));
+                builder.AppendLine("actual_backend=" + (Player != null ? Player.ActualBackendKind.ToString() : "Unavailable"));
+                builder.AppendLine("requested_video_renderer=" + (Player != null ? Player.VideoRenderer.ToString() : "Unavailable"));
+                builder.AppendLine("actual_video_renderer=" + (Player != null ? Player.ActualVideoRenderer.ToString() : "Unavailable"));
+                builder.AppendLine("require_audio_output=" + RequireAudioOutput);
+                builder.AppendLine("playback_advance_sec=" + result.PlaybackAdvanceSeconds.ToString("F3"));
+                builder.AppendLine("has_texture=" + finalSnapshot.HasTexture);
+                builder.AppendLine("audio_playing=" + finalSnapshot.AudioPlaying);
+                builder.AppendLine("started=" + finalSnapshot.Started);
+                builder.AppendLine("observed_texture_during_window=" + _observedTextureDuringWindow);
+                builder.AppendLine("observed_audio_during_window=" + _observedAudioDuringWindow);
+                builder.AppendLine("observed_started_during_window=" + _observedStartedDuringWindow);
+                builder.AppendLine("runtime_health_available=" + finalSnapshot.HasRuntimeHealth);
+                builder.AppendLine("state=" + finalSnapshot.RuntimeStatePublic);
+                builder.AppendLine("runtime_state=" + finalSnapshot.RuntimeStateInternal);
+                builder.AppendLine("playback_intent=" + finalSnapshot.PlaybackIntent);
+                builder.AppendLine("stream_count=" + finalSnapshot.StreamCount);
+                builder.AppendLine("video_decoder_count=" + finalSnapshot.VideoDecoderCount);
+                builder.AppendLine("has_audio_decoder=" + finalSnapshot.HasAudioDecoder);
+                builder.AppendLine("source_state=" + finalSnapshot.SourceState);
+                builder.AppendLine("source_packets=" + finalSnapshot.SourcePackets);
+                builder.AppendLine("source_timeouts=" + finalSnapshot.SourceTimeouts);
+                builder.AppendLine("source_reconnects=" + finalSnapshot.SourceReconnects);
+                builder.AppendLine("source_last_activity_age_sec=" + finalSnapshot.SourceLastActivityAgeSec.ToString("F3"));
+                builder.AppendLine("path_selection_available=" + finalSnapshot.HasPathSelection);
+                builder.AppendLine("path_selection_kind=" + finalSnapshot.PathSelectionKind);
+                builder.AppendLine("frame_contract_available=" + finalSnapshot.HasFrameContract);
+                builder.AppendLine("playback_contract_available=" + finalSnapshot.HasPlaybackTimingContract);
+                builder.AppendLine("playback_contract_master_sec=" + finalSnapshot.PlaybackContractMasterTimeSec.ToString("F3"));
+                builder.AppendLine("playback_contract_external_sec=" + finalSnapshot.PlaybackContractExternalTimeSec.ToString("F3"));
+                builder.AppendLine("playback_contract_has_audio_time_sec=" + finalSnapshot.PlaybackContractHasAudioTimeSec);
+                builder.AppendLine("playback_contract_audio_time_sec=" + finalSnapshot.PlaybackContractAudioTimeSec.ToString("F3"));
+                builder.AppendLine("playback_contract_has_audio_presented_time_sec=" + finalSnapshot.PlaybackContractHasAudioPresentedTimeSec);
+                builder.AppendLine("playback_contract_audio_presented_time_sec=" + finalSnapshot.PlaybackContractAudioPresentedTimeSec.ToString("F3"));
+                builder.AppendLine("playback_contract_audio_sink_delay_ms=" + (finalSnapshot.PlaybackContractAudioSinkDelaySec * 1000.0).ToString("F1"));
+                builder.AppendLine("playback_contract_has_audio_clock=" + finalSnapshot.PlaybackContractHasAudioClock);
+                builder.AppendLine("av_sync_contract_available=" + finalSnapshot.HasAvSyncContract);
+                builder.AppendLine("av_sync_contract_clock_delta_ms=" + finalSnapshot.AvSyncContractClockDeltaMs.ToString("F1"));
+                builder.AppendLine("summary_path=" + summaryPath);
+                File.WriteAllText(summaryPath, builder.ToString(), Encoding.UTF8);
+                Debug.Log("[CodexValidation] summary_written=" + summaryPath);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("[CodexValidation] summary_write_failed " + ex.Message);
+            }
         }
 
         private double SafeReadPlaybackTime()
@@ -713,6 +848,7 @@ namespace UnityAV
         private void Update()
         {
             TryConfigureWindow();
+            TrySyncVisibleSurfaceMaterial();
         }
 
         private void TryConfigureWindow()
@@ -816,6 +952,61 @@ namespace UnityAV
             }
         }
 
+        private void TrySyncVisibleSurfaceMaterial()
+        {
+            if (Player == null || VideoSurface == null)
+            {
+                return;
+            }
+
+            if (_videoSurfaceRenderer == null)
+            {
+                _videoSurfaceRenderer = VideoSurface.GetComponent<Renderer>();
+            }
+
+            if (_videoSurfaceRenderer == null)
+            {
+                return;
+            }
+
+            if (_videoSurfaceRuntimeMaterial == null)
+            {
+                _videoSurfaceRuntimeMaterial = _videoSurfaceRenderer.material;
+                var unlitTextureShader = Shader.Find("Unlit/Texture");
+                if (unlitTextureShader != null
+                    && _videoSurfaceRuntimeMaterial.shader != unlitTextureShader)
+                {
+                    _videoSurfaceRuntimeMaterial.shader = unlitTextureShader;
+                }
+
+                _videoSurfaceRuntimeMaterial.color = Color.white;
+            }
+
+            var targetTexture = Player.TargetMaterial != null
+                ? Player.TargetMaterial.mainTexture
+                : null;
+            if (!ReferenceEquals(_videoSurfaceRuntimeMaterial.mainTexture, targetTexture))
+            {
+                _videoSurfaceRuntimeMaterial.mainTexture = targetTexture;
+            }
+        }
+
+        private string TryReadOverrideValue(string prefix, string androidExtraName)
+        {
+            var argumentValue = TryReadStringArgument(prefix);
+            if (!string.IsNullOrEmpty(argumentValue))
+            {
+                return argumentValue;
+            }
+
+            string androidExtraValue;
+            return MediaSourceResolver.TryReadAndroidIntentStringExtra(
+                androidExtraName,
+                out androidExtraValue)
+                ? androidExtraValue
+                : string.Empty;
+        }
+
         private static string TryReadStringArgument(string prefix)
         {
             var args = Environment.GetCommandLineArgs();
@@ -835,9 +1026,13 @@ namespace UnityAV
             return string.Empty;
         }
 
-        private static int TryReadIntArgument(string prefix, int fallback, out bool hasExplicitValue)
+        private int TryReadIntArgument(
+            string prefix,
+            string androidExtraName,
+            int fallback,
+            out bool hasExplicitValue)
         {
-            var value = TryReadStringArgument(prefix);
+            var value = TryReadOverrideValue(prefix, androidExtraName);
             hasExplicitValue = !string.IsNullOrEmpty(value);
             int parsed;
             if (string.IsNullOrEmpty(value) || !int.TryParse(value, out parsed) || parsed <= 0)
@@ -848,9 +1043,12 @@ namespace UnityAV
             return parsed;
         }
 
-        private static float TryReadFloatArgument(string prefix, float fallback)
+        private float TryReadFloatArgument(
+            string prefix,
+            string androidExtraName,
+            float fallback)
         {
-            var value = TryReadStringArgument(prefix);
+            var value = TryReadOverrideValue(prefix, androidExtraName);
             float parsed;
             if (string.IsNullOrEmpty(value)
                 || !float.TryParse(value, out parsed)
@@ -862,9 +1060,13 @@ namespace UnityAV
             return parsed;
         }
 
-        private static bool TryReadBoolArgument(string prefix, bool fallback, out bool hasExplicitValue)
+        private bool TryReadBoolArgument(
+            string prefix,
+            string androidExtraName,
+            bool fallback,
+            out bool hasExplicitValue)
         {
-            var value = TryReadStringArgument(prefix);
+            var value = TryReadOverrideValue(prefix, androidExtraName);
             hasExplicitValue = !string.IsNullOrEmpty(value);
             bool parsed;
             if (string.IsNullOrEmpty(value) || !bool.TryParse(value, out parsed))
@@ -875,9 +1077,13 @@ namespace UnityAV
             return parsed;
         }
 
-        private static long TryReadLongArgument(string prefix, long fallback, out bool hasExplicitValue)
+        private long TryReadLongArgument(
+            string prefix,
+            string androidExtraName,
+            long fallback,
+            out bool hasExplicitValue)
         {
-            var value = TryReadStringArgument(prefix);
+            var value = TryReadOverrideValue(prefix, androidExtraName);
             hasExplicitValue = !string.IsNullOrEmpty(value);
             long parsed;
             if (string.IsNullOrEmpty(value) || !long.TryParse(value, out parsed))
@@ -942,10 +1148,125 @@ namespace UnityAV
             yield return new WaitForSeconds(seconds);
 #if UNITY_EDITOR
             UnityEditor.EditorApplication.isPlaying = false;
+#elif UNITY_ANDROID
+            if (Player != null)
+            {
+                try
+                {
+                    Player.Stop();
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning("[CodexValidation] android_stop_after_summary_failed " + ex.Message);
+                }
+            }
+
+            TryMoveAndroidValidationTaskToBack();
+            enabled = false;
+            yield break;
 #else
             Application.Quit();
             Environment.Exit(exitCode);
 #endif
+        }
+
+        private void TryMoveAndroidValidationTaskToBack()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                var unityPlayerClass = CreateAndroidJavaClass("com.unity3d.player.UnityPlayer");
+                using (var unityPlayerDisposable = unityPlayerClass as IDisposable)
+                {
+                    var activity = AndroidJavaGetStaticObject(unityPlayerClass, "currentActivity");
+                    using (var activityDisposable = activity as IDisposable)
+                    {
+                        if (activity == null)
+                        {
+                            Debug.LogWarning("[CodexValidation] android_move_task_to_back skipped currentActivity_unavailable");
+                            return;
+                        }
+
+                        var moved = AndroidJavaCallBool(activity, "moveTaskToBack", true);
+                        Debug.Log("[CodexValidation] android_move_task_to_back=" + moved);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("[CodexValidation] android_move_task_to_back_failed " + ex.Message);
+            }
+#endif
+        }
+
+        private static object CreateAndroidJavaClass(string className)
+        {
+            var androidJavaClassType = Type.GetType(
+                "UnityEngine.AndroidJavaClass, UnityEngine.AndroidJNIModule");
+            return androidJavaClassType != null
+                ? Activator.CreateInstance(androidJavaClassType, new object[] { className })
+                : null;
+        }
+
+        private static Type GetAndroidJavaObjectRuntimeType()
+        {
+            return Type.GetType("UnityEngine.AndroidJavaObject, UnityEngine.AndroidJNIModule");
+        }
+
+        private static object AndroidJavaGetStaticObject(object javaClass, string fieldName)
+        {
+            if (javaClass == null)
+            {
+                return null;
+            }
+
+            var javaObjectType = GetAndroidJavaObjectRuntimeType();
+            if (javaObjectType == null)
+            {
+                return null;
+            }
+
+            var method = javaClass
+                .GetType()
+                .GetMethods()
+                .FirstOrDefault(candidate =>
+                    string.Equals(candidate.Name, "GetStatic", StringComparison.Ordinal)
+                    && candidate.IsGenericMethodDefinition
+                    && candidate.GetParameters().Length == 1);
+            method = method != null ? method.MakeGenericMethod(javaObjectType) : null;
+            return method != null
+                ? method.Invoke(javaClass, new object[] { fieldName })
+                : null;
+        }
+
+        private static bool AndroidJavaCallBool(object javaObject, string methodName, params object[] args)
+        {
+            if (javaObject == null)
+            {
+                return false;
+            }
+
+            var methods = javaObject
+                .GetType()
+                .GetMethods()
+                .Where(candidate =>
+                    string.Equals(candidate.Name, "Call", StringComparison.Ordinal)
+                    && candidate.IsGenericMethodDefinition);
+            foreach (var candidate in methods)
+            {
+                var parameters = candidate.GetParameters();
+                if (parameters.Length != 2)
+                {
+                    continue;
+                }
+
+                var typed = candidate.MakeGenericMethod(typeof(bool));
+                var invokeArgs = new object[] { methodName, args ?? new object[0] };
+                var result = typed.Invoke(javaObject, invokeArgs);
+                return result is bool value && value;
+            }
+
+            return false;
         }
 
         private struct ValidationSnapshot
@@ -956,10 +1277,18 @@ namespace UnityAV
             public bool Started;
             public int TextureWidth;
             public int TextureHeight;
+            public bool HasRuntimeHealth;
+            public int RuntimeStatePublic;
+            public int RuntimeStateInternal;
+            public int PlaybackIntent;
+            public int StreamCount;
+            public int VideoDecoderCount;
+            public bool HasAudioDecoder;
             public string SourceState;
             public string SourcePackets;
             public string SourceTimeouts;
             public string SourceReconnects;
+            public double SourceLastActivityAgeSec;
             public bool HasAvSyncSample;
             public double AudioPresentedTimeSec;
             public double AudioPipelineDelaySec;
@@ -1038,6 +1367,33 @@ namespace UnityAV
             public double RealtimeReferenceTimeSec;
             public bool HasRealtimeProbeSample;
             public long RealtimeProbeUnixMs;
+        }
+
+        private struct ValidationResultInfo
+        {
+            public bool Passed;
+            public string Reason;
+            public double PlaybackAdvanceSeconds;
+
+            public static ValidationResultInfo Failed(string reason, double playbackAdvanceSeconds)
+            {
+                return new ValidationResultInfo
+                {
+                    Passed = false,
+                    Reason = reason,
+                    PlaybackAdvanceSeconds = playbackAdvanceSeconds
+                };
+            }
+
+            public static ValidationResultInfo PassedWithAdvance(double playbackAdvanceSeconds)
+            {
+                return new ValidationResultInfo
+                {
+                    Passed = true,
+                    Reason = "steady-playback",
+                    PlaybackAdvanceSeconds = playbackAdvanceSeconds
+                };
+            }
         }
     }
 }

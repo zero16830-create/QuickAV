@@ -79,8 +79,18 @@ namespace UnityAV.Editor
             if (target == BuildTarget.Android)
             {
                 PlayerSettings.Android.bundleVersionCode = Math.Max(1, androidVersionCode);
+                PlayerSettings.SetScriptingBackend(
+                    UnityEditor.Build.NamedBuildTarget.Android,
+                    ScriptingImplementation.IL2CPP);
+                PlayerSettings.SetArchitecture(UnityEditor.Build.NamedBuildTarget.Android, 1);
                 PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
                 EditorUserBuildSettings.buildAppBundle = androidAppBundle;
+                UnityEngine.Debug.Log(
+                    "[RustAVReleaseBuild] android_scripting_backend="
+                    + PlayerSettings.GetScriptingBackend(UnityEditor.Build.NamedBuildTarget.Android));
+                UnityEngine.Debug.Log(
+                    "[RustAVReleaseBuild] android_target_architectures="
+                    + PlayerSettings.Android.targetArchitectures);
             }
         }
 
