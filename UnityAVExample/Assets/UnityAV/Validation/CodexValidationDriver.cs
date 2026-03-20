@@ -811,6 +811,9 @@ namespace UnityAV
                 builder.AppendLine("path_selection_available=" + finalSnapshot.HasPathSelection);
                 builder.AppendLine("path_selection_kind=" + finalSnapshot.PathSelectionKind);
                 builder.AppendLine("frame_contract_available=" + finalSnapshot.HasFrameContract);
+                builder.AppendLine("frame_contract_memory=" + finalSnapshot.FrameContractMemoryKind);
+                builder.AppendLine("frame_contract_dynamic_range=" + finalSnapshot.FrameContractDynamicRange);
+                builder.AppendLine("frame_contract_nominal_fps=" + finalSnapshot.FrameContractNominalFps.ToString("F2"));
                 builder.AppendLine("playback_contract_available=" + finalSnapshot.HasPlaybackTimingContract);
                 builder.AppendLine("playback_contract_master_sec=" + finalSnapshot.PlaybackContractMasterTimeSec.ToString("F3"));
                 builder.AppendLine("playback_contract_external_sec=" + finalSnapshot.PlaybackContractExternalTimeSec.ToString("F3"));
@@ -821,7 +824,11 @@ namespace UnityAV
                 builder.AppendLine("playback_contract_audio_sink_delay_ms=" + (finalSnapshot.PlaybackContractAudioSinkDelaySec * 1000.0).ToString("F1"));
                 builder.AppendLine("playback_contract_has_audio_clock=" + finalSnapshot.PlaybackContractHasAudioClock);
                 builder.AppendLine("av_sync_contract_available=" + finalSnapshot.HasAvSyncContract);
+                builder.AppendLine("av_sync_contract_master_clock=" + finalSnapshot.AvSyncContractMasterClock);
+                builder.AppendLine("av_sync_contract_drift_ms=" + finalSnapshot.AvSyncContractDriftMs.ToString("F1"));
                 builder.AppendLine("av_sync_contract_clock_delta_ms=" + finalSnapshot.AvSyncContractClockDeltaMs.ToString("F1"));
+                builder.AppendLine("av_sync_contract_drop_total=" + finalSnapshot.AvSyncContractDropTotal);
+                builder.AppendLine("av_sync_contract_duplicate_total=" + finalSnapshot.AvSyncContractDuplicateTotal);
                 builder.AppendLine("summary_path=" + summaryPath);
                 File.WriteAllText(summaryPath, builder.ToString(), Encoding.UTF8);
                 Debug.Log("[CodexValidation] summary_written=" + summaryPath);
