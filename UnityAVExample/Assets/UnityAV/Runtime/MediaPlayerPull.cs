@@ -2238,14 +2238,6 @@ namespace UnityAV
             return _isRealtimeSource && policy.RealtimeStartRequiresVideoFrame;
         }
 
-        private bool IsAndroidFileAudioOutputRateBridgeActive()
-        {
-            return TryGetRequiredAudioOutputPolicy(
-                    nameof(IsAndroidFileAudioOutputRateBridgeActive),
-                    out var policy)
-                && IsAndroidFileAudioOutputRateBridgeActive(policy);
-        }
-
         private bool IsAndroidFileAudioOutputRateBridgeActive(
             MediaNativeInteropCommon.AudioOutputPolicyView policy)
         {

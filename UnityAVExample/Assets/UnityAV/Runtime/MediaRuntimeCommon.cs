@@ -3195,40 +3195,6 @@ namespace UnityAV
             return Math.Max(Math.Min(thresholdSamples, relaxedThresholdSamples), audioChannels);
         }
 
-        internal static bool ResolveShouldStartAudioPlayback(
-            AudioOutputPolicyView policy,
-            bool isRealtimeSource,
-            bool androidFileBridgeActive,
-            bool requiresPresentedStartupFrame,
-            bool hasPresentedStartupFrame,
-            int audioSampleRate,
-            int audioChannels,
-            int bufferedSamples,
-            float startupElapsedMilliseconds)
-        {
-            if (audioSampleRate <= 0 || audioChannels <= 0)
-            {
-                return false;
-            }
-
-            if (isRealtimeSource
-                && requiresPresentedStartupFrame
-                && !hasPresentedStartupFrame)
-            {
-                return false;
-            }
-
-            var thresholdSamples = ResolveAudioStartThresholdSamples(
-                policy,
-                isRealtimeSource,
-                androidFileBridgeActive,
-                audioSampleRate,
-                audioChannels,
-                startupElapsedMilliseconds,
-                !requiresPresentedStartupFrame || hasPresentedStartupFrame);
-            return bufferedSamples >= thresholdSamples;
-        }
-
         internal static AudioStartupObservationView CreateAudioStartupObservation(
             int audioSampleRate,
             int audioChannels,

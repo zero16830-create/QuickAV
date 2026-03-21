@@ -2816,14 +2816,6 @@ namespace UnityAV
             return false;
         }
 
-        private bool IsAndroidFileAudioOutputRateBridgeActive()
-        {
-            return TryGetRequiredAudioOutputPolicy(
-                    nameof(IsAndroidFileAudioOutputRateBridgeActive),
-                    out var policy)
-                && IsAndroidFileAudioOutputRateBridgeActive(policy);
-        }
-
         private bool IsAndroidFileAudioOutputRateBridgeActive(
             MediaNativeInteropCommon.AudioOutputPolicyView policy)
         {
@@ -2908,53 +2900,11 @@ namespace UnityAV
             return playbackSampleCount;
         }
 
-        private int GetAudioStartThresholdMilliseconds()
-        {
-            if (!TryGetRequiredAudioOutputPolicy(
-                    nameof(GetAudioStartThresholdMilliseconds),
-                    out var policy))
-            {
-                return 0;
-            }
-            return MediaNativeInteropCommon.ResolveAudioStartThresholdMilliseconds(
-                policy,
-                _isRealtimeSource,
-                IsAndroidFileAudioOutputRateBridgeActive(policy));
-        }
-
         private bool GetRealtimeStartRequiresVideoFrame(
             MediaNativeInteropCommon.AudioOutputPolicyView policy)
         {
             return MediaNativeInteropCommon.ResolveRealtimeStartRequiresVideoFrame(
                 policy);
-        }
-
-        private int GetAudioRingCapacityMilliseconds()
-        {
-            if (!TryGetRequiredAudioOutputPolicy(
-                    nameof(GetAudioRingCapacityMilliseconds),
-                    out var policy))
-            {
-                return 0;
-            }
-            return MediaNativeInteropCommon.ResolveAudioRingCapacityMilliseconds(
-                policy,
-                _isRealtimeSource,
-                IsAndroidFileAudioOutputRateBridgeActive(policy));
-        }
-
-        private int GetBufferedAudioCeilingMilliseconds()
-        {
-            if (!TryGetRequiredAudioOutputPolicy(
-                    nameof(GetBufferedAudioCeilingMilliseconds),
-                    out var policy))
-            {
-                return 0;
-            }
-            return MediaNativeInteropCommon.ResolveAudioBufferedCeilingMilliseconds(
-                policy,
-                _isRealtimeSource,
-                IsAndroidFileAudioOutputRateBridgeActive(policy));
         }
 
         private int GetRealtimeSteadyAdditionalAudioSinkDelayMilliseconds()
@@ -2966,18 +2916,6 @@ namespace UnityAV
                 return 0;
             }
             return MediaNativeInteropCommon.ResolveRealtimeSteadyAdditionalSinkDelayMilliseconds(
-                policy);
-        }
-
-        private int GetRealtimeBackendAdditionalAudioSinkDelayMilliseconds()
-        {
-            if (!TryGetRequiredAudioOutputPolicy(
-                    nameof(GetRealtimeBackendAdditionalAudioSinkDelayMilliseconds),
-                    out var policy))
-            {
-                return 0;
-            }
-            return MediaNativeInteropCommon.ResolveRealtimeBackendAdditionalSinkDelayMilliseconds(
                 policy);
         }
 
