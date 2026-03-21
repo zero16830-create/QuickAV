@@ -381,7 +381,6 @@ namespace UnityAV
         private double _nativeVideoFrameLastTimeDeltaSec;
         private double _nativeVideoFrameLastRealtimeDeltaSec;
         private long _nativeVideoStartupWarmupSuppressedFrameCount;
-        private bool _nativeVideoStartupWarmupCompleted;
         private bool _nativeVideoWarmupContractAuditLogged;
         private bool _nativeVideoWarmupContractCompletionLogged;
         private double _nativeVideoFrameTimeDeltaSumSec;
@@ -1939,6 +1938,7 @@ namespace UnityAV
                 {
                     var contractWarmupAvailable = TryGetStartupWarmupCompleteFromContract(
                         out var contractWarmupComplete);
+                    var observedWarmupComplete = HasObservedNativeVideoStartupPresentation();
                     Debug.Log(
                         "[MediaPlayer] native_video_warmup_eval"
                         + " startup_seconds=" + StartupElapsedSeconds.ToString("F3")
@@ -1947,7 +1947,7 @@ namespace UnityAV
                         + " external_texture_target=" + _nativeVideoInteropCaps.ExternalTextureTarget
                         + " presented_total=" + _nativeVideoFramePresentedCount
                         + " presented_lifetime_total=" + _nativeVideoFramePresentedLifetimeCount
-                        + " warmup_completed=" + _nativeVideoStartupWarmupCompleted
+                        + " warmup_completed=" + observedWarmupComplete
                         + " contract_warmup_available=" + contractWarmupAvailable
                         + " contract_warmup_complete=" + contractWarmupComplete
                         + " has_last_frame=" + hasLastFrame
@@ -2020,7 +2020,6 @@ namespace UnityAV
                 {
                     _nativeVideoFramePresentedCount += 1;
                     _nativeVideoFramePresentedLifetimeCount += 1;
-                    _nativeVideoStartupWarmupCompleted = true;
                     if (TraceNativeVideoCadence
                         && _nativeVideoFramePresentedLifetimeCount == 1)
                     {
@@ -3809,7 +3808,6 @@ namespace UnityAV
             _nativeVideoFrameReleaseCount = 0;
             _nativeVideoFramePresentedLifetimeCount = 0;
             _nativeVideoStartupWarmupSuppressedFrameCount = 0;
-            _nativeVideoStartupWarmupCompleted = false;
             _nativeVideoWarmupContractAuditLogged = false;
             _nativeVideoWarmupContractCompletionLogged = false;
             ResetNativeVideoFrameCadenceStats();
@@ -3906,6 +3904,11 @@ namespace UnityAV
             _nativeVideoComputeExceptionCount = 0;
         }
 
+        private bool HasObservedNativeVideoStartupPresentation()
+        {
+            return _nativeVideoFramePresentedLifetimeCount > 0;
+        }
+
         private bool ShouldWarmupFileNativeVideoStartupPresentation()
         {
             var contractWarmupAvailable = TryGetStartupWarmupCompleteFromContract(
@@ -3922,6 +3925,7 @@ namespace UnityAV
         {
             var contractWarmupAvailable = TryGetStartupWarmupCompleteFromContract(
                 out var contractWarmupComplete);
+            var observedWarmupComplete = HasObservedNativeVideoStartupPresentation();
             if (!_nativeVideoWarmupContractAuditLogged)
             {
                 Debug.Log(
@@ -3932,7 +3936,7 @@ namespace UnityAV
                     + " external_texture_target=" + _nativeVideoInteropCaps.ExternalTextureTarget
                     + " presented_total=" + _nativeVideoFramePresentedCount
                     + " presented_lifetime_total=" + _nativeVideoFramePresentedLifetimeCount
-                    + " warmup_completed=" + _nativeVideoStartupWarmupCompleted
+                    + " warmup_completed=" + observedWarmupComplete
                     + " contract_warmup_available=" + contractWarmupAvailable
                     + " contract_warmup_complete=" + contractWarmupComplete);
                 _nativeVideoWarmupContractAuditLogged = true;
@@ -3947,7 +3951,7 @@ namespace UnityAV
                     + " startup_seconds=" + StartupElapsedSeconds.ToString("F3")
                     + " presented_total=" + _nativeVideoFramePresentedCount
                     + " presented_lifetime_total=" + _nativeVideoFramePresentedLifetimeCount
-                    + " warmup_completed=" + _nativeVideoStartupWarmupCompleted
+                    + " warmup_completed=" + observedWarmupComplete
                     + " contract_warmup_available=True"
                     + " contract_warmup_complete=True");
                 _nativeVideoWarmupContractCompletionLogged = true;
