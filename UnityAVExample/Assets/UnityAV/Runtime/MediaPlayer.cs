@@ -357,6 +357,8 @@ namespace UnityAV
         private bool _playRequested;
         private bool _resumeAfterPause;
         private MediaBackendKind _actualBackendKind = MediaBackendKind.Auto;
+        private bool _hasAudioOutputPolicy;
+        private MediaNativeInteropCommon.AudioOutputPolicyView _audioOutputPolicy;
         private bool _nativeVideoPathActive;
         private MediaNativeInteropCommon.NativeVideoInteropCapsView _nativeVideoInteropCaps;
         private float _playRequestedRealtimeAt = -1f;
@@ -619,6 +621,11 @@ namespace UnityAV
             IntPtr texturePointer,
             ref MediaNativeInteropCommon.RustAVPlayerOpenOptions options);
 
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerOpenSession")]
+        private static extern int OpenPlayerSession(
+            string uri,
+            ref MediaNativeInteropCommon.RustAVPlayerSessionOpenOptions options);
+
         [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerGetNativeVideoInteropCaps")]
         private static extern int GetNativeVideoInteropCaps(
             int backendKind,
@@ -697,8 +704,17 @@ namespace UnityAV
         [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerPlay")]
         private static extern int Play(int id);
 
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerPrepare")]
+        private static extern int PreparePlayer(int id);
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerPause")]
+        private static extern int PausePlayer(int id);
+
         [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerStop")]
         private static extern int Stop(int id);
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerClose")]
+        private static extern int ClosePlayer(int id);
 
         [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerSeek")]
         private static extern int Seek(int id, double time);
@@ -743,6 +759,31 @@ namespace UnityAV
             int id,
             ref MediaNativeInteropCommon.RustAVAvSyncContract contract);
 
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerGetSourceTimelineContract")]
+        private static extern int GetSourceTimelineContract(
+            int id,
+            ref MediaNativeInteropCommon.RustAVSourceTimelineContract contract);
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerGetPlayerSessionContract")]
+        private static extern int GetPlayerSessionContract(
+            int id,
+            ref MediaNativeInteropCommon.RustAVPlayerSessionContract contract);
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerGetAudioOutputPolicy")]
+        private static extern int GetAudioOutputPolicy(
+            int id,
+            ref MediaNativeInteropCommon.RustAVAudioOutputPolicy policy);
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerGetAvSyncEnterpriseMetrics")]
+        private static extern int GetAvSyncEnterpriseMetrics(
+            int id,
+            ref MediaNativeInteropCommon.RustAVAvSyncEnterpriseMetrics metrics);
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerGetPassiveAvSyncSnapshot")]
+        private static extern int GetPassiveAvSyncSnapshot(
+            int id,
+            ref MediaNativeInteropCommon.RustAVPassiveAvSyncSnapshot snapshot);
+
         [DllImport(NativePlugin.Name, EntryPoint = "RustAV_GetBackendRuntimeDiagnostic")]
         private static extern int GetBackendRuntimeDiagnostic(
             int backendKind,
@@ -778,6 +819,52 @@ namespace UnityAV
             _playRequested = true;
             TryStartAudioSource();
             UpdateNativeAudioSinkDelay();
+        }
+
+        public void Prepare()
+        {
+            if (!ValidatePlayerId(_id))
+            {
+                throw new InvalidOperationException($"{nameof(MediaPlayer)} has no " +
+                    "underlying valid native player.");
+            }
+
+            var result = PreparePlayer(_id);
+
+            if (result < 0)
+            {
+                throw new Exception($"Failed to prepare with error {result}");
+            }
+        }
+
+        public void Pause()
+        {
+            if (!ValidatePlayerId(_id))
+            {
+                throw new InvalidOperationException($"{nameof(MediaPlayer)} has no " +
+                    "underlying valid native player.");
+            }
+
+            var result = PausePlayer(_id);
+
+            if (result < 0)
+            {
+                throw new Exception($"Failed to pause with error {result}");
+            }
+
+            _playRequested = false;
+            if (_audioSource != null)
+            {
+                _audioSource.Pause();
+            }
+
+            UpdateNativeAudioSinkDelay();
+        }
+
+        public void Close()
+        {
+            ReleaseNativePlayer();
+            ReleaseManagedResources();
         }
 
         /// <summary>
@@ -961,6 +1048,61 @@ namespace UnityAV
                     GetAvSyncContract,
                     _id,
                     out contract);
+        }
+
+        internal bool TryGetSourceTimelineContract(
+            out MediaNativeInteropCommon.SourceTimelineContractView contract)
+        {
+            contract = default(MediaNativeInteropCommon.SourceTimelineContractView);
+            return ValidatePlayerId(_id)
+                && MediaNativeInteropCommon.TryReadSourceTimelineContract(
+                    GetSourceTimelineContract,
+                    _id,
+                    out contract);
+        }
+
+        internal bool TryGetPlayerSessionContract(
+            out MediaNativeInteropCommon.PlayerSessionContractView contract)
+        {
+            contract = default(MediaNativeInteropCommon.PlayerSessionContractView);
+            return ValidatePlayerId(_id)
+                && MediaNativeInteropCommon.TryReadPlayerSessionContract(
+                    GetPlayerSessionContract,
+                    _id,
+                    out contract);
+        }
+
+        internal bool TryGetAudioOutputPolicy(
+            out MediaNativeInteropCommon.AudioOutputPolicyView policy)
+        {
+            policy = default(MediaNativeInteropCommon.AudioOutputPolicyView);
+            return ValidatePlayerId(_id)
+                && MediaNativeInteropCommon.TryReadAudioOutputPolicy(
+                    GetAudioOutputPolicy,
+                    _id,
+                    out policy);
+        }
+
+        internal bool TryGetAvSyncEnterpriseMetrics(
+            out MediaNativeInteropCommon.AvSyncEnterpriseMetricsView metrics)
+        {
+            metrics = default(MediaNativeInteropCommon.AvSyncEnterpriseMetricsView);
+            return ValidatePlayerId(_id)
+                && MediaNativeInteropCommon.TryReadAvSyncEnterpriseMetrics(
+                    GetAvSyncEnterpriseMetrics,
+                    _id,
+                    out metrics);
+        }
+
+        internal bool TryGetPassiveAvSyncSnapshot(
+            out MediaNativeInteropCommon.PassiveAvSyncSnapshotView snapshot)
+        {
+            snapshot = default(MediaNativeInteropCommon.PassiveAvSyncSnapshotView);
+            return ValidatePlayerId(_id)
+                && MediaNativeInteropCommon.TryReadPassiveAvSyncSnapshot(
+                    GetPassiveAvSyncSnapshot,
+                    _id,
+                    out snapshot);
         }
 
         internal bool TryGetNativeVideoBridgeDescriptor(
@@ -1611,9 +1753,6 @@ namespace UnityAV
 
                 var runtimePreferredBackend =
                     MediaNativeInteropCommon.ResolveRuntimePreferredBackend(PreferredBackend);
-                var openOptions = MediaNativeInteropCommon.CreateOpenOptions(
-                    runtimePreferredBackend,
-                    StrictBackend);
                 var nativeTargetExtraFlags = ResolveNativeVideoTargetExtraFlags();
                 var nativeTarget = MediaNativeInteropCommon.CreateNativeVideoTarget(
                     targetPlatformKind,
@@ -1631,7 +1770,7 @@ namespace UnityAV
 
                 if (PreferNativeVideo)
                 {
-                    TryCreateNativeVideoPlayer(uri, ref nativeTarget, ref openOptions);
+                    TryCreateNativeVideoPlayer(uri, runtimePreferredBackend, ref nativeTarget);
                 }
 
                 if (!ValidatePlayerId(_id))
@@ -1642,11 +1781,11 @@ namespace UnityAV
                         + " texture_type=" + (_targetTexture != null ? _targetTexture.GetType().Name : "null"));
                     try
                     {
-                        _id = GetPlayerEx(uri, targetHandle, ref openOptions);
+                        _id = CreateTexturePlayer(uri, targetHandle, runtimePreferredBackend);
                     }
                     catch (EntryPointNotFoundException)
                     {
-                        _id = GetPlayer(uri, targetHandle);
+                        _id = CreateLegacyTexturePlayer(uri, targetHandle, runtimePreferredBackend);
                     }
                 }
 
@@ -1654,6 +1793,7 @@ namespace UnityAV
                 {
                     NativeInitializer.RegisterPlayerRenderEvent(_id);
                     _actualBackendKind = ReadActualBackendKind();
+                    RefreshAudioOutputPolicy();
                     Debug.Log(
                         "[MediaPlayer] player_created requested_backend=" + PreferredBackend
                         + " actual_backend=" + _actualBackendKind
@@ -1685,6 +1825,7 @@ namespace UnityAV
                     ApplyPresentedTexture(_targetTexture);
                     SetLoop(_id, Loop);
                     UpdateNativeAudioSinkDelay();
+                    Prepare();
                 }
                 else
                 {
@@ -2041,7 +2182,7 @@ namespace UnityAV
                     _resumeAfterPause = _playRequested;
                     if (_resumeAfterPause)
                     {
-                        Stop();
+                        Pause();
                     }
                 }
                 else if (_resumeAfterPause)
@@ -2200,14 +2341,10 @@ namespace UnityAV
             _audioChannels = meta.Channels;
             _audioBytesPerSample = meta.BytesPerSample;
 
-            var ringCapacity = Math.Max(_audioSampleRate * _audioChannels * 4, 4096);
-            if (_isRealtimeSource)
-            {
-                ringCapacity = Math.Max(
-                    (_audioSampleRate * _audioChannels
-                        * RealtimeAudioRingCapacityMilliseconds) / 1000,
-                    4096);
-            }
+            var ringCapacityMilliseconds = GetAudioRingCapacityMilliseconds();
+            var ringCapacity = Math.Max(
+                (_audioSampleRate * _audioChannels * ringCapacityMilliseconds) / 1000,
+                4096);
 
             lock (_audioLock)
             {
@@ -2325,9 +2462,7 @@ namespace UnityAV
                 return 0;
             }
 
-            var steadyStateMilliseconds = _isRealtimeSource
-                ? RealtimeAudioBufferedCeilingMilliseconds
-                : FileAudioBufferedCeilingMilliseconds;
+            var steadyStateMilliseconds = GetBufferedAudioCeilingMilliseconds();
             var steadyStateSamples = (_audioSampleRate * _audioChannels * steadyStateMilliseconds)
                 / 1000;
             steadyStateSamples = Math.Max(steadyStateSamples, _audioChannels);
@@ -2435,9 +2570,7 @@ namespace UnityAV
                 return 0;
             }
 
-            var thresholdMilliseconds = _isRealtimeSource
-                ? RealtimeAudioStartThresholdMilliseconds
-                : FileAudioStartThresholdMilliseconds;
+            var thresholdMilliseconds = GetAudioStartThresholdMilliseconds();
             var thresholdSamples = (_audioSampleRate * _audioChannels * thresholdMilliseconds)
                 / 1000;
             if (!_isRealtimeSource)
@@ -2447,13 +2580,14 @@ namespace UnityAV
 
             var startupElapsedMilliseconds = StartupElapsedSeconds * 1000f;
             var hasStartupFrame = !_nativeVideoPathActive || HasPresentedNativeVideoFrame;
-            if (!hasStartupFrame || startupElapsedMilliseconds < RealtimeAudioStartupGraceMilliseconds)
+            var startupGraceMilliseconds = GetRealtimeStartupGraceMilliseconds();
+            if (!hasStartupFrame || startupElapsedMilliseconds < startupGraceMilliseconds)
             {
                 return Math.Max(thresholdSamples, _audioChannels);
             }
 
             var relaxedThresholdSamples = (_audioSampleRate * _audioChannels
-                * RealtimeAudioStartupMinimumThresholdMilliseconds) / 1000;
+                * GetRealtimeStartupMinimumThresholdMilliseconds()) / 1000;
             return Math.Max(Math.Min(thresholdSamples, relaxedThresholdSamples), _audioChannels);
         }
 
@@ -2519,14 +2653,153 @@ namespace UnityAV
             }
 
             var delayMilliseconds = audioStarted
-                ? RealtimeAdditionalAudioSinkDelayMilliseconds
-                : RealtimeStartupAdditionalAudioSinkDelayMilliseconds;
+                ? GetRealtimeSteadyAdditionalAudioSinkDelayMilliseconds()
+                : GetRealtimeStartupAdditionalAudioSinkDelayMilliseconds();
             if (_actualBackendKind == MediaBackendKind.Ffmpeg)
             {
-                delayMilliseconds += RealtimeFfmpegAdditionalAudioSinkDelayMilliseconds;
+                delayMilliseconds += GetRealtimeBackendAdditionalAudioSinkDelayMilliseconds();
             }
 
             return delayMilliseconds;
+        }
+
+        private void RefreshAudioOutputPolicy()
+        {
+            if (TryGetAudioOutputPolicy(out var policy))
+            {
+                _audioOutputPolicy = policy;
+                _hasAudioOutputPolicy = true;
+                return;
+            }
+
+            ResetAudioOutputPolicy();
+        }
+
+        private void ResetAudioOutputPolicy()
+        {
+            _audioOutputPolicy = default(MediaNativeInteropCommon.AudioOutputPolicyView);
+            _hasAudioOutputPolicy = false;
+        }
+
+        private bool IsAndroidFilePlayback()
+        {
+            return !_isRealtimeSource && Application.platform == RuntimePlatform.Android;
+        }
+
+        private int GetAudioStartThresholdMilliseconds()
+        {
+            if (_hasAudioOutputPolicy)
+            {
+                if (_isRealtimeSource)
+                {
+                    return _audioOutputPolicy.RealtimeStartThresholdMilliseconds;
+                }
+
+                if (IsAndroidFilePlayback())
+                {
+                    return _audioOutputPolicy.AndroidFileStartThresholdMilliseconds;
+                }
+
+                return _audioOutputPolicy.FileStartThresholdMilliseconds;
+            }
+
+            return _isRealtimeSource
+                ? RealtimeAudioStartThresholdMilliseconds
+                : FileAudioStartThresholdMilliseconds;
+        }
+
+        private int GetRealtimeStartupGraceMilliseconds()
+        {
+            if (_hasAudioOutputPolicy)
+            {
+                return _audioOutputPolicy.RealtimeStartupGraceMilliseconds;
+            }
+
+            return RealtimeAudioStartupGraceMilliseconds;
+        }
+
+        private int GetRealtimeStartupMinimumThresholdMilliseconds()
+        {
+            if (_hasAudioOutputPolicy)
+            {
+                return _audioOutputPolicy.RealtimeStartupMinimumThresholdMilliseconds;
+            }
+
+            return RealtimeAudioStartupMinimumThresholdMilliseconds;
+        }
+
+        private int GetAudioRingCapacityMilliseconds()
+        {
+            if (_hasAudioOutputPolicy)
+            {
+                if (_isRealtimeSource)
+                {
+                    return _audioOutputPolicy.RealtimeRingCapacityMilliseconds;
+                }
+
+                if (IsAndroidFilePlayback())
+                {
+                    return _audioOutputPolicy.AndroidFileRingCapacityMilliseconds;
+                }
+
+                return _audioOutputPolicy.FileRingCapacityMilliseconds;
+            }
+
+            return _isRealtimeSource
+                ? RealtimeAudioRingCapacityMilliseconds
+                : 4000;
+        }
+
+        private int GetBufferedAudioCeilingMilliseconds()
+        {
+            if (_hasAudioOutputPolicy)
+            {
+                if (_isRealtimeSource)
+                {
+                    return _audioOutputPolicy.RealtimeBufferedCeilingMilliseconds;
+                }
+
+                if (IsAndroidFilePlayback())
+                {
+                    return _audioOutputPolicy.AndroidFileBufferedCeilingMilliseconds;
+                }
+
+                return _audioOutputPolicy.FileBufferedCeilingMilliseconds;
+            }
+
+            return _isRealtimeSource
+                ? RealtimeAudioBufferedCeilingMilliseconds
+                : FileAudioBufferedCeilingMilliseconds;
+        }
+
+        private int GetRealtimeStartupAdditionalAudioSinkDelayMilliseconds()
+        {
+            if (_hasAudioOutputPolicy)
+            {
+                return _audioOutputPolicy.RealtimeStartupAdditionalSinkDelayMilliseconds;
+            }
+
+            return RealtimeStartupAdditionalAudioSinkDelayMilliseconds;
+        }
+
+        private int GetRealtimeSteadyAdditionalAudioSinkDelayMilliseconds()
+        {
+            if (_hasAudioOutputPolicy)
+            {
+                return _audioOutputPolicy.RealtimeSteadyAdditionalSinkDelayMilliseconds;
+            }
+
+            return RealtimeAdditionalAudioSinkDelayMilliseconds;
+        }
+
+        private int GetRealtimeBackendAdditionalAudioSinkDelayMilliseconds()
+        {
+            if (_hasAudioOutputPolicy)
+            {
+                return _audioOutputPolicy.RealtimeBackendAdditionalSinkDelayMilliseconds;
+            }
+
+            return RealtimeFfmpegAdditionalAudioSinkDelayMilliseconds;
         }
 
         private double BufferedAudioSecondsFromBytes(int bufferedBytes)
@@ -3604,11 +3877,12 @@ namespace UnityAV
             ClearAudioBuffer();
             SetAudioSinkDelaySeconds(_id, 0.0);
             NativeInitializer.UnregisterPlayerRenderEvent(_id);
-            var result = ReleasePlayer(_id);
+            var result = ClosePlayer(_id);
             _id = InvalidPlayerId;
             _playRequested = false;
             _resumeAfterPause = false;
             _actualBackendKind = MediaBackendKind.Auto;
+            ResetAudioOutputPolicy();
             _nativeVideoPathActive = false;
             _nativeVideoInteropCaps = default(MediaNativeInteropCommon.NativeVideoInteropCapsView);
             _isRealtimeSource = false;
@@ -3637,7 +3911,7 @@ namespace UnityAV
                 ClearAudioBuffer();
                 SetAudioSinkDelaySeconds(_id, 0.0);
                 NativeInitializer.UnregisterPlayerRenderEvent(_id);
-                ReleasePlayer(_id);
+                ClosePlayer(_id);
             }
             catch
             {
@@ -3647,6 +3921,7 @@ namespace UnityAV
             _playRequested = false;
             _resumeAfterPause = false;
             _actualBackendKind = MediaBackendKind.Auto;
+            ResetAudioOutputPolicy();
             _nativeVideoPathActive = false;
             _nativeVideoInteropCaps = default(MediaNativeInteropCommon.NativeVideoInteropCapsView);
             _isRealtimeSource = false;
@@ -3821,13 +4096,45 @@ namespace UnityAV
                 EnableAudio);
         }
 
+        private int CreateTexturePlayer(
+            string uri,
+            IntPtr targetHandle,
+            MediaBackendKind runtimePreferredBackend)
+        {
+            var sessionOptions = MediaNativeInteropCommon.CreateSessionOpenOptions(
+                runtimePreferredBackend,
+                StrictBackend,
+                MediaNativeInteropCommon.RustAVPlayerSessionOutputKind.Texture,
+                Width,
+                Height,
+                MediaNativeInteropCommon.PlayerSessionOpenFlagNone,
+                targetHandle);
+            return OpenPlayerSession(uri, ref sessionOptions);
+        }
+
+        private int CreateLegacyTexturePlayer(
+            string uri,
+            IntPtr targetHandle,
+            MediaBackendKind runtimePreferredBackend)
+        {
+            var openOptions = MediaNativeInteropCommon.CreateOpenOptions(
+                runtimePreferredBackend,
+                StrictBackend);
+            try
+            {
+                return GetPlayerEx(uri, targetHandle, ref openOptions);
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return GetPlayer(uri, targetHandle);
+            }
+        }
+
         private void TryCreateNativeVideoPlayer(
             string uri,
-            ref MediaNativeInteropCommon.RustAVNativeVideoTarget nativeTarget,
-            ref MediaNativeInteropCommon.RustAVPlayerOpenOptions openOptions)
+            MediaBackendKind runtimePreferredBackend,
+            ref MediaNativeInteropCommon.RustAVNativeVideoTarget nativeTarget)
         {
-            var runtimePreferredBackend =
-                MediaNativeInteropCommon.ResolveRuntimePreferredBackend(PreferredBackend);
             Debug.Log(
                 "[MediaPlayer] native_video_create_begin"
                 + " uri=" + uri
@@ -3992,13 +4299,19 @@ namespace UnityAV
 
             try
             {
-                _id = GetNativeVideoPlayerEx(uri, ref nativeTarget, ref openOptions);
+                _id = CreateNativeVideoPlayerViaSessionOpen(
+                    uri,
+                    runtimePreferredBackend,
+                    ref nativeTarget);
             }
             catch (EntryPointNotFoundException)
             {
                 try
                 {
-                    _id = GetNativeVideoPlayer(uri, ref nativeTarget);
+                    _id = CreateLegacyNativeVideoPlayer(
+                        uri,
+                        runtimePreferredBackend,
+                        ref nativeTarget);
                 }
                 catch (EntryPointNotFoundException)
                 {
@@ -4010,6 +4323,7 @@ namespace UnityAV
             {
                 _nativeVideoPathActive = true;
                 _nativeVideoActivationDecision = NativeVideoActivationDecisionKind.Active;
+                RefreshAudioOutputPolicy();
                 Debug.Log(
                     "[MediaPlayer] native_video_create_result"
                     + " player_id=" + _id
@@ -4023,6 +4337,51 @@ namespace UnityAV
                     + " player_id=" + _id
                     + " target_handle=0x" + nativeTarget.TargetHandle.ToString("X")
                     + " texture_type=" + (_targetTexture != null ? _targetTexture.GetType().Name : "null"));
+            }
+        }
+
+        private int CreateNativeVideoPlayerViaSessionOpen(
+            string uri,
+            MediaBackendKind runtimePreferredBackend,
+            ref MediaNativeInteropCommon.RustAVNativeVideoTarget nativeTarget)
+        {
+            var nativeTargetPtr = Marshal.AllocHGlobal(
+                Marshal.SizeOf(typeof(MediaNativeInteropCommon.RustAVNativeVideoTarget)));
+            try
+            {
+                Marshal.StructureToPtr(nativeTarget, nativeTargetPtr, false);
+                var sessionOptions = MediaNativeInteropCommon.CreateSessionOpenOptions(
+                    runtimePreferredBackend,
+                    StrictBackend,
+                    MediaNativeInteropCommon.RustAVPlayerSessionOutputKind.NativeVideo,
+                    nativeTarget.Width,
+                    nativeTarget.Height,
+                    MediaNativeInteropCommon.PlayerSessionOpenFlagAudioExport,
+                    IntPtr.Zero,
+                    nativeTargetPtr);
+                return OpenPlayerSession(uri, ref sessionOptions);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(nativeTargetPtr);
+            }
+        }
+
+        private int CreateLegacyNativeVideoPlayer(
+            string uri,
+            MediaBackendKind runtimePreferredBackend,
+            ref MediaNativeInteropCommon.RustAVNativeVideoTarget nativeTarget)
+        {
+            var openOptions = MediaNativeInteropCommon.CreateOpenOptions(
+                runtimePreferredBackend,
+                StrictBackend);
+            try
+            {
+                return GetNativeVideoPlayerEx(uri, ref nativeTarget, ref openOptions);
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return GetNativeVideoPlayer(uri, ref nativeTarget);
             }
         }
     }

@@ -138,10 +138,16 @@ namespace UnityAV
     internal static class MediaNativeInteropCommon
     {
         internal const uint RustAVPlayerOpenOptionsVersion = 1u;
+        internal const uint RustAVPlayerSessionOpenOptionsVersion = 1u;
         internal const uint RustAVPlayerHealthSnapshotV2Version = 2u;
         internal const uint RustAVVideoFrameContractVersion = 1u;
-        internal const uint RustAVPlaybackTimingContractVersion = 1u;
+        internal const uint RustAVPlaybackTimingContractVersion = 2u;
         internal const uint RustAVAvSyncContractVersion = 1u;
+        internal const uint RustAVAudioOutputPolicyVersion = 2u;
+        internal const uint RustAVSourceTimelineContractVersion = 1u;
+        internal const uint RustAVPlayerSessionContractVersion = 1u;
+        internal const uint RustAVAvSyncEnterpriseMetricsVersion = 2u;
+        internal const uint RustAVPassiveAvSyncSnapshotVersion = 1u;
         internal const uint RustAVVideoColorInfoVersion = 1u;
         internal const uint RustAVNativeVideoTargetVersion = 1u;
         internal const uint RustAVNativeVideoInteropCapsVersion = 1u;
@@ -174,6 +180,9 @@ namespace UnityAV
         internal const uint NativeVideoFrameFlagHardwareDecode = 1u << 1;
         internal const uint NativeVideoFrameFlagZeroCopy = 1u << 2;
         internal const uint NativeVideoFrameFlagCpuFallback = 1u << 3;
+        internal const uint PlayerSessionOpenFlagNone = 0u;
+        internal const uint PlayerSessionOpenFlagAudioExport = 1u << 0;
+        internal const uint PlayerSessionOpenFlagWgpuUploadOnly = 1u << 1;
 
         internal enum NativeVideoPixelFormat
         {
@@ -319,6 +328,15 @@ namespace UnityAV
             D3D11ShaderResourceView = 2,
         }
 
+        internal enum RustAVPlayerSessionOutputKind
+        {
+            Unknown = 0,
+            Texture = 1,
+            PullRgba = 2,
+            WgpuRgba = 3,
+            NativeVideo = 4,
+        }
+
         [StructLayout(LayoutKind.Sequential)]
         internal struct RustAVPlayerOpenOptions
         {
@@ -326,6 +344,21 @@ namespace UnityAV
             public uint StructVersion;
             public int BackendKind;
             public int StrictBackend;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct RustAVPlayerSessionOpenOptions
+        {
+            public uint StructSize;
+            public uint StructVersion;
+            public int OutputKind;
+            public int BackendKind;
+            public int StrictBackend;
+            public int TargetWidth;
+            public int TargetHeight;
+            public uint OutputFlags;
+            public IntPtr TargetTexture;
+            public IntPtr NativeVideoTarget;
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -611,6 +644,13 @@ namespace UnityAV
             public double AudioPresentedTimeSec;
             public double AudioSinkDelaySec;
             public int HasAudioClock;
+            public long MasterTimeUs;
+            public long ExternalTimeUs;
+            public int HasAudioTimeUs;
+            public long AudioTimeUs;
+            public int HasAudioPresentedTimeUs;
+            public long AudioPresentedTimeUs;
+            public long AudioSinkDelayUs;
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -627,6 +667,96 @@ namespace UnityAV
             public int StartupWarmupComplete;
             public ulong DropTotal;
             public ulong DuplicateTotal;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct RustAVAudioOutputPolicy
+        {
+            public uint StructSize;
+            public uint StructVersion;
+            public int FileStartThresholdMilliseconds;
+            public int AndroidFileStartThresholdMilliseconds;
+            public int RealtimeStartThresholdMilliseconds;
+            public int RealtimeStartupGraceMilliseconds;
+            public int RealtimeStartupMinimumThresholdMilliseconds;
+            public int FileRingCapacityMilliseconds;
+            public int AndroidFileRingCapacityMilliseconds;
+            public int RealtimeRingCapacityMilliseconds;
+            public int FileBufferedCeilingMilliseconds;
+            public int AndroidFileBufferedCeilingMilliseconds;
+            public int RealtimeBufferedCeilingMilliseconds;
+            public int RealtimeStartupAdditionalSinkDelayMilliseconds;
+            public int RealtimeSteadyAdditionalSinkDelayMilliseconds;
+            public int RealtimeBackendAdditionalSinkDelayMilliseconds;
+            public int RealtimeStartRequiresVideoFrame;
+            public int AllowAndroidFileOutputRateBridge;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct RustAVSourceTimelineContract
+        {
+            public uint StructSize;
+            public uint StructVersion;
+            public int Model;
+            public int AnchorKind;
+            public int HasCurrentSourceTimeUs;
+            public long CurrentSourceTimeUs;
+            public int HasTimelineOriginUs;
+            public long TimelineOriginUs;
+            public int HasAnchorValueUs;
+            public long AnchorValueUs;
+            public int HasAnchorMonoUs;
+            public long AnchorMonoUs;
+            public int IsRealtime;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct RustAVPlayerSessionContract
+        {
+            public uint StructSize;
+            public uint StructVersion;
+            public int LifecycleState;
+            public int PublicState;
+            public int RuntimeState;
+            public int PlaybackIntent;
+            public int StopReason;
+            public int SourceConnectionState;
+            public int CanSeek;
+            public int IsRealtime;
+            public int IsBuffering;
+            public int IsSyncing;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct RustAVAvSyncEnterpriseMetrics
+        {
+            public uint StructSize;
+            public uint StructVersion;
+            public uint SampleCount;
+            public long WindowSpanUs;
+            public long LatestRawOffsetUs;
+            public long LatestSmoothOffsetUs;
+            public double DriftSlopePpm;
+            public double DriftProjected2hMs;
+            public long OffsetAbsP95Us;
+            public long OffsetAbsP99Us;
+            public long OffsetAbsMaxUs;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct RustAVPassiveAvSyncSnapshot
+        {
+            public uint StructSize;
+            public uint StructVersion;
+            public long RawOffsetUs;
+            public long SmoothOffsetUs;
+            public double DriftPpm;
+            public long DriftInterceptUs;
+            public uint DriftSampleCount;
+            public int VideoSchedule;
+            public double AudioResampleRatio;
+            public int AudioResampleActive;
+            public int ShouldRebuildAnchor;
         }
 
         internal delegate int BackendRuntimeDiagnosticDelegate(
@@ -651,6 +781,26 @@ namespace UnityAV
         internal delegate int GetAvSyncContractDelegate(
             int playerId,
             ref RustAVAvSyncContract contract);
+
+        internal delegate int GetAudioOutputPolicyDelegate(
+            int playerId,
+            ref RustAVAudioOutputPolicy policy);
+
+        internal delegate int GetSourceTimelineContractDelegate(
+            int playerId,
+            ref RustAVSourceTimelineContract contract);
+
+        internal delegate int GetPlayerSessionContractDelegate(
+            int playerId,
+            ref RustAVPlayerSessionContract contract);
+
+        internal delegate int GetAvSyncEnterpriseMetricsDelegate(
+            int playerId,
+            ref RustAVAvSyncEnterpriseMetrics metrics);
+
+        internal delegate int GetPassiveAvSyncSnapshotDelegate(
+            int playerId,
+            ref RustAVPassiveAvSyncSnapshot snapshot);
 
         internal delegate int GetNativeVideoInteropCapsDelegate(
             int backendKind,
@@ -914,13 +1064,21 @@ namespace UnityAV
 
         internal struct PlaybackTimingContractView
         {
+            public bool HasMicrosecondMirror;
             public double MasterTimeSec;
+            public long MasterTimeUs;
             public double ExternalTimeSec;
+            public long ExternalTimeUs;
             public bool HasAudioTimeSec;
             public double AudioTimeSec;
+            public bool HasAudioTimeUs;
+            public long AudioTimeUs;
             public bool HasAudioPresentedTimeSec;
             public double AudioPresentedTimeSec;
+            public bool HasAudioPresentedTimeUs;
+            public long AudioPresentedTimeUs;
             public double AudioSinkDelaySec;
+            public long AudioSinkDelayUs;
             public bool HasAudioClock;
         }
 
@@ -935,6 +1093,81 @@ namespace UnityAV
             public bool StartupWarmupComplete;
             public ulong DropTotal;
             public ulong DuplicateTotal;
+        }
+
+        internal struct AudioOutputPolicyView
+        {
+            public int FileStartThresholdMilliseconds;
+            public int AndroidFileStartThresholdMilliseconds;
+            public int RealtimeStartThresholdMilliseconds;
+            public int RealtimeStartupGraceMilliseconds;
+            public int RealtimeStartupMinimumThresholdMilliseconds;
+            public int FileRingCapacityMilliseconds;
+            public int AndroidFileRingCapacityMilliseconds;
+            public int RealtimeRingCapacityMilliseconds;
+            public int FileBufferedCeilingMilliseconds;
+            public int AndroidFileBufferedCeilingMilliseconds;
+            public int RealtimeBufferedCeilingMilliseconds;
+            public int RealtimeStartupAdditionalSinkDelayMilliseconds;
+            public int RealtimeSteadyAdditionalSinkDelayMilliseconds;
+            public int RealtimeBackendAdditionalSinkDelayMilliseconds;
+            public bool RealtimeStartRequiresVideoFrame;
+            public bool AllowAndroidFileOutputRateBridge;
+        }
+
+        internal struct SourceTimelineContractView
+        {
+            public int Model;
+            public int AnchorKind;
+            public bool HasCurrentSourceTimeUs;
+            public long CurrentSourceTimeUs;
+            public bool HasTimelineOriginUs;
+            public long TimelineOriginUs;
+            public bool HasAnchorValueUs;
+            public long AnchorValueUs;
+            public bool HasAnchorMonoUs;
+            public long AnchorMonoUs;
+            public bool IsRealtime;
+        }
+
+        internal struct PlayerSessionContractView
+        {
+            public int LifecycleState;
+            public int PublicState;
+            public int RuntimeState;
+            public int PlaybackIntent;
+            public int StopReason;
+            public MediaSourceConnectionState SourceConnectionState;
+            public bool CanSeek;
+            public bool IsRealtime;
+            public bool IsBuffering;
+            public bool IsSyncing;
+        }
+
+        internal struct AvSyncEnterpriseMetricsView
+        {
+            public uint SampleCount;
+            public long WindowSpanUs;
+            public long LatestRawOffsetUs;
+            public long LatestSmoothOffsetUs;
+            public double DriftSlopePpm;
+            public double DriftProjected2hMs;
+            public long OffsetAbsP95Us;
+            public long OffsetAbsP99Us;
+            public long OffsetAbsMaxUs;
+        }
+
+        internal struct PassiveAvSyncSnapshotView
+        {
+            public long RawOffsetUs;
+            public long SmoothOffsetUs;
+            public double DriftPpm;
+            public long DriftInterceptUs;
+            public uint DriftSampleCount;
+            public string VideoSchedule;
+            public double AudioResampleRatio;
+            public bool AudioResampleActive;
+            public bool ShouldRebuildAnchor;
         }
 
         internal static bool TryReadRuntimeHealth(
@@ -1078,6 +1311,151 @@ namespace UnityAV
             }
         }
 
+        internal static bool TryReadAudioOutputPolicy(
+            GetAudioOutputPolicyDelegate getAudioOutputPolicy,
+            int playerId,
+            out AudioOutputPolicyView policy)
+        {
+            policy = default(AudioOutputPolicyView);
+
+            try
+            {
+                var nativePolicy = CreateAudioOutputPolicy();
+                var result = getAudioOutputPolicy(playerId, ref nativePolicy);
+                if (result < 0)
+                {
+                    return false;
+                }
+
+                policy = NormalizeAudioOutputPolicy(nativePolicy);
+                return true;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return false;
+            }
+            catch (DllNotFoundException)
+            {
+                return false;
+            }
+        }
+
+        internal static bool TryReadSourceTimelineContract(
+            GetSourceTimelineContractDelegate getSourceTimelineContract,
+            int playerId,
+            out SourceTimelineContractView contract)
+        {
+            contract = default(SourceTimelineContractView);
+
+            try
+            {
+                var nativeContract = CreateSourceTimelineContract();
+                var result = getSourceTimelineContract(playerId, ref nativeContract);
+                if (result < 0)
+                {
+                    return false;
+                }
+
+                contract = NormalizeSourceTimelineContract(nativeContract);
+                return true;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return false;
+            }
+            catch (DllNotFoundException)
+            {
+                return false;
+            }
+        }
+
+        internal static bool TryReadPlayerSessionContract(
+            GetPlayerSessionContractDelegate getPlayerSessionContract,
+            int playerId,
+            out PlayerSessionContractView contract)
+        {
+            contract = default(PlayerSessionContractView);
+
+            try
+            {
+                var nativeContract = CreatePlayerSessionContract();
+                var result = getPlayerSessionContract(playerId, ref nativeContract);
+                if (result < 0)
+                {
+                    return false;
+                }
+
+                contract = NormalizePlayerSessionContract(nativeContract);
+                return true;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return false;
+            }
+            catch (DllNotFoundException)
+            {
+                return false;
+            }
+        }
+
+        internal static bool TryReadAvSyncEnterpriseMetrics(
+            GetAvSyncEnterpriseMetricsDelegate getAvSyncEnterpriseMetrics,
+            int playerId,
+            out AvSyncEnterpriseMetricsView metrics)
+        {
+            metrics = default(AvSyncEnterpriseMetricsView);
+
+            try
+            {
+                var nativeMetrics = CreateAvSyncEnterpriseMetrics();
+                var result = getAvSyncEnterpriseMetrics(playerId, ref nativeMetrics);
+                if (result < 0)
+                {
+                    return false;
+                }
+
+                metrics = NormalizeAvSyncEnterpriseMetrics(nativeMetrics);
+                return true;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return false;
+            }
+            catch (DllNotFoundException)
+            {
+                return false;
+            }
+        }
+
+        internal static bool TryReadPassiveAvSyncSnapshot(
+            GetPassiveAvSyncSnapshotDelegate getPassiveAvSyncSnapshot,
+            int playerId,
+            out PassiveAvSyncSnapshotView snapshot)
+        {
+            snapshot = default(PassiveAvSyncSnapshotView);
+
+            try
+            {
+                var nativeSnapshot = CreatePassiveAvSyncSnapshot();
+                var result = getPassiveAvSyncSnapshot(playerId, ref nativeSnapshot);
+                if (result <= 0)
+                {
+                    return false;
+                }
+
+                snapshot = NormalizePassiveAvSyncSnapshot(nativeSnapshot);
+                return true;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return false;
+            }
+            catch (DllNotFoundException)
+            {
+                return false;
+            }
+        }
+
         internal static RustAVPlayerOpenOptions CreateOpenOptions(
             MediaBackendKind preferredBackend,
             bool strictBackend)
@@ -1088,6 +1466,31 @@ namespace UnityAV
                 StructVersion = RustAVPlayerOpenOptionsVersion,
                 BackendKind = (int)preferredBackend,
                 StrictBackend = strictBackend ? 1 : 0,
+            };
+        }
+
+        internal static RustAVPlayerSessionOpenOptions CreateSessionOpenOptions(
+            MediaBackendKind preferredBackend,
+            bool strictBackend,
+            RustAVPlayerSessionOutputKind outputKind,
+            int targetWidth,
+            int targetHeight,
+            uint outputFlags = PlayerSessionOpenFlagNone,
+            IntPtr targetTexture = default,
+            IntPtr nativeVideoTarget = default)
+        {
+            return new RustAVPlayerSessionOpenOptions
+            {
+                StructSize = (uint)Marshal.SizeOf(typeof(RustAVPlayerSessionOpenOptions)),
+                StructVersion = RustAVPlayerSessionOpenOptionsVersion,
+                OutputKind = (int)outputKind,
+                BackendKind = (int)preferredBackend,
+                StrictBackend = strictBackend ? 1 : 0,
+                TargetWidth = targetWidth,
+                TargetHeight = targetHeight,
+                OutputFlags = outputFlags,
+                TargetTexture = targetTexture,
+                NativeVideoTarget = nativeVideoTarget,
             };
         }
 
@@ -1228,6 +1631,51 @@ namespace UnityAV
             {
                 StructSize = (uint)Marshal.SizeOf(typeof(RustAVAvSyncContract)),
                 StructVersion = RustAVAvSyncContractVersion,
+            };
+        }
+
+        internal static RustAVAudioOutputPolicy CreateAudioOutputPolicy()
+        {
+            return new RustAVAudioOutputPolicy
+            {
+                StructSize = (uint)Marshal.SizeOf(typeof(RustAVAudioOutputPolicy)),
+                StructVersion = RustAVAudioOutputPolicyVersion,
+            };
+        }
+
+        internal static RustAVSourceTimelineContract CreateSourceTimelineContract()
+        {
+            return new RustAVSourceTimelineContract
+            {
+                StructSize = (uint)Marshal.SizeOf(typeof(RustAVSourceTimelineContract)),
+                StructVersion = RustAVSourceTimelineContractVersion,
+            };
+        }
+
+        internal static RustAVPlayerSessionContract CreatePlayerSessionContract()
+        {
+            return new RustAVPlayerSessionContract
+            {
+                StructSize = (uint)Marshal.SizeOf(typeof(RustAVPlayerSessionContract)),
+                StructVersion = RustAVPlayerSessionContractVersion,
+            };
+        }
+
+        internal static RustAVAvSyncEnterpriseMetrics CreateAvSyncEnterpriseMetrics()
+        {
+            return new RustAVAvSyncEnterpriseMetrics
+            {
+                StructSize = (uint)Marshal.SizeOf(typeof(RustAVAvSyncEnterpriseMetrics)),
+                StructVersion = RustAVAvSyncEnterpriseMetricsVersion,
+            };
+        }
+
+        internal static RustAVPassiveAvSyncSnapshot CreatePassiveAvSyncSnapshot()
+        {
+            return new RustAVPassiveAvSyncSnapshot
+            {
+                StructSize = (uint)Marshal.SizeOf(typeof(RustAVPassiveAvSyncSnapshot)),
+                StructVersion = RustAVPassiveAvSyncSnapshotVersion,
             };
         }
 
@@ -2312,17 +2760,56 @@ namespace UnityAV
         internal static PlaybackTimingContractView NormalizePlaybackTimingContract(
             RustAVPlaybackTimingContract contract)
         {
+            var hasMicrosecondMirror = contract.StructVersion >= 2u;
             return new PlaybackTimingContractView
             {
+                HasMicrosecondMirror = hasMicrosecondMirror,
                 MasterTimeSec = contract.MasterTimeSec,
+                MasterTimeUs = hasMicrosecondMirror
+                    ? contract.MasterTimeUs
+                    : SecondsToMicroseconds(contract.MasterTimeSec),
                 ExternalTimeSec = contract.ExternalTimeSec,
+                ExternalTimeUs = hasMicrosecondMirror
+                    ? contract.ExternalTimeUs
+                    : SecondsToMicroseconds(contract.ExternalTimeSec),
                 HasAudioTimeSec = contract.HasAudioTimeSec != 0,
                 AudioTimeSec = contract.AudioTimeSec,
+                HasAudioTimeUs = hasMicrosecondMirror
+                    ? contract.HasAudioTimeUs != 0
+                    : contract.HasAudioTimeSec != 0,
+                AudioTimeUs = hasMicrosecondMirror
+                    ? contract.AudioTimeUs
+                    : SecondsToMicroseconds(contract.AudioTimeSec),
                 HasAudioPresentedTimeSec = contract.HasAudioPresentedTimeSec != 0,
                 AudioPresentedTimeSec = contract.AudioPresentedTimeSec,
+                HasAudioPresentedTimeUs = hasMicrosecondMirror
+                    ? contract.HasAudioPresentedTimeUs != 0
+                    : contract.HasAudioPresentedTimeSec != 0,
+                AudioPresentedTimeUs = hasMicrosecondMirror
+                    ? contract.AudioPresentedTimeUs
+                    : SecondsToMicroseconds(contract.AudioPresentedTimeSec),
                 AudioSinkDelaySec = contract.AudioSinkDelaySec,
+                AudioSinkDelayUs = hasMicrosecondMirror
+                    ? contract.AudioSinkDelayUs
+                    : SecondsToMicroseconds(contract.AudioSinkDelaySec),
                 HasAudioClock = contract.HasAudioClock != 0,
             };
+        }
+
+        private static long SecondsToMicroseconds(double seconds)
+        {
+            if (double.IsNaN(seconds) || double.IsInfinity(seconds) || seconds < 0.0)
+            {
+                return 0L;
+            }
+
+            var micros = seconds * 1000000.0;
+            if (micros >= long.MaxValue)
+            {
+                return long.MaxValue;
+            }
+
+            return (long)Math.Round(micros, MidpointRounding.AwayFromZero);
         }
 
         internal static AvSyncContractView NormalizeAvSyncContract(RustAVAvSyncContract contract)
@@ -2339,6 +2826,120 @@ namespace UnityAV
                 DropTotal = contract.DropTotal,
                 DuplicateTotal = contract.DuplicateTotal,
             };
+        }
+
+        internal static AudioOutputPolicyView NormalizeAudioOutputPolicy(
+            RustAVAudioOutputPolicy policy)
+        {
+            return new AudioOutputPolicyView
+            {
+                FileStartThresholdMilliseconds = policy.FileStartThresholdMilliseconds,
+                AndroidFileStartThresholdMilliseconds = policy.AndroidFileStartThresholdMilliseconds,
+                RealtimeStartThresholdMilliseconds = policy.RealtimeStartThresholdMilliseconds,
+                RealtimeStartupGraceMilliseconds = policy.RealtimeStartupGraceMilliseconds,
+                RealtimeStartupMinimumThresholdMilliseconds = policy.RealtimeStartupMinimumThresholdMilliseconds,
+                FileRingCapacityMilliseconds = policy.FileRingCapacityMilliseconds,
+                AndroidFileRingCapacityMilliseconds = policy.AndroidFileRingCapacityMilliseconds,
+                RealtimeRingCapacityMilliseconds = policy.RealtimeRingCapacityMilliseconds,
+                FileBufferedCeilingMilliseconds = policy.FileBufferedCeilingMilliseconds,
+                AndroidFileBufferedCeilingMilliseconds = policy.AndroidFileBufferedCeilingMilliseconds,
+                RealtimeBufferedCeilingMilliseconds = policy.RealtimeBufferedCeilingMilliseconds,
+                RealtimeStartupAdditionalSinkDelayMilliseconds = policy.RealtimeStartupAdditionalSinkDelayMilliseconds,
+                RealtimeSteadyAdditionalSinkDelayMilliseconds = policy.RealtimeSteadyAdditionalSinkDelayMilliseconds,
+                RealtimeBackendAdditionalSinkDelayMilliseconds = policy.RealtimeBackendAdditionalSinkDelayMilliseconds,
+                RealtimeStartRequiresVideoFrame = policy.RealtimeStartRequiresVideoFrame != 0,
+                AllowAndroidFileOutputRateBridge = policy.AllowAndroidFileOutputRateBridge != 0,
+            };
+        }
+
+        internal static SourceTimelineContractView NormalizeSourceTimelineContract(
+            RustAVSourceTimelineContract contract)
+        {
+            return new SourceTimelineContractView
+            {
+                Model = contract.Model,
+                AnchorKind = contract.AnchorKind,
+                HasCurrentSourceTimeUs = contract.HasCurrentSourceTimeUs != 0,
+                CurrentSourceTimeUs = contract.CurrentSourceTimeUs,
+                HasTimelineOriginUs = contract.HasTimelineOriginUs != 0,
+                TimelineOriginUs = contract.TimelineOriginUs,
+                HasAnchorValueUs = contract.HasAnchorValueUs != 0,
+                AnchorValueUs = contract.AnchorValueUs,
+                HasAnchorMonoUs = contract.HasAnchorMonoUs != 0,
+                AnchorMonoUs = contract.AnchorMonoUs,
+                IsRealtime = contract.IsRealtime != 0,
+            };
+        }
+
+        internal static PlayerSessionContractView NormalizePlayerSessionContract(
+            RustAVPlayerSessionContract contract)
+        {
+            return new PlayerSessionContractView
+            {
+                LifecycleState = contract.LifecycleState,
+                PublicState = contract.PublicState,
+                RuntimeState = contract.RuntimeState,
+                PlaybackIntent = contract.PlaybackIntent,
+                StopReason = contract.StopReason,
+                SourceConnectionState = NormalizeSourceConnectionState(contract.SourceConnectionState),
+                CanSeek = contract.CanSeek != 0,
+                IsRealtime = contract.IsRealtime != 0,
+                IsBuffering = contract.IsBuffering != 0,
+                IsSyncing = contract.IsSyncing != 0,
+            };
+        }
+
+        internal static AvSyncEnterpriseMetricsView NormalizeAvSyncEnterpriseMetrics(
+            RustAVAvSyncEnterpriseMetrics metrics)
+        {
+            return new AvSyncEnterpriseMetricsView
+            {
+                SampleCount = metrics.SampleCount,
+                WindowSpanUs = metrics.WindowSpanUs,
+                LatestRawOffsetUs = metrics.LatestRawOffsetUs,
+                LatestSmoothOffsetUs = metrics.LatestSmoothOffsetUs,
+                DriftSlopePpm = metrics.DriftSlopePpm,
+                DriftProjected2hMs = metrics.DriftProjected2hMs,
+                OffsetAbsP95Us = metrics.OffsetAbsP95Us,
+                OffsetAbsP99Us = metrics.OffsetAbsP99Us,
+                OffsetAbsMaxUs = metrics.OffsetAbsMaxUs,
+            };
+        }
+
+        internal static PassiveAvSyncSnapshotView NormalizePassiveAvSyncSnapshot(
+            RustAVPassiveAvSyncSnapshot snapshot)
+        {
+            return new PassiveAvSyncSnapshotView
+            {
+                RawOffsetUs = snapshot.RawOffsetUs,
+                SmoothOffsetUs = snapshot.SmoothOffsetUs,
+                DriftPpm = snapshot.DriftPpm,
+                DriftInterceptUs = snapshot.DriftInterceptUs,
+                DriftSampleCount = snapshot.DriftSampleCount,
+                VideoSchedule = NormalizePassiveAvSyncVideoSchedule(snapshot.VideoSchedule),
+                AudioResampleRatio = snapshot.AudioResampleRatio,
+                AudioResampleActive = snapshot.AudioResampleActive != 0,
+                ShouldRebuildAnchor = snapshot.ShouldRebuildAnchor != 0,
+            };
+        }
+
+        internal static string NormalizePassiveAvSyncVideoSchedule(int rawValue)
+        {
+            switch (rawValue)
+            {
+                case 0:
+                    return "Hold";
+                case 1:
+                    return "Render";
+                case 2:
+                    return "RenderLate";
+                case 3:
+                    return "Drop";
+                case 4:
+                    return "RebuildSyncAnchor";
+                default:
+                    return "Unknown";
+            }
         }
 
         internal static NativeVideoPlaneTextureFormat NormalizeNativeVideoPlaneTextureFormat(

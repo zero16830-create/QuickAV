@@ -12,7 +12,7 @@
 #endif
 
 #define RUSTAV_ABI_VERSION_MAJOR 1u
-#define RUSTAV_ABI_VERSION_MINOR 10u
+#define RUSTAV_ABI_VERSION_MINOR 17u
 #define RUSTAV_ABI_VERSION_PATCH 0u
 #define RUSTAV_PLAYER_HEALTH_SNAPSHOT_V2_VERSION 2u
 #define RUSTAV_PLAYER_OPEN_OPTIONS_VERSION 1u
@@ -20,6 +20,12 @@
 #define RUSTAV_VIDEO_FRAME_CONTRACT_VERSION 1u
 #define RUSTAV_PLAYBACK_TIMING_CONTRACT_VERSION 1u
 #define RUSTAV_AV_SYNC_CONTRACT_VERSION 1u
+#define RUSTAV_AUDIO_OUTPUT_POLICY_VERSION 2u
+#define RUSTAV_PLAYER_SESSION_OPEN_OPTIONS_VERSION 1u
+#define RUSTAV_SOURCE_TIMELINE_CONTRACT_VERSION 1u
+#define RUSTAV_PLAYER_SESSION_CONTRACT_VERSION 1u
+#define RUSTAV_AV_SYNC_ENTERPRISE_METRICS_VERSION 2u
+#define RUSTAV_PASSIVE_AV_SYNC_SNAPSHOT_VERSION 1u
 #define RUSTAV_NATIVE_VIDEO_TARGET_VERSION 1u
 #define RUSTAV_NATIVE_VIDEO_INTEROP_CAPS_VERSION 1u
 #define RUSTAV_NATIVE_VIDEO_BRIDGE_DESCRIPTOR_VERSION 1u
@@ -87,6 +93,14 @@ typedef enum RustAVBackendKind {
     RustAVBackendKind_Ffmpeg = 1,
     RustAVBackendKind_Gstreamer = 2
 } RustAVBackendKind;
+
+typedef enum RustAVPlayerSessionOutputKind {
+    RustAVPlayerSessionOutputKind_Unknown = 0,
+    RustAVPlayerSessionOutputKind_Texture = 1,
+    RustAVPlayerSessionOutputKind_PullRgba = 2,
+    RustAVPlayerSessionOutputKind_WgpuRgba = 3,
+    RustAVPlayerSessionOutputKind_NativeVideo = 4
+} RustAVPlayerSessionOutputKind;
 
 typedef enum RustAVNativeVideoPlatformKind {
     RustAVNativeVideoPlatformKind_Unknown = 0,
@@ -168,6 +182,23 @@ typedef struct RustAVNativeVideoTarget {
     int32_t pixel_format;
     uint32_t flags;
 } RustAVNativeVideoTarget;
+
+#define RUSTAV_PLAYER_SESSION_OPEN_FLAG_NONE 0u
+#define RUSTAV_PLAYER_SESSION_OPEN_FLAG_AUDIO_EXPORT (1u << 0)
+#define RUSTAV_PLAYER_SESSION_OPEN_FLAG_WGPU_UPLOAD_ONLY (1u << 1)
+
+typedef struct RustAVPlayerSessionOpenOptions {
+    uint32_t struct_size;
+    uint32_t struct_version;
+    int32_t output_kind;
+    int32_t backend_kind;
+    int32_t strict_backend;
+    int32_t target_width;
+    int32_t target_height;
+    uint32_t output_flags;
+    void* target_texture;
+    const RustAVNativeVideoTarget* native_video_target;
+} RustAVPlayerSessionOpenOptions;
 
 typedef struct RustAVNativeVideoInteropCaps {
     uint32_t struct_size;
@@ -457,6 +488,13 @@ typedef struct RustAVPlaybackTimingContract {
     double audio_presented_time_sec;
     double audio_sink_delay_sec;
     int32_t has_audio_clock;
+    int64_t master_time_us;
+    int64_t external_time_us;
+    int32_t has_audio_time_us;
+    int64_t audio_time_us;
+    int32_t has_audio_presented_time_us;
+    int64_t audio_presented_time_us;
+    int64_t audio_sink_delay_us;
 } RustAVPlaybackTimingContract;
 
 typedef struct RustAVAvSyncContract {
@@ -472,6 +510,86 @@ typedef struct RustAVAvSyncContract {
     uint64_t drop_total;
     uint64_t duplicate_total;
 } RustAVAvSyncContract;
+
+typedef struct RustAVAudioOutputPolicy {
+    uint32_t struct_size;
+    uint32_t struct_version;
+    int32_t file_start_threshold_ms;
+    int32_t android_file_start_threshold_ms;
+    int32_t realtime_start_threshold_ms;
+    int32_t realtime_startup_grace_ms;
+    int32_t realtime_startup_minimum_threshold_ms;
+    int32_t file_ring_capacity_ms;
+    int32_t android_file_ring_capacity_ms;
+    int32_t realtime_ring_capacity_ms;
+    int32_t file_buffered_ceiling_ms;
+    int32_t android_file_buffered_ceiling_ms;
+    int32_t realtime_buffered_ceiling_ms;
+    int32_t realtime_startup_additional_sink_delay_ms;
+    int32_t realtime_steady_additional_sink_delay_ms;
+    int32_t realtime_backend_additional_sink_delay_ms;
+    int32_t realtime_start_requires_video_frame;
+    int32_t allow_android_file_output_rate_bridge;
+} RustAVAudioOutputPolicy;
+
+typedef struct RustAVSourceTimelineContract {
+    uint32_t struct_size;
+    uint32_t struct_version;
+    int32_t model;
+    int32_t anchor_kind;
+    int32_t has_current_source_time_us;
+    int64_t current_source_time_us;
+    int32_t has_timeline_origin_us;
+    int64_t timeline_origin_us;
+    int32_t has_anchor_value_us;
+    int64_t anchor_value_us;
+    int32_t has_anchor_mono_us;
+    int64_t anchor_mono_us;
+    int32_t is_realtime;
+} RustAVSourceTimelineContract;
+
+typedef struct RustAVPlayerSessionContract {
+    uint32_t struct_size;
+    uint32_t struct_version;
+    int32_t lifecycle_state;
+    int32_t public_state;
+    int32_t runtime_state;
+    int32_t playback_intent;
+    int32_t stop_reason;
+    int32_t source_connection_state;
+    int32_t can_seek;
+    int32_t is_realtime;
+    int32_t is_buffering;
+    int32_t is_syncing;
+} RustAVPlayerSessionContract;
+
+typedef struct RustAVAvSyncEnterpriseMetrics {
+    uint32_t struct_size;
+    uint32_t struct_version;
+    uint32_t sample_count;
+    int64_t window_span_us;
+    int64_t latest_raw_offset_us;
+    int64_t latest_smooth_offset_us;
+    double drift_slope_ppm;
+    double drift_projected_2h_ms;
+    int64_t offset_abs_p95_us;
+    int64_t offset_abs_p99_us;
+    int64_t offset_abs_max_us;
+} RustAVAvSyncEnterpriseMetrics;
+
+typedef struct RustAVPassiveAvSyncSnapshot {
+    uint32_t struct_size;
+    uint32_t struct_version;
+    int64_t raw_offset_us;
+    int64_t smooth_offset_us;
+    double drift_ppm;
+    int64_t drift_intercept_us;
+    uint32_t drift_sample_count;
+    int32_t video_schedule;
+    double audio_resample_ratio;
+    int32_t audio_resample_active;
+    int32_t should_rebuild_anchor;
+} RustAVPassiveAvSyncSnapshot;
 
 typedef void (RUSTAV_CALLBACK_CALL *RustAVLogCallback)(const char* message);
 typedef void (RUSTAV_CALL *RustAVRenderEventFunc)(int32_t eventId);
@@ -490,10 +608,13 @@ const char* RUSTAV_CALL RustAV_GetBuildInfo(void);
  *   - RustAV_PlayerCopyFrameRGBA
  *   - RustAV_PlayerGetAudioMetaPCM
  *   - RustAV_PlayerCopyAudioPCM
- *   - RustAV_PlayerPlay / Stop / Seek / SetLoop
+ *   - RustAV_PlayerPrepare / Play / Pause / Stop / Seek / SetLoop / Close
  *   - RustAV_PlayerGetHealthSnapshotV2 / RustAV_GetBackendRuntimeDiagnostic
  */
 int32_t RUSTAV_CALL RustAV_PlayerCreatePullRGBA(const char* path, int32_t targetWidth, int32_t targetHeight);
+int32_t RUSTAV_CALL RustAV_PlayerOpenSession(
+    const char* path,
+    const RustAVPlayerSessionOpenOptions* options);
 int32_t RUSTAV_CALL RustAV_PlayerCreatePullRGBAEx(
     const char* path,
     int32_t targetWidth,
@@ -506,10 +627,13 @@ int32_t RUSTAV_CALL RustAV_PlayerCreateWgpuRGBAEx(
     int32_t targetHeight,
     const RustAVPlayerOpenOptions* options);
 int32_t RUSTAV_CALL RustAV_PlayerRelease(int32_t id);
+int32_t RUSTAV_CALL RustAV_PlayerClose(int32_t id);
 int32_t RUSTAV_CALL RustAV_PlayerUpdate(int32_t id);
 double RUSTAV_CALL RustAV_PlayerGetDuration(int32_t id);
 double RUSTAV_CALL RustAV_PlayerGetTime(int32_t id);
+int32_t RUSTAV_CALL RustAV_PlayerPrepare(int32_t id);
 int32_t RUSTAV_CALL RustAV_PlayerPlay(int32_t id);
+int32_t RUSTAV_CALL RustAV_PlayerPause(int32_t id);
 int32_t RUSTAV_CALL RustAV_PlayerStop(int32_t id);
 int32_t RUSTAV_CALL RustAV_PlayerSeek(int32_t id, double time);
 int32_t RUSTAV_CALL RustAV_PlayerSetLoop(int32_t id, bool loopValue);
@@ -529,6 +653,21 @@ int32_t RUSTAV_CALL RustAV_PlayerGetPlaybackTimingContract(
 int32_t RUSTAV_CALL RustAV_PlayerGetAvSyncContract(
     int32_t id,
     RustAVAvSyncContract* outContract);
+int32_t RUSTAV_CALL RustAV_PlayerGetAudioOutputPolicy(
+    int32_t id,
+    RustAVAudioOutputPolicy* outPolicy);
+int32_t RUSTAV_CALL RustAV_PlayerGetSourceTimelineContract(
+    int32_t id,
+    RustAVSourceTimelineContract* outContract);
+int32_t RUSTAV_CALL RustAV_PlayerGetPlayerSessionContract(
+    int32_t id,
+    RustAVPlayerSessionContract* outContract);
+int32_t RUSTAV_CALL RustAV_PlayerGetAvSyncEnterpriseMetrics(
+    int32_t id,
+    RustAVAvSyncEnterpriseMetrics* outMetrics);
+int32_t RUSTAV_CALL RustAV_PlayerGetPassiveAvSyncSnapshot(
+    int32_t id,
+    RustAVPassiveAvSyncSnapshot* outSnapshot);
 int32_t RUSTAV_CALL RustAV_PlayerGetNativeVideoBridgeDescriptor(
     int32_t id,
     RustAVNativeVideoBridgeDescriptor* outDescriptor);
