@@ -12,7 +12,7 @@
 #endif
 
 #define RUSTAV_ABI_VERSION_MAJOR 1u
-#define RUSTAV_ABI_VERSION_MINOR 17u
+#define RUSTAV_ABI_VERSION_MINOR 18u
 #define RUSTAV_ABI_VERSION_PATCH 0u
 #define RUSTAV_PLAYER_HEALTH_SNAPSHOT_V2_VERSION 2u
 #define RUSTAV_PLAYER_OPEN_OPTIONS_VERSION 1u
@@ -23,7 +23,7 @@
 #define RUSTAV_AUDIO_OUTPUT_POLICY_VERSION 2u
 #define RUSTAV_PLAYER_SESSION_OPEN_OPTIONS_VERSION 1u
 #define RUSTAV_SOURCE_TIMELINE_CONTRACT_VERSION 1u
-#define RUSTAV_PLAYER_SESSION_CONTRACT_VERSION 1u
+#define RUSTAV_PLAYER_SESSION_CONTRACT_VERSION 2u
 #define RUSTAV_AV_SYNC_ENTERPRISE_METRICS_VERSION 2u
 #define RUSTAV_PASSIVE_AV_SYNC_SNAPSHOT_VERSION 1u
 #define RUSTAV_NATIVE_VIDEO_TARGET_VERSION 1u
@@ -561,6 +561,14 @@ typedef struct RustAVPlayerSessionContract {
     int32_t is_realtime;
     int32_t is_buffering;
     int32_t is_syncing;
+    int32_t audio_start_state_reported;
+    int32_t should_start_audio;
+    int32_t audio_start_block_reason;
+    int32_t required_buffered_samples;
+    int32_t reported_buffered_samples;
+    int32_t requires_presented_video_frame;
+    int32_t has_presented_video_frame;
+    int32_t android_file_rate_bridge_active;
 } RustAVPlayerSessionContract;
 
 typedef struct RustAVAvSyncEnterpriseMetrics {
@@ -662,6 +670,15 @@ int32_t RUSTAV_CALL RustAV_PlayerGetSourceTimelineContract(
 int32_t RUSTAV_CALL RustAV_PlayerGetPlayerSessionContract(
     int32_t id,
     RustAVPlayerSessionContract* outContract);
+int32_t RUSTAV_CALL RustAV_PlayerReportAudioStartupState(
+    int32_t id,
+    int32_t audio_sample_rate,
+    int32_t audio_channels,
+    int32_t buffered_samples,
+    double startup_elapsed_ms,
+    bool has_presented_video_frame,
+    bool requires_presented_video_frame,
+    bool android_file_rate_bridge_active);
 int32_t RUSTAV_CALL RustAV_PlayerGetAvSyncEnterpriseMetrics(
     int32_t id,
     RustAVAvSyncEnterpriseMetrics* outMetrics);

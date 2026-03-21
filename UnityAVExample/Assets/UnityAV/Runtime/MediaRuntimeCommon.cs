@@ -144,22 +144,8 @@ namespace UnityAV
         internal const uint RustAVPlaybackTimingContractVersion = 2u;
         internal const uint RustAVAvSyncContractVersion = 1u;
         internal const uint RustAVAudioOutputPolicyVersion = 2u;
-        internal const int DefaultFileAudioStartThresholdMilliseconds = 400;
-        internal const int DefaultAndroidFileAudioStartThresholdMilliseconds = 600;
-        internal const int DefaultRealtimeAudioStartThresholdMilliseconds = 120;
-        internal const int DefaultRealtimeAudioStartupGraceMilliseconds = 750;
-        internal const int DefaultRealtimeAudioStartupMinimumThresholdMilliseconds = 40;
-        internal const int DefaultFileAudioRingCapacityMilliseconds = 4000;
-        internal const int DefaultAndroidFileAudioRingCapacityMilliseconds = 4000;
-        internal const int DefaultRealtimeAudioRingCapacityMilliseconds = 750;
-        internal const int DefaultFileAudioBufferedCeilingMilliseconds = 1000;
-        internal const int DefaultAndroidFileAudioBufferedCeilingMilliseconds = 2500;
-        internal const int DefaultRealtimeAudioBufferedCeilingMilliseconds = 60;
-        internal const int DefaultRealtimeStartupAdditionalAudioSinkDelayMilliseconds = 20;
-        internal const int DefaultRealtimeSteadyAdditionalAudioSinkDelayMilliseconds = 60;
-        internal const int DefaultRealtimeBackendAdditionalAudioSinkDelayMilliseconds = 120;
         internal const uint RustAVSourceTimelineContractVersion = 1u;
-        internal const uint RustAVPlayerSessionContractVersion = 1u;
+        internal const uint RustAVPlayerSessionContractVersion = 2u;
         internal const uint RustAVAvSyncEnterpriseMetricsVersion = 2u;
         internal const uint RustAVPassiveAvSyncSnapshotVersion = 1u;
         internal const uint RustAVVideoColorInfoVersion = 1u;
@@ -739,6 +725,14 @@ namespace UnityAV
             public int IsRealtime;
             public int IsBuffering;
             public int IsSyncing;
+            public int AudioStartStateReported;
+            public int ShouldStartAudio;
+            public int AudioStartBlockReason;
+            public int RequiredBufferedSamples;
+            public int ReportedBufferedSamples;
+            public int RequiresPresentedVideoFrame;
+            public int HasPresentedVideoFrame;
+            public int AndroidFileRateBridgeActive;
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -807,6 +801,16 @@ namespace UnityAV
         internal delegate int GetPlayerSessionContractDelegate(
             int playerId,
             ref RustAVPlayerSessionContract contract);
+
+        internal delegate int ReportAudioStartupStateDelegate(
+            int playerId,
+            int audioSampleRate,
+            int audioChannels,
+            int bufferedSamples,
+            double startupElapsedMilliseconds,
+            bool hasPresentedVideoFrame,
+            bool requiresPresentedVideoFrame,
+            bool androidFileRateBridgeActive);
 
         [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerPlay")]
         private static extern int PlayPlayerNative(int id);
@@ -1174,6 +1178,25 @@ namespace UnityAV
             public bool IsRealtime;
             public bool IsBuffering;
             public bool IsSyncing;
+            public bool AudioStartStateReported;
+            public bool ShouldStartAudio;
+            public int AudioStartBlockReason;
+            public int RequiredBufferedSamples;
+            public int ReportedBufferedSamples;
+            public bool RequiresPresentedVideoFrame;
+            public bool HasPresentedVideoFrame;
+            public bool AndroidFileRateBridgeActive;
+        }
+
+        internal struct AudioStartupObservationView
+        {
+            public int AudioSampleRate;
+            public int AudioChannels;
+            public int BufferedSamples;
+            public double StartupElapsedMilliseconds;
+            public bool HasPresentedVideoFrame;
+            public bool RequiresPresentedVideoFrame;
+            public bool AndroidFileRateBridgeActive;
         }
 
         internal struct AvSyncEnterpriseMetricsView
@@ -1419,6 +1442,34 @@ namespace UnityAV
 
                 contract = NormalizePlayerSessionContract(nativeContract);
                 return true;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return false;
+            }
+            catch (DllNotFoundException)
+            {
+                return false;
+            }
+        }
+
+        internal static bool TryReportAudioStartupState(
+            ReportAudioStartupStateDelegate reportAudioStartupState,
+            int playerId,
+            AudioStartupObservationView observation)
+        {
+            try
+            {
+                var result = reportAudioStartupState(
+                    playerId,
+                    observation.AudioSampleRate,
+                    observation.AudioChannels,
+                    observation.BufferedSamples,
+                    observation.StartupElapsedMilliseconds,
+                    observation.HasPresentedVideoFrame,
+                    observation.RequiresPresentedVideoFrame,
+                    observation.AndroidFileRateBridgeActive);
+                return result >= 0;
             }
             catch (EntryPointNotFoundException)
             {
@@ -2954,29 +3005,6 @@ namespace UnityAV
             };
         }
 
-        internal static AudioOutputPolicyView CreateDefaultAudioOutputPolicy()
-        {
-            return new AudioOutputPolicyView
-            {
-                FileStartThresholdMilliseconds = DefaultFileAudioStartThresholdMilliseconds,
-                AndroidFileStartThresholdMilliseconds = DefaultAndroidFileAudioStartThresholdMilliseconds,
-                RealtimeStartThresholdMilliseconds = DefaultRealtimeAudioStartThresholdMilliseconds,
-                RealtimeStartupGraceMilliseconds = DefaultRealtimeAudioStartupGraceMilliseconds,
-                RealtimeStartupMinimumThresholdMilliseconds = DefaultRealtimeAudioStartupMinimumThresholdMilliseconds,
-                FileRingCapacityMilliseconds = DefaultFileAudioRingCapacityMilliseconds,
-                AndroidFileRingCapacityMilliseconds = DefaultAndroidFileAudioRingCapacityMilliseconds,
-                RealtimeRingCapacityMilliseconds = DefaultRealtimeAudioRingCapacityMilliseconds,
-                FileBufferedCeilingMilliseconds = DefaultFileAudioBufferedCeilingMilliseconds,
-                AndroidFileBufferedCeilingMilliseconds = DefaultAndroidFileAudioBufferedCeilingMilliseconds,
-                RealtimeBufferedCeilingMilliseconds = DefaultRealtimeAudioBufferedCeilingMilliseconds,
-                RealtimeStartupAdditionalSinkDelayMilliseconds = DefaultRealtimeStartupAdditionalAudioSinkDelayMilliseconds,
-                RealtimeSteadyAdditionalSinkDelayMilliseconds = DefaultRealtimeSteadyAdditionalAudioSinkDelayMilliseconds,
-                RealtimeBackendAdditionalSinkDelayMilliseconds = DefaultRealtimeBackendAdditionalAudioSinkDelayMilliseconds,
-                RealtimeStartRequiresVideoFrame = true,
-                AllowAndroidFileOutputRateBridge = true,
-            };
-        }
-
         internal static bool ResolveAndroidFileAudioOutputRateBridgeActive(
             AudioOutputPolicyView policy,
             bool isRealtimeSource,
@@ -3194,6 +3222,27 @@ namespace UnityAV
             return bufferedSamples >= thresholdSamples;
         }
 
+        internal static AudioStartupObservationView CreateAudioStartupObservation(
+            int audioSampleRate,
+            int audioChannels,
+            int bufferedSamples,
+            float startupElapsedMilliseconds,
+            bool hasPresentedVideoFrame,
+            bool requiresPresentedVideoFrame,
+            bool androidFileRateBridgeActive)
+        {
+            return new AudioStartupObservationView
+            {
+                AudioSampleRate = Mathf.Max(0, audioSampleRate),
+                AudioChannels = Mathf.Max(0, audioChannels),
+                BufferedSamples = Mathf.Max(0, bufferedSamples),
+                StartupElapsedMilliseconds = Math.Max(0.0, startupElapsedMilliseconds),
+                HasPresentedVideoFrame = hasPresentedVideoFrame,
+                RequiresPresentedVideoFrame = requiresPresentedVideoFrame,
+                AndroidFileRateBridgeActive = androidFileRateBridgeActive,
+            };
+        }
+
         internal static float ResolvePassiveAvSyncAudioResamplePitch(
             PassiveAvSyncSnapshotView snapshot,
             bool isRealtimeSource,
@@ -3287,8 +3336,12 @@ namespace UnityAV
             bool contractWarmupAvailable,
             bool contractWarmupComplete)
         {
-            return localWarmupCompleted
-                || (contractWarmupAvailable && contractWarmupComplete);
+            if (contractWarmupAvailable)
+            {
+                return contractWarmupComplete;
+            }
+
+            return localWarmupCompleted;
         }
 
         internal static bool ResolveShouldWarmupFileNativeVideoStartupPresentation(
@@ -3300,6 +3353,14 @@ namespace UnityAV
             bool contractWarmupComplete,
             long presentedLifetimeCount)
         {
+            if (contractWarmupAvailable)
+            {
+                return !isRealtimeSource
+                    && nativeVideoPathActive
+                    && externalTextureTarget
+                    && !contractWarmupComplete;
+            }
+
             return !isRealtimeSource
                 && nativeVideoPathActive
                 && externalTextureTarget
@@ -3312,6 +3373,8 @@ namespace UnityAV
 
         internal static bool ResolveShouldHoldFileNativeVideoStartupPresentation(
             bool warmupEnabled,
+            bool contractWarmupAvailable,
+            bool contractWarmupComplete,
             bool hasLastFrame,
             long frameIndexDelta,
             double frameTimeDeltaSec,
@@ -3324,6 +3387,12 @@ namespace UnityAV
             if (!warmupEnabled)
             {
                 return false;
+            }
+
+            if (contractWarmupAvailable)
+            {
+                nextStableFrameCount = 0;
+                return !contractWarmupComplete;
             }
 
             if (!hasLastFrame)
@@ -3438,6 +3507,14 @@ namespace UnityAV
                 IsRealtime = contract.IsRealtime != 0,
                 IsBuffering = contract.IsBuffering != 0,
                 IsSyncing = contract.IsSyncing != 0,
+                AudioStartStateReported = contract.AudioStartStateReported != 0,
+                ShouldStartAudio = contract.ShouldStartAudio != 0,
+                AudioStartBlockReason = contract.AudioStartBlockReason,
+                RequiredBufferedSamples = contract.RequiredBufferedSamples,
+                ReportedBufferedSamples = contract.ReportedBufferedSamples,
+                RequiresPresentedVideoFrame = contract.RequiresPresentedVideoFrame != 0,
+                HasPresentedVideoFrame = contract.HasPresentedVideoFrame != 0,
+                AndroidFileRateBridgeActive = contract.AndroidFileRateBridgeActive != 0,
             };
         }
 

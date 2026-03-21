@@ -350,6 +350,7 @@ namespace UnityAV
         private MediaBackendKind _actualBackendKind = MediaBackendKind.Auto;
         private bool _hasAudioOutputPolicy;
         private MediaNativeInteropCommon.AudioOutputPolicyView _audioOutputPolicy;
+        private bool _audioOutputPolicyMissingLogged;
         private bool _nativeVideoPathActive;
         private MediaNativeInteropCommon.NativeVideoInteropCapsView _nativeVideoInteropCaps;
         private float _playRequestedRealtimeAt = -1f;
@@ -384,6 +385,7 @@ namespace UnityAV
         private long _nativeVideoStartupWarmupSuppressedFrameCount;
         private bool _nativeVideoStartupWarmupCompleted;
         private bool _nativeVideoWarmupContractAuditLogged;
+        private bool _nativeVideoWarmupContractCompletionLogged;
         private double _nativeVideoFrameTimeDeltaSumSec;
         private double _nativeVideoFrameTimeDeltaMinSec = double.PositiveInfinity;
         private double _nativeVideoFrameTimeDeltaMaxSec;
@@ -748,6 +750,17 @@ namespace UnityAV
             int id,
             ref MediaNativeInteropCommon.RustAVPlayerSessionContract contract);
 
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerReportAudioStartupState")]
+        private static extern int ReportAudioStartupState(
+            int id,
+            int audioSampleRate,
+            int audioChannels,
+            int bufferedSamples,
+            double startupElapsedMilliseconds,
+            bool hasPresentedVideoFrame,
+            bool requiresPresentedVideoFrame,
+            bool androidFileRateBridgeActive);
+
         [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerGetAudioOutputPolicy")]
         private static extern int GetAudioOutputPolicy(
             int id,
@@ -993,6 +1006,16 @@ namespace UnityAV
                     GetPlayerSessionContract,
                     _id,
                     out contract);
+        }
+
+        internal bool TryReportAudioStartupState(
+            MediaNativeInteropCommon.AudioStartupObservationView observation)
+        {
+            return ValidatePlayerId(_id)
+                && MediaNativeInteropCommon.TryReportAudioStartupState(
+                    ReportAudioStartupState,
+                    _id,
+                    observation);
         }
 
         internal bool TryGetAudioOutputPolicy(
@@ -2282,7 +2305,16 @@ namespace UnityAV
                 return false;
             }
 
-            var playbackSampleRate = DeterminePlaybackSampleRate(meta.SampleRate);
+            if (!TryGetRequiredAudioOutputPolicy(nameof(EnsureAudioFormat), out var policy))
+            {
+                return false;
+            }
+
+            var playbackSampleRate = DeterminePlaybackSampleRate(meta.SampleRate, policy);
+            if (playbackSampleRate <= 0)
+            {
+                return false;
+            }
             if (_audioClip != null
                 && _audioSourceSampleRate == meta.SampleRate
                 && _audioSampleRate == playbackSampleRate
@@ -2297,9 +2329,13 @@ namespace UnityAV
             _audioChannels = meta.Channels;
             _audioBytesPerSample = meta.BytesPerSample;
 
-            LogResolvedAudioOutputPolicy();
+            LogResolvedAudioOutputPolicy(policy);
 
-            var ringCapacityMilliseconds = GetAudioRingCapacityMilliseconds();
+            var ringCapacityMilliseconds =
+                MediaNativeInteropCommon.ResolveAudioRingCapacityMilliseconds(
+                    policy,
+                    _isRealtimeSource,
+                    IsAndroidFileAudioOutputRateBridgeActive(policy));
             var ringCapacity = Math.Max(
                 MediaNativeInteropCommon.ResolveAudioBufferSamples(
                     _audioSampleRate,
@@ -2427,13 +2463,19 @@ namespace UnityAV
 
         private int CalculateBufferedAudioCeilingSamples()
         {
+            if (!TryGetRequiredAudioOutputPolicy(
+                    nameof(CalculateBufferedAudioCeilingSamples),
+                    out var policy))
+            {
+                return 0;
+            }
             var hasStartupFrame = !_nativeVideoPathActive
-                || !GetRealtimeStartRequiresVideoFrame()
+                || !GetRealtimeStartRequiresVideoFrame(policy)
                 || HasPresentedNativeVideoFrame;
             return MediaNativeInteropCommon.ResolveAudioBufferedCeilingSamples(
-                GetEffectiveAudioOutputPolicy(),
+                policy,
                 _isRealtimeSource,
-                IsAndroidFileAudioOutputRateBridgeActive(),
+                IsAndroidFileAudioOutputRateBridgeActive(policy),
                 _audioSource != null && _audioSource.isPlaying,
                 _audioSampleRate,
                 _audioChannels,
@@ -2506,25 +2548,49 @@ namespace UnityAV
                 return;
             }
 
-            lock (_audioLock)
+            if (!TryGetRequiredAudioOutputPolicy(nameof(TryStartAudioSource), out var policy))
             {
-                if (!MediaNativeInteropCommon.ResolveShouldStartAudioPlayback(
-                        GetEffectiveAudioOutputPolicy(),
-                        _isRealtimeSource,
-                        IsAndroidFileAudioOutputRateBridgeActive(),
-                        _isRealtimeSource
-                            && _nativeVideoPathActive
-                            && GetRealtimeStartRequiresVideoFrame(),
-                        !_nativeVideoPathActive || HasPresentedNativeVideoFrame,
-                        _audioSampleRate,
-                        _audioChannels,
-                        _audioBufferedSamples,
-                        StartupElapsedSeconds * 1000f))
-                {
-                    return;
-                }
+                return;
             }
 
+            MediaNativeInteropCommon.AudioStartupObservationView observation;
+            lock (_audioLock)
+            {
+                var androidFileBridgeActive = IsAndroidFileAudioOutputRateBridgeActive(policy);
+                observation = MediaNativeInteropCommon.CreateAudioStartupObservation(
+                    _audioSampleRate,
+                    _audioChannels,
+                    _audioBufferedSamples,
+                    StartupElapsedSeconds * 1000f,
+                    !_nativeVideoPathActive || HasPresentedNativeVideoFrame,
+                    _isRealtimeSource
+                        && _nativeVideoPathActive
+                        && GetRealtimeStartRequiresVideoFrame(policy),
+                    androidFileBridgeActive);
+            }
+
+            if (!TryReportAudioStartupState(observation))
+            {
+                return;
+            }
+
+            if (!TryGetPlayerSessionContract(out var playerSessionContract)
+                || !playerSessionContract.AudioStartStateReported
+                || !playerSessionContract.ShouldStartAudio)
+            {
+                return;
+            }
+
+            Debug.Log(
+                "[MediaPlayer] audio_start_runtime_gate"
+                + " state_reported=" + playerSessionContract.AudioStartStateReported
+                + " should_start=" + playerSessionContract.ShouldStartAudio
+                + " block_reason=" + playerSessionContract.AudioStartBlockReason
+                + " required_buffered_samples=" + playerSessionContract.RequiredBufferedSamples
+                + " reported_buffered_samples=" + playerSessionContract.ReportedBufferedSamples
+                + " requires_presented_video_frame=" + playerSessionContract.RequiresPresentedVideoFrame
+                + " has_presented_video_frame=" + playerSessionContract.HasPresentedVideoFrame
+                + " android_file_rate_bridge_active=" + playerSessionContract.AndroidFileRateBridgeActive);
             _audioSource.Play();
             UpdatePassiveAvSyncAudioResample();
             UpdateNativeAudioSinkDelay();
@@ -2587,7 +2653,8 @@ namespace UnityAV
             _nativeBufferedAudioBytes = Math.Max(0, bufferedBytes);
         }
 
-        private void LogResolvedAudioOutputPolicy()
+        private void LogResolvedAudioOutputPolicy(
+            MediaNativeInteropCommon.AudioOutputPolicyView policy)
         {
             if (_audioSampleRate <= 0 || _audioChannels <= 0)
             {
@@ -2599,13 +2666,25 @@ namespace UnityAV
                 "[MediaPlayer] audio_output_policy_applied"
                 + " is_realtime=" + _isRealtimeSource
                 + " android_file_playback=" + IsAndroidFilePlayback()
-                + " android_file_bridge_active=" + IsAndroidFileAudioOutputRateBridgeActive()
+                + " android_file_bridge_active=" + IsAndroidFileAudioOutputRateBridgeActive(policy)
                 + " source_sample_rate=" + _audioSourceSampleRate
                 + " clip_sample_rate=" + _audioSampleRate
                 + " output_sample_rate=" + outputSampleRate
-                + " start_threshold_ms=" + GetAudioStartThresholdMilliseconds()
-                + " ring_capacity_ms=" + GetAudioRingCapacityMilliseconds()
-                + " buffered_ceiling_ms=" + GetBufferedAudioCeilingMilliseconds()
+                + " start_threshold_ms="
+                + MediaNativeInteropCommon.ResolveAudioStartThresholdMilliseconds(
+                    policy,
+                    _isRealtimeSource,
+                    IsAndroidFileAudioOutputRateBridgeActive(policy))
+                + " ring_capacity_ms="
+                + MediaNativeInteropCommon.ResolveAudioRingCapacityMilliseconds(
+                    policy,
+                    _isRealtimeSource,
+                    IsAndroidFileAudioOutputRateBridgeActive(policy))
+                + " buffered_ceiling_ms="
+                + MediaNativeInteropCommon.ResolveAudioBufferedCeilingMilliseconds(
+                    policy,
+                    _isRealtimeSource,
+                    IsAndroidFileAudioOutputRateBridgeActive(policy))
                 + " policy_available=" + _hasAudioOutputPolicy
                 + (_hasAudioOutputPolicy
                     ? " allow_android_file_output_rate_bridge="
@@ -2671,8 +2750,14 @@ namespace UnityAV
 
         private int GetRealtimeAdditionalAudioSinkDelayMilliseconds(bool audioStarted)
         {
+            if (!TryGetRequiredAudioOutputPolicy(
+                    nameof(GetRealtimeAdditionalAudioSinkDelayMilliseconds),
+                    out var policy))
+            {
+                return 0;
+            }
             return MediaNativeInteropCommon.ResolveRealtimeAdditionalSinkDelayMilliseconds(
-                GetEffectiveAudioOutputPolicy(),
+                policy,
                 _isRealtimeSource,
                 audioStarted,
                 _actualBackendKind == MediaBackendKind.Ffmpeg,
@@ -2685,6 +2770,7 @@ namespace UnityAV
             {
                 _audioOutputPolicy = policy;
                 _hasAudioOutputPolicy = true;
+                _audioOutputPolicyMissingLogged = false;
                 return;
             }
 
@@ -2695,6 +2781,7 @@ namespace UnityAV
         {
             _audioOutputPolicy = default(MediaNativeInteropCommon.AudioOutputPolicyView);
             _hasAudioOutputPolicy = false;
+            _audioOutputPolicyMissingLogged = false;
         }
 
         private bool IsAndroidFilePlayback()
@@ -2702,19 +2789,46 @@ namespace UnityAV
             return !_isRealtimeSource && Application.platform == RuntimePlatform.Android;
         }
 
-        private MediaNativeInteropCommon.AudioOutputPolicyView GetEffectiveAudioOutputPolicy()
+        private bool TryGetRequiredAudioOutputPolicy(
+            string operation,
+            out MediaNativeInteropCommon.AudioOutputPolicyView policy)
         {
+            policy = default(MediaNativeInteropCommon.AudioOutputPolicyView);
             if (!_hasAudioOutputPolicy && ValidatePlayerId(_id))
             {
                 RefreshAudioOutputPolicy();
             }
 
-            return _hasAudioOutputPolicy
-                ? _audioOutputPolicy
-                : MediaNativeInteropCommon.CreateDefaultAudioOutputPolicy();
+            if (_hasAudioOutputPolicy)
+            {
+                policy = _audioOutputPolicy;
+                return true;
+            }
+
+            if (!_audioOutputPolicyMissingLogged)
+            {
+                Debug.LogWarning(
+                    "[MediaPlayer] audio_output_policy_missing"
+                    + " operation=" + operation
+                    + " player_id=" + _id
+                    + " is_realtime=" + _isRealtimeSource
+                    + " play_requested=" + _playRequested);
+                _audioOutputPolicyMissingLogged = true;
+            }
+
+            return false;
         }
 
         private bool IsAndroidFileAudioOutputRateBridgeActive()
+        {
+            return TryGetRequiredAudioOutputPolicy(
+                    nameof(IsAndroidFileAudioOutputRateBridgeActive),
+                    out var policy)
+                && IsAndroidFileAudioOutputRateBridgeActive(policy);
+        }
+
+        private bool IsAndroidFileAudioOutputRateBridgeActive(
+            MediaNativeInteropCommon.AudioOutputPolicyView policy)
         {
             if (!IsAndroidFilePlayback()
                 || _audioSourceSampleRate <= 0
@@ -2724,17 +2838,19 @@ namespace UnityAV
             }
 
             return MediaNativeInteropCommon.ResolveAndroidFileAudioOutputRateBridgeActive(
-                GetEffectiveAudioOutputPolicy(),
+                policy,
                 _isRealtimeSource,
                 Application.platform,
                 _audioSourceSampleRate,
                 _audioSampleRate);
         }
 
-        private int DeterminePlaybackSampleRate(int sourceSampleRate)
+        private int DeterminePlaybackSampleRate(
+            int sourceSampleRate,
+            MediaNativeInteropCommon.AudioOutputPolicyView policy)
         {
             return MediaNativeInteropCommon.ResolvePlaybackSampleRate(
-                GetEffectiveAudioOutputPolicy(),
+                policy,
                 _isRealtimeSource,
                 Application.platform,
                 sourceSampleRate,
@@ -2797,44 +2913,75 @@ namespace UnityAV
 
         private int GetAudioStartThresholdMilliseconds()
         {
+            if (!TryGetRequiredAudioOutputPolicy(
+                    nameof(GetAudioStartThresholdMilliseconds),
+                    out var policy))
+            {
+                return 0;
+            }
             return MediaNativeInteropCommon.ResolveAudioStartThresholdMilliseconds(
-                GetEffectiveAudioOutputPolicy(),
+                policy,
                 _isRealtimeSource,
-                IsAndroidFileAudioOutputRateBridgeActive());
+                IsAndroidFileAudioOutputRateBridgeActive(policy));
         }
 
-        private bool GetRealtimeStartRequiresVideoFrame()
+        private bool GetRealtimeStartRequiresVideoFrame(
+            MediaNativeInteropCommon.AudioOutputPolicyView policy)
         {
             return MediaNativeInteropCommon.ResolveRealtimeStartRequiresVideoFrame(
-                GetEffectiveAudioOutputPolicy());
+                policy);
         }
 
         private int GetAudioRingCapacityMilliseconds()
         {
+            if (!TryGetRequiredAudioOutputPolicy(
+                    nameof(GetAudioRingCapacityMilliseconds),
+                    out var policy))
+            {
+                return 0;
+            }
             return MediaNativeInteropCommon.ResolveAudioRingCapacityMilliseconds(
-                GetEffectiveAudioOutputPolicy(),
+                policy,
                 _isRealtimeSource,
-                IsAndroidFileAudioOutputRateBridgeActive());
+                IsAndroidFileAudioOutputRateBridgeActive(policy));
         }
 
         private int GetBufferedAudioCeilingMilliseconds()
         {
+            if (!TryGetRequiredAudioOutputPolicy(
+                    nameof(GetBufferedAudioCeilingMilliseconds),
+                    out var policy))
+            {
+                return 0;
+            }
             return MediaNativeInteropCommon.ResolveAudioBufferedCeilingMilliseconds(
-                GetEffectiveAudioOutputPolicy(),
+                policy,
                 _isRealtimeSource,
-                IsAndroidFileAudioOutputRateBridgeActive());
+                IsAndroidFileAudioOutputRateBridgeActive(policy));
         }
 
         private int GetRealtimeSteadyAdditionalAudioSinkDelayMilliseconds()
         {
+            if (!TryGetRequiredAudioOutputPolicy(
+                    nameof(GetRealtimeSteadyAdditionalAudioSinkDelayMilliseconds),
+                    out var policy))
+            {
+                return 0;
+            }
             return MediaNativeInteropCommon.ResolveRealtimeSteadyAdditionalSinkDelayMilliseconds(
-                GetEffectiveAudioOutputPolicy());
+                policy);
         }
 
         private int GetRealtimeBackendAdditionalAudioSinkDelayMilliseconds()
         {
+            if (!TryGetRequiredAudioOutputPolicy(
+                    nameof(GetRealtimeBackendAdditionalAudioSinkDelayMilliseconds),
+                    out var policy))
+            {
+                return 0;
+            }
             return MediaNativeInteropCommon.ResolveRealtimeBackendAdditionalSinkDelayMilliseconds(
-                GetEffectiveAudioOutputPolicy());
+                policy);
         }
 
         private void ResetManagedAudioState()
@@ -3738,6 +3885,7 @@ namespace UnityAV
             _nativeVideoStartupWarmupSuppressedFrameCount = 0;
             _nativeVideoStartupWarmupCompleted = false;
             _nativeVideoWarmupContractAuditLogged = false;
+            _nativeVideoWarmupContractCompletionLogged = false;
             ResetNativeVideoFrameCadenceStats();
             ResetNativeVideoUpdateTimingStats();
             _nativeVideoBindingWarningIssued = false;
@@ -3844,25 +3992,38 @@ namespace UnityAV
 
         private void LogNativeVideoWarmupContractAuditOnce()
         {
-            if (_nativeVideoWarmupContractAuditLogged)
-            {
-                return;
-            }
-
             var contractWarmupAvailable = TryGetStartupWarmupCompleteFromContract(
                 out var contractWarmupComplete);
-            Debug.Log(
-                "[MediaPlayer] native_video_warmup_contract_state"
-                + " startup_seconds=" + StartupElapsedSeconds.ToString("F3")
-                + " is_realtime=" + _isRealtimeSource
-                + " native_active=" + _nativeVideoPathActive
-                + " external_texture_target=" + _nativeVideoInteropCaps.ExternalTextureTarget
-                + " presented_total=" + _nativeVideoFramePresentedCount
-                + " presented_lifetime_total=" + _nativeVideoFramePresentedLifetimeCount
-                + " warmup_completed=" + _nativeVideoStartupWarmupCompleted
-                + " contract_warmup_available=" + contractWarmupAvailable
-                + " contract_warmup_complete=" + contractWarmupComplete);
-            _nativeVideoWarmupContractAuditLogged = true;
+            if (!_nativeVideoWarmupContractAuditLogged)
+            {
+                Debug.Log(
+                    "[MediaPlayer] native_video_warmup_contract_state"
+                    + " startup_seconds=" + StartupElapsedSeconds.ToString("F3")
+                    + " is_realtime=" + _isRealtimeSource
+                    + " native_active=" + _nativeVideoPathActive
+                    + " external_texture_target=" + _nativeVideoInteropCaps.ExternalTextureTarget
+                    + " presented_total=" + _nativeVideoFramePresentedCount
+                    + " presented_lifetime_total=" + _nativeVideoFramePresentedLifetimeCount
+                    + " warmup_completed=" + _nativeVideoStartupWarmupCompleted
+                    + " contract_warmup_available=" + contractWarmupAvailable
+                    + " contract_warmup_complete=" + contractWarmupComplete);
+                _nativeVideoWarmupContractAuditLogged = true;
+            }
+
+            if (contractWarmupAvailable
+                && contractWarmupComplete
+                && !_nativeVideoWarmupContractCompletionLogged)
+            {
+                Debug.Log(
+                    "[MediaPlayer] native_video_warmup_contract_complete_observed"
+                    + " startup_seconds=" + StartupElapsedSeconds.ToString("F3")
+                    + " presented_total=" + _nativeVideoFramePresentedCount
+                    + " presented_lifetime_total=" + _nativeVideoFramePresentedLifetimeCount
+                    + " warmup_completed=" + _nativeVideoStartupWarmupCompleted
+                    + " contract_warmup_available=True"
+                    + " contract_warmup_complete=True");
+                _nativeVideoWarmupContractCompletionLogged = true;
+            }
         }
 
         private bool TryGetStartupWarmupCompleteFromContract(out bool contractWarmupComplete)
@@ -3884,8 +4045,12 @@ namespace UnityAV
             double frameTimeDeltaSec,
             float realtimeDeltaSec)
         {
+            var contractWarmupAvailable = TryGetStartupWarmupCompleteFromContract(
+                out var contractWarmupComplete);
             var shouldHold = MediaNativeInteropCommon.ResolveShouldHoldFileNativeVideoStartupPresentation(
                 ShouldWarmupFileNativeVideoStartupPresentation(),
+                contractWarmupAvailable,
+                contractWarmupComplete,
                 hasLastFrame,
                 frameIndexDelta,
                 frameTimeDeltaSec,

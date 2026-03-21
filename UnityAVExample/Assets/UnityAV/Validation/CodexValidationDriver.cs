@@ -783,6 +783,22 @@ namespace UnityAV
                     hasPlayerSessionContract && playerSessionContract.IsBuffering,
                 PlayerSessionIsSyncing =
                     hasPlayerSessionContract && playerSessionContract.IsSyncing,
+                PlayerSessionAudioStartStateReported =
+                    hasPlayerSessionContract && playerSessionContract.AudioStartStateReported,
+                PlayerSessionShouldStartAudio =
+                    hasPlayerSessionContract && playerSessionContract.ShouldStartAudio,
+                PlayerSessionAudioStartBlockReason =
+                    hasPlayerSessionContract ? playerSessionContract.AudioStartBlockReason : -1,
+                PlayerSessionRequiredBufferedSamples =
+                    hasPlayerSessionContract ? playerSessionContract.RequiredBufferedSamples : 0,
+                PlayerSessionReportedBufferedSamples =
+                    hasPlayerSessionContract ? playerSessionContract.ReportedBufferedSamples : 0,
+                PlayerSessionRequiresPresentedVideoFrame =
+                    hasPlayerSessionContract && playerSessionContract.RequiresPresentedVideoFrame,
+                PlayerSessionHasPresentedVideoFrame =
+                    hasPlayerSessionContract && playerSessionContract.HasPresentedVideoFrame,
+                PlayerSessionAndroidFileRateBridgeActive =
+                    hasPlayerSessionContract && playerSessionContract.AndroidFileRateBridgeActive,
                 HasAudioOutputPolicy = hasAudioOutputPolicy,
                 AudioOutputPolicyFileStartThresholdMs =
                     hasAudioOutputPolicy ? audioOutputPolicy.FileStartThresholdMilliseconds : 0,
@@ -1108,6 +1124,14 @@ namespace UnityAV
                 builder.AppendLine("player_session_is_realtime=" + finalSnapshot.PlayerSessionIsRealtime);
                 builder.AppendLine("player_session_is_buffering=" + finalSnapshot.PlayerSessionIsBuffering);
                 builder.AppendLine("player_session_is_syncing=" + finalSnapshot.PlayerSessionIsSyncing);
+                builder.AppendLine("player_session_audio_start_state_reported=" + finalSnapshot.PlayerSessionAudioStartStateReported);
+                builder.AppendLine("player_session_should_start_audio=" + finalSnapshot.PlayerSessionShouldStartAudio);
+                builder.AppendLine("player_session_audio_start_block_reason=" + finalSnapshot.PlayerSessionAudioStartBlockReason);
+                builder.AppendLine("player_session_required_buffered_samples=" + finalSnapshot.PlayerSessionRequiredBufferedSamples);
+                builder.AppendLine("player_session_reported_buffered_samples=" + finalSnapshot.PlayerSessionReportedBufferedSamples);
+                builder.AppendLine("player_session_requires_presented_video_frame=" + finalSnapshot.PlayerSessionRequiresPresentedVideoFrame);
+                builder.AppendLine("player_session_has_presented_video_frame=" + finalSnapshot.PlayerSessionHasPresentedVideoFrame);
+                builder.AppendLine("player_session_android_file_rate_bridge_active=" + finalSnapshot.PlayerSessionAndroidFileRateBridgeActive);
                 builder.AppendLine("audio_output_policy_available=" + finalSnapshot.HasAudioOutputPolicy);
                 builder.AppendLine("audio_output_policy_file_start_ms=" + finalSnapshot.AudioOutputPolicyFileStartThresholdMs);
                 builder.AppendLine("audio_output_policy_android_file_start_ms=" + finalSnapshot.AudioOutputPolicyAndroidFileStartThresholdMs);
@@ -1675,6 +1699,14 @@ namespace UnityAV
             public bool PlayerSessionIsRealtime;
             public bool PlayerSessionIsBuffering;
             public bool PlayerSessionIsSyncing;
+            public bool PlayerSessionAudioStartStateReported;
+            public bool PlayerSessionShouldStartAudio;
+            public int PlayerSessionAudioStartBlockReason;
+            public int PlayerSessionRequiredBufferedSamples;
+            public int PlayerSessionReportedBufferedSamples;
+            public bool PlayerSessionRequiresPresentedVideoFrame;
+            public bool PlayerSessionHasPresentedVideoFrame;
+            public bool PlayerSessionAndroidFileRateBridgeActive;
             public bool HasAudioOutputPolicy;
             public int AudioOutputPolicyFileStartThresholdMs;
             public int AudioOutputPolicyAndroidFileStartThresholdMs;
