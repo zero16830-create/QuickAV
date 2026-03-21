@@ -1785,6 +1785,10 @@ namespace UnityAV
                     }
                     catch (EntryPointNotFoundException)
                     {
+                        Debug.LogWarning(
+                            "[MediaPlayer] texture_session_open_entrypoint_missing"
+                            + " fallback=legacy_create_texture"
+                            + " uri=" + uri);
                         _id = CreateLegacyTexturePlayer(uri, targetHandle, runtimePreferredBackend);
                     }
                 }
@@ -4116,6 +4120,13 @@ namespace UnityAV
             IntPtr targetHandle,
             MediaBackendKind runtimePreferredBackend)
         {
+            Debug.Log(
+                "[MediaPlayer] texture_session_open_begin"
+                + " uri=" + uri
+                + " backend=" + runtimePreferredBackend
+                + " strict_backend=" + StrictBackend
+                + " target_handle=0x" + targetHandle.ToInt64().ToString("X")
+                + " size=" + Width + "x" + Height);
             var sessionOptions = MediaNativeInteropCommon.CreateSessionOpenOptions(
                 runtimePreferredBackend,
                 StrictBackend,
@@ -4132,6 +4143,13 @@ namespace UnityAV
             IntPtr targetHandle,
             MediaBackendKind runtimePreferredBackend)
         {
+            Debug.LogWarning(
+                "[MediaPlayer] texture_legacy_create_begin"
+                + " uri=" + uri
+                + " backend=" + runtimePreferredBackend
+                + " strict_backend=" + StrictBackend
+                + " target_handle=0x" + targetHandle.ToInt64().ToString("X")
+                + " size=" + Width + "x" + Height);
             var openOptions = MediaNativeInteropCommon.CreateOpenOptions(
                 runtimePreferredBackend,
                 StrictBackend);
@@ -4321,6 +4339,10 @@ namespace UnityAV
             }
             catch (EntryPointNotFoundException)
             {
+                Debug.LogWarning(
+                    "[MediaPlayer] native_video_session_open_entrypoint_missing"
+                    + " fallback=legacy_create_native_video"
+                    + " uri=" + uri);
                 try
                 {
                     _id = CreateLegacyNativeVideoPlayer(
@@ -4360,6 +4382,13 @@ namespace UnityAV
             MediaBackendKind runtimePreferredBackend,
             ref MediaNativeInteropCommon.RustAVNativeVideoTarget nativeTarget)
         {
+            Debug.Log(
+                "[MediaPlayer] native_video_session_open_begin"
+                + " uri=" + uri
+                + " backend=" + runtimePreferredBackend
+                + " strict_backend=" + StrictBackend
+                + " target_handle=0x" + nativeTarget.TargetHandle.ToString("X")
+                + " size=" + nativeTarget.Width + "x" + nativeTarget.Height);
             var nativeTargetPtr = Marshal.AllocHGlobal(
                 Marshal.SizeOf(typeof(MediaNativeInteropCommon.RustAVNativeVideoTarget)));
             try
@@ -4387,6 +4416,13 @@ namespace UnityAV
             MediaBackendKind runtimePreferredBackend,
             ref MediaNativeInteropCommon.RustAVNativeVideoTarget nativeTarget)
         {
+            Debug.LogWarning(
+                "[MediaPlayer] native_video_legacy_create_begin"
+                + " uri=" + uri
+                + " backend=" + runtimePreferredBackend
+                + " strict_backend=" + StrictBackend
+                + " target_handle=0x" + nativeTarget.TargetHandle.ToString("X")
+                + " size=" + nativeTarget.Width + "x" + nativeTarget.Height);
             var openOptions = MediaNativeInteropCommon.CreateOpenOptions(
                 runtimePreferredBackend,
                 StrictBackend);
