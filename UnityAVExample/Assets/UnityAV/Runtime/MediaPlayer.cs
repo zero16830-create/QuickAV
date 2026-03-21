@@ -19,7 +19,6 @@ namespace UnityAV
         private const int DefaultHeight = 1024;
         private const int InvalidPlayerId = -1;
         private const int StreamingAudioClipLengthSeconds = 1800;
-        private const int FileNativeVideoStartupWarmupStableFrames = 4;
         private const int MaxAudioCopyBytes = 64 * 1024;
         private const int MaxAudioCopyIterations = 16;
 
@@ -381,7 +380,6 @@ namespace UnityAV
         private long _nativeVideoFrameLastIndexDelta;
         private double _nativeVideoFrameLastTimeDeltaSec;
         private double _nativeVideoFrameLastRealtimeDeltaSec;
-        private int _nativeVideoStartupWarmupStableFrameCount;
         private long _nativeVideoStartupWarmupSuppressedFrameCount;
         private bool _nativeVideoStartupWarmupCompleted;
         private bool _nativeVideoWarmupContractAuditLogged;
@@ -1816,10 +1814,6 @@ namespace UnityAV
             {
                 _nativeVideoFrameAcquireMissCount += 1;
                 _nativeVideoFrameConsecutiveMissCount += 1;
-                if (ShouldWarmupFileNativeVideoStartupPresentation())
-                {
-                    _nativeVideoStartupWarmupStableFrameCount = 0;
-                }
                 _nativeVideoFrameMaxConsecutiveMissCount = Math.Max(
                     _nativeVideoFrameMaxConsecutiveMissCount,
                     _nativeVideoFrameConsecutiveMissCount);
@@ -1963,11 +1957,7 @@ namespace UnityAV
                         + " realtime_delta_ms=" + (realtimeDeltaSec * 1000.0).ToString("F1"));
                 }
 
-                if (ShouldHoldFileNativeVideoStartupPresentation(
-                    hasLastFrame,
-                    frameIndexDelta,
-                    frameTimeDeltaSec,
-                    realtimeDeltaSec))
+                if (ShouldHoldFileNativeVideoStartupPresentation())
                 {
                     _nativeVideoStartupWarmupSuppressedFrameCount += 1;
                     if (TraceNativeVideoCadence)
@@ -1977,8 +1967,6 @@ namespace UnityAV
                             + " startup_seconds=" + StartupElapsedSeconds.ToString("F3")
                             + " frame_index=" + frameInfo.FrameIndex
                             + " frame_time=" + frameInfo.TimeSec.ToString("F3")
-                            + " stable_count=" + _nativeVideoStartupWarmupStableFrameCount
-                            + " stable_target=" + FileNativeVideoStartupWarmupStableFrames
                             + " suppressed_total=" + _nativeVideoStartupWarmupSuppressedFrameCount
                             + " frame_index_delta=" + frameIndexDelta
                             + " frame_time_delta_ms=" + (frameTimeDeltaSec * 1000.0).ToString("F1")
@@ -2574,23 +2562,27 @@ namespace UnityAV
                 return;
             }
 
-            if (!TryGetPlayerSessionContract(out var playerSessionContract)
-                || !playerSessionContract.AudioStartStateReported
-                || !playerSessionContract.ShouldStartAudio)
-            {
-                return;
-            }
+            var hasPlayerSessionContract = TryGetPlayerSessionContract(out var playerSessionContract);
+            var command = MediaNativeInteropCommon.ResolveAudioStartRuntimeCommand(
+                hasPlayerSessionContract,
+                playerSessionContract);
 
             Debug.Log(
                 "[MediaPlayer] audio_start_runtime_gate"
-                + " state_reported=" + playerSessionContract.AudioStartStateReported
-                + " should_start=" + playerSessionContract.ShouldStartAudio
-                + " block_reason=" + playerSessionContract.AudioStartBlockReason
-                + " required_buffered_samples=" + playerSessionContract.RequiredBufferedSamples
-                + " reported_buffered_samples=" + playerSessionContract.ReportedBufferedSamples
-                + " requires_presented_video_frame=" + playerSessionContract.RequiresPresentedVideoFrame
-                + " has_presented_video_frame=" + playerSessionContract.HasPresentedVideoFrame
-                + " android_file_rate_bridge_active=" + playerSessionContract.AndroidFileRateBridgeActive);
+                + " source=" + command.Source
+                + " contract_available=" + command.ContractAvailable
+                + " state_reported=" + command.StateReported
+                + " should_start=" + command.ContractShouldStart
+                + " block_reason=" + command.BlockReason
+                + " required_buffered_samples=" + command.RequiredBufferedSamples
+                + " reported_buffered_samples=" + command.ReportedBufferedSamples
+                + " requires_presented_video_frame=" + command.RequiresPresentedVideoFrame
+                + " has_presented_video_frame=" + command.HasPresentedVideoFrame
+                + " android_file_rate_bridge_active=" + command.AndroidFileRateBridgeActive);
+            if (!command.ShouldPlay)
+            {
+                return;
+            }
             _audioSource.Play();
             UpdatePassiveAvSyncAudioResample();
             UpdateNativeAudioSinkDelay();
@@ -3816,7 +3808,6 @@ namespace UnityAV
             _nativeVideoFrameAcquireCount = 0;
             _nativeVideoFrameReleaseCount = 0;
             _nativeVideoFramePresentedLifetimeCount = 0;
-            _nativeVideoStartupWarmupStableFrameCount = 0;
             _nativeVideoStartupWarmupSuppressedFrameCount = 0;
             _nativeVideoStartupWarmupCompleted = false;
             _nativeVideoWarmupContractAuditLogged = false;
@@ -3923,10 +3914,8 @@ namespace UnityAV
                 _isRealtimeSource,
                 _nativeVideoPathActive,
                 _nativeVideoInteropCaps.ExternalTextureTarget,
-                _nativeVideoStartupWarmupCompleted,
                 contractWarmupAvailable,
-                contractWarmupComplete,
-                _nativeVideoFramePresentedLifetimeCount);
+                contractWarmupComplete);
         }
 
         private void LogNativeVideoWarmupContractAuditOnce()
@@ -3978,26 +3967,14 @@ namespace UnityAV
             return true;
         }
 
-        private bool ShouldHoldFileNativeVideoStartupPresentation(
-            bool hasLastFrame,
-            long frameIndexDelta,
-            double frameTimeDeltaSec,
-            float realtimeDeltaSec)
+        private bool ShouldHoldFileNativeVideoStartupPresentation()
         {
             var contractWarmupAvailable = TryGetStartupWarmupCompleteFromContract(
                 out var contractWarmupComplete);
             var shouldHold = MediaNativeInteropCommon.ResolveShouldHoldFileNativeVideoStartupPresentation(
                 ShouldWarmupFileNativeVideoStartupPresentation(),
                 contractWarmupAvailable,
-                contractWarmupComplete,
-                hasLastFrame,
-                frameIndexDelta,
-                frameTimeDeltaSec,
-                realtimeDeltaSec,
-                _nativeVideoStartupWarmupStableFrameCount,
-                FileNativeVideoStartupWarmupStableFrames,
-                out var nextStableFrameCount);
-            _nativeVideoStartupWarmupStableFrameCount = nextStableFrameCount;
+                contractWarmupComplete);
             return shouldHold;
         }
 

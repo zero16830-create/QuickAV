@@ -1232,6 +1232,21 @@ namespace UnityAV
             public string Source;
         }
 
+        internal struct AudioStartRuntimeCommandView
+        {
+            public bool ShouldPlay;
+            public string Source;
+            public bool ContractAvailable;
+            public bool StateReported;
+            public bool ContractShouldStart;
+            public int BlockReason;
+            public int RequiredBufferedSamples;
+            public int ReportedBufferedSamples;
+            public bool RequiresPresentedVideoFrame;
+            public bool HasPresentedVideoFrame;
+            public bool AndroidFileRateBridgeActive;
+        }
+
         internal static bool TryReadRuntimeHealth(
             GetPlayerHealthSnapshotDelegate getPlayerHealthSnapshot,
             int playerId,
@@ -3216,6 +3231,90 @@ namespace UnityAV
             };
         }
 
+        internal static AudioStartRuntimeCommandView ResolveAudioStartRuntimeCommand(
+            bool contractAvailable,
+            PlayerSessionContractView contract)
+        {
+            if (!contractAvailable)
+            {
+                return CreateAudioStartRuntimeCommand(false, "missing_contract", false, false, false, 0, 0, 0, false, false, false);
+            }
+
+            if (!contract.AudioStartStateReported)
+            {
+                return CreateAudioStartRuntimeCommand(
+                    false,
+                    "state_not_reported",
+                    true,
+                    contract.AudioStartStateReported,
+                    contract.ShouldStartAudio,
+                    contract.AudioStartBlockReason,
+                    contract.RequiredBufferedSamples,
+                    contract.ReportedBufferedSamples,
+                    contract.RequiresPresentedVideoFrame,
+                    contract.HasPresentedVideoFrame,
+                    contract.AndroidFileRateBridgeActive);
+            }
+
+            if (!contract.ShouldStartAudio)
+            {
+                return CreateAudioStartRuntimeCommand(
+                    false,
+                    "blocked",
+                    true,
+                    contract.AudioStartStateReported,
+                    contract.ShouldStartAudio,
+                    contract.AudioStartBlockReason,
+                    contract.RequiredBufferedSamples,
+                    contract.ReportedBufferedSamples,
+                    contract.RequiresPresentedVideoFrame,
+                    contract.HasPresentedVideoFrame,
+                    contract.AndroidFileRateBridgeActive);
+            }
+
+            return CreateAudioStartRuntimeCommand(
+                true,
+                "controller",
+                true,
+                contract.AudioStartStateReported,
+                contract.ShouldStartAudio,
+                contract.AudioStartBlockReason,
+                contract.RequiredBufferedSamples,
+                contract.ReportedBufferedSamples,
+                contract.RequiresPresentedVideoFrame,
+                contract.HasPresentedVideoFrame,
+                contract.AndroidFileRateBridgeActive);
+        }
+
+        internal static AudioStartRuntimeCommandView CreateAudioStartRuntimeCommand(
+            bool shouldPlay,
+            string source,
+            bool contractAvailable,
+            bool stateReported,
+            bool contractShouldStart,
+            int blockReason,
+            int requiredBufferedSamples,
+            int reportedBufferedSamples,
+            bool requiresPresentedVideoFrame,
+            bool hasPresentedVideoFrame,
+            bool androidFileRateBridgeActive)
+        {
+            return new AudioStartRuntimeCommandView
+            {
+                ShouldPlay = shouldPlay,
+                Source = string.IsNullOrWhiteSpace(source) ? "unknown" : source,
+                ContractAvailable = contractAvailable,
+                StateReported = stateReported,
+                ContractShouldStart = contractShouldStart,
+                BlockReason = blockReason,
+                RequiredBufferedSamples = requiredBufferedSamples,
+                ReportedBufferedSamples = reportedBufferedSamples,
+                RequiresPresentedVideoFrame = requiresPresentedVideoFrame,
+                HasPresentedVideoFrame = hasPresentedVideoFrame,
+                AndroidFileRateBridgeActive = androidFileRateBridgeActive,
+            };
+        }
+
         internal static float ResolvePassiveAvSyncAudioResamplePitch(
             PassiveAvSyncSnapshotView snapshot,
             bool isRealtimeSource,
@@ -3366,90 +3465,31 @@ namespace UnityAV
             return delayMilliseconds;
         }
 
-        internal static bool ResolveIsFileNativeVideoStartupWarmupComplete(
-            bool localWarmupCompleted,
-            bool contractWarmupAvailable,
-            bool contractWarmupComplete)
-        {
-            if (contractWarmupAvailable)
-            {
-                return contractWarmupComplete;
-            }
-
-            return localWarmupCompleted;
-        }
-
         internal static bool ResolveShouldWarmupFileNativeVideoStartupPresentation(
             bool isRealtimeSource,
             bool nativeVideoPathActive,
             bool externalTextureTarget,
-            bool localWarmupCompleted,
             bool contractWarmupAvailable,
-            bool contractWarmupComplete,
-            long presentedLifetimeCount)
+            bool contractWarmupComplete)
         {
-            if (contractWarmupAvailable)
-            {
-                return !isRealtimeSource
-                    && nativeVideoPathActive
-                    && externalTextureTarget
-                    && !contractWarmupComplete;
-            }
-
             return !isRealtimeSource
                 && nativeVideoPathActive
                 && externalTextureTarget
-                && !ResolveIsFileNativeVideoStartupWarmupComplete(
-                    localWarmupCompleted,
-                    contractWarmupAvailable,
-                    contractWarmupComplete)
-                && presentedLifetimeCount == 0;
+                && contractWarmupAvailable
+                && !contractWarmupComplete;
         }
 
         internal static bool ResolveShouldHoldFileNativeVideoStartupPresentation(
             bool warmupEnabled,
             bool contractWarmupAvailable,
-            bool contractWarmupComplete,
-            bool hasLastFrame,
-            long frameIndexDelta,
-            double frameTimeDeltaSec,
-            float realtimeDeltaSec,
-            int stableFrameCount,
-            int stableFrameTarget,
-            out int nextStableFrameCount)
+            bool contractWarmupComplete)
         {
-            nextStableFrameCount = stableFrameCount;
             if (!warmupEnabled)
             {
                 return false;
             }
 
-            if (contractWarmupAvailable)
-            {
-                nextStableFrameCount = 0;
-                return !contractWarmupComplete;
-            }
-
-            if (!hasLastFrame)
-            {
-                nextStableFrameCount = 0;
-                return true;
-            }
-
-            if (frameIndexDelta == 0 && frameTimeDeltaSec <= 0.0)
-            {
-                return true;
-            }
-
-            var stableCadence = frameIndexDelta == 1
-                && frameTimeDeltaSec > 0.0
-                && realtimeDeltaSec > 0.0f
-                && frameTimeDeltaSec <= 0.050
-                && realtimeDeltaSec <= Math.Max(0.050f, (float)frameTimeDeltaSec * 2.5f);
-            nextStableFrameCount = stableCadence
-                ? stableFrameCount + 1
-                : 0;
-            return nextStableFrameCount < stableFrameTarget;
+            return contractWarmupAvailable && !contractWarmupComplete;
         }
 
         internal static double ResolveBufferedAudioSecondsFromBytes(

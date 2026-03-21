@@ -2011,23 +2011,27 @@ namespace UnityAV
                 return;
             }
 
-            if (!TryGetPlayerSessionContract(out var playerSessionContract)
-                || !playerSessionContract.AudioStartStateReported
-                || !playerSessionContract.ShouldStartAudio)
-            {
-                return;
-            }
+            var hasPlayerSessionContract = TryGetPlayerSessionContract(out var playerSessionContract);
+            var command = MediaNativeInteropCommon.ResolveAudioStartRuntimeCommand(
+                hasPlayerSessionContract,
+                playerSessionContract);
 
             Debug.Log(
                 "[MediaPlayerPull] audio_start_runtime_gate"
-                + " state_reported=" + playerSessionContract.AudioStartStateReported
-                + " should_start=" + playerSessionContract.ShouldStartAudio
-                + " block_reason=" + playerSessionContract.AudioStartBlockReason
-                + " required_buffered_samples=" + playerSessionContract.RequiredBufferedSamples
-                + " reported_buffered_samples=" + playerSessionContract.ReportedBufferedSamples
-                + " requires_presented_video_frame=" + playerSessionContract.RequiresPresentedVideoFrame
-                + " has_presented_video_frame=" + playerSessionContract.HasPresentedVideoFrame
-                + " android_file_rate_bridge_active=" + playerSessionContract.AndroidFileRateBridgeActive);
+                + " source=" + command.Source
+                + " contract_available=" + command.ContractAvailable
+                + " state_reported=" + command.StateReported
+                + " should_start=" + command.ContractShouldStart
+                + " block_reason=" + command.BlockReason
+                + " required_buffered_samples=" + command.RequiredBufferedSamples
+                + " reported_buffered_samples=" + command.ReportedBufferedSamples
+                + " requires_presented_video_frame=" + command.RequiresPresentedVideoFrame
+                + " has_presented_video_frame=" + command.HasPresentedVideoFrame
+                + " android_file_rate_bridge_active=" + command.AndroidFileRateBridgeActive);
+            if (!command.ShouldPlay)
+            {
+                return;
+            }
             _audioSource.Play();
             RefreshAudioPlaybackAnchor();
             UpdatePassiveAvSyncAudioResample();
