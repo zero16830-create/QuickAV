@@ -2547,7 +2547,10 @@ namespace UnityAV
                     return;
                 }
 
-                if (_isRealtimeSource && _nativeVideoPathActive && !HasPresentedNativeVideoFrame)
+                if (GetRealtimeStartRequiresVideoFrame()
+                    && _isRealtimeSource
+                    && _nativeVideoPathActive
+                    && !HasPresentedNativeVideoFrame)
                 {
                     return;
                 }
@@ -2579,7 +2582,9 @@ namespace UnityAV
             }
 
             var startupElapsedMilliseconds = StartupElapsedSeconds * 1000f;
-            var hasStartupFrame = !_nativeVideoPathActive || HasPresentedNativeVideoFrame;
+            var hasStartupFrame = !_nativeVideoPathActive
+                || !GetRealtimeStartRequiresVideoFrame()
+                || HasPresentedNativeVideoFrame;
             var startupGraceMilliseconds = GetRealtimeStartupGraceMilliseconds();
             if (!hasStartupFrame || startupElapsedMilliseconds < startupGraceMilliseconds)
             {
@@ -2726,6 +2731,16 @@ namespace UnityAV
             }
 
             return RealtimeAudioStartupMinimumThresholdMilliseconds;
+        }
+
+        private bool GetRealtimeStartRequiresVideoFrame()
+        {
+            if (_hasAudioOutputPolicy)
+            {
+                return _audioOutputPolicy.RealtimeStartRequiresVideoFrame;
+            }
+
+            return true;
         }
 
         private int GetAudioRingCapacityMilliseconds()
