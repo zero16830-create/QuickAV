@@ -1225,6 +1225,13 @@ namespace UnityAV
             public bool ShouldRebuildAnchor;
         }
 
+        internal struct PassiveAvSyncAudioResampleCommandView
+        {
+            public float Pitch;
+            public bool Active;
+            public string Source;
+        }
+
         internal static bool TryReadRuntimeHealth(
             GetPlayerHealthSnapshotDelegate getPlayerHealthSnapshot,
             int playerId,
@@ -3269,6 +3276,68 @@ namespace UnityAV
 
             active = true;
             return (float)clampedRatio;
+        }
+
+        internal static PassiveAvSyncAudioResampleCommandView ResolvePassiveAvSyncAudioResampleCommand(
+            bool enableAudio,
+            bool isRealtimeSource,
+            bool isAudioPlaying,
+            bool hasSnapshot,
+            PassiveAvSyncSnapshotView snapshot)
+        {
+            if (!enableAudio)
+            {
+                return CreatePassiveAvSyncAudioResampleCommand(1.0f, false, "disabled");
+            }
+
+            if (!isRealtimeSource)
+            {
+                return CreatePassiveAvSyncAudioResampleCommand(1.0f, false, "non_realtime");
+            }
+
+            if (!isAudioPlaying)
+            {
+                return CreatePassiveAvSyncAudioResampleCommand(1.0f, false, "not_playing");
+            }
+
+            if (!hasSnapshot)
+            {
+                return CreatePassiveAvSyncAudioResampleCommand(1.0f, false, "missing_snapshot");
+            }
+
+            var nextPitch = ResolvePassiveAvSyncAudioResamplePitch(
+                snapshot,
+                isRealtimeSource,
+                out var nextActive);
+            return CreatePassiveAvSyncAudioResampleCommand(nextPitch, nextActive, "controller");
+        }
+
+        internal static bool ShouldApplyPassiveAvSyncAudioResampleCommand(
+            bool hasAppliedState,
+            float appliedPitch,
+            bool appliedActive,
+            PassiveAvSyncAudioResampleCommandView command)
+        {
+            if (!hasAppliedState)
+            {
+                return true;
+            }
+
+            return Math.Abs(appliedPitch - command.Pitch) > 0.0001f
+                || appliedActive != command.Active;
+        }
+
+        internal static PassiveAvSyncAudioResampleCommandView CreatePassiveAvSyncAudioResampleCommand(
+            float pitch,
+            bool active,
+            string source)
+        {
+            return new PassiveAvSyncAudioResampleCommandView
+            {
+                Pitch = Mathf.Clamp(pitch, 0.995f, 1.005f),
+                Active = active,
+                Source = string.IsNullOrWhiteSpace(source) ? "unknown" : source,
+            };
         }
 
         internal static int ResolveAudioBufferedCeilingSamples(

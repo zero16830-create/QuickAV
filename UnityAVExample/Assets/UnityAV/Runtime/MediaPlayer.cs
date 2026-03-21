@@ -2603,47 +2603,44 @@ namespace UnityAV
                 return;
             }
 
-            var nextPitch = 1.0f;
-            var nextActive = false;
-            if (EnableAudio
-                && _isRealtimeSource
-                && _audioSource.isPlaying
-                && TryGetPassiveAvSyncSnapshot(out var snapshot))
-            {
-                nextPitch = MediaNativeInteropCommon.ResolvePassiveAvSyncAudioResamplePitch(
-                    snapshot,
-                    _isRealtimeSource,
-                    out nextActive);
-            }
-
-            ApplyPassiveAvSyncAudioResample(nextPitch, nextActive);
+            var hasSnapshot = TryGetPassiveAvSyncSnapshot(out var snapshot);
+            var command = MediaNativeInteropCommon.ResolvePassiveAvSyncAudioResampleCommand(
+                EnableAudio,
+                _isRealtimeSource,
+                _audioSource.isPlaying,
+                hasSnapshot,
+                snapshot);
+            ApplyPassiveAvSyncAudioResample(command);
         }
 
-        private void ApplyPassiveAvSyncAudioResample(float nextPitch, bool nextActive)
+        private void ApplyPassiveAvSyncAudioResample(
+            MediaNativeInteropCommon.PassiveAvSyncAudioResampleCommandView command)
         {
             if (_audioSource == null)
             {
                 return;
             }
 
-            nextPitch = Mathf.Clamp(nextPitch, 0.995f, 1.005f);
-            var changed = !_hasAppliedPassiveAvSyncAudioResampleState
-                || Mathf.Abs(_appliedPassiveAvSyncAudioResamplePitch - nextPitch) > 0.0001f
-                || _appliedPassiveAvSyncAudioResampleActive != nextActive;
+            var changed = MediaNativeInteropCommon.ShouldApplyPassiveAvSyncAudioResampleCommand(
+                _hasAppliedPassiveAvSyncAudioResampleState,
+                _appliedPassiveAvSyncAudioResamplePitch,
+                _appliedPassiveAvSyncAudioResampleActive,
+                command);
             if (!changed)
             {
                 return;
             }
 
-            _audioSource.pitch = nextPitch;
-            _appliedPassiveAvSyncAudioResamplePitch = nextPitch;
-            _appliedPassiveAvSyncAudioResampleActive = nextActive;
+            _audioSource.pitch = command.Pitch;
+            _appliedPassiveAvSyncAudioResamplePitch = command.Pitch;
+            _appliedPassiveAvSyncAudioResampleActive = command.Active;
             _hasAppliedPassiveAvSyncAudioResampleState = true;
 
             Debug.Log(
                 "[MediaPlayer] passive_av_sync_audio_resample_applied pitch="
-                + nextPitch.ToString("F6")
-                + " active=" + nextActive
+                + command.Pitch.ToString("F6")
+                + " active=" + command.Active
+                + " source=" + command.Source
                 + " playing=" + _audioSource.isPlaying
                 + " realtime=" + _isRealtimeSource);
         }
@@ -3950,7 +3947,11 @@ namespace UnityAV
             _nativeVideoUpdateNativeVideoFrameElapsedMsMax = 0.0;
             _nativeVideoUpdateAudioBufferElapsedMsSum = 0.0;
             _nativeVideoUpdateAudioBufferElapsedMsMax = 0.0;
-            ApplyPassiveAvSyncAudioResample(1.0f, false);
+            ApplyPassiveAvSyncAudioResample(
+                MediaNativeInteropCommon.CreatePassiveAvSyncAudioResampleCommand(
+                    1.0f,
+                    false,
+                    "reset"));
         }
 
         private void ResetNativeVideoPresentationTelemetryStats()
