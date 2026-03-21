@@ -144,6 +144,20 @@ namespace UnityAV
         internal const uint RustAVPlaybackTimingContractVersion = 2u;
         internal const uint RustAVAvSyncContractVersion = 1u;
         internal const uint RustAVAudioOutputPolicyVersion = 2u;
+        internal const int DefaultFileAudioStartThresholdMilliseconds = 400;
+        internal const int DefaultAndroidFileAudioStartThresholdMilliseconds = 600;
+        internal const int DefaultRealtimeAudioStartThresholdMilliseconds = 120;
+        internal const int DefaultRealtimeAudioStartupGraceMilliseconds = 750;
+        internal const int DefaultRealtimeAudioStartupMinimumThresholdMilliseconds = 40;
+        internal const int DefaultFileAudioRingCapacityMilliseconds = 4000;
+        internal const int DefaultAndroidFileAudioRingCapacityMilliseconds = 4000;
+        internal const int DefaultRealtimeAudioRingCapacityMilliseconds = 750;
+        internal const int DefaultFileAudioBufferedCeilingMilliseconds = 1000;
+        internal const int DefaultAndroidFileAudioBufferedCeilingMilliseconds = 2500;
+        internal const int DefaultRealtimeAudioBufferedCeilingMilliseconds = 60;
+        internal const int DefaultRealtimeStartupAdditionalAudioSinkDelayMilliseconds = 20;
+        internal const int DefaultRealtimeSteadyAdditionalAudioSinkDelayMilliseconds = 60;
+        internal const int DefaultRealtimeBackendAdditionalAudioSinkDelayMilliseconds = 120;
         internal const uint RustAVSourceTimelineContractVersion = 1u;
         internal const uint RustAVPlayerSessionContractVersion = 1u;
         internal const uint RustAVAvSyncEnterpriseMetricsVersion = 2u;
@@ -793,6 +807,24 @@ namespace UnityAV
         internal delegate int GetPlayerSessionContractDelegate(
             int playerId,
             ref RustAVPlayerSessionContract contract);
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerPlay")]
+        private static extern int PlayPlayerNative(int id);
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerPrepare")]
+        private static extern int PreparePlayerNative(int id);
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerPause")]
+        private static extern int PausePlayerNative(int id);
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerStop")]
+        private static extern int StopPlayerNative(int id);
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerClose")]
+        private static extern int ClosePlayerNative(int id);
+
+        [DllImport(NativePlugin.Name, EntryPoint = "RustAV_PlayerSeek")]
+        private static extern int SeekPlayerNative(int id, double time);
 
         internal delegate int GetAvSyncEnterpriseMetricsDelegate(
             int playerId,
@@ -1492,6 +1524,76 @@ namespace UnityAV
                 TargetTexture = targetTexture,
                 NativeVideoTarget = nativeVideoTarget,
             };
+        }
+
+        internal static void EnsureValidPlayerSessionId(int playerId, string playerTypeName)
+        {
+            if (playerId < 0)
+            {
+                throw new InvalidOperationException(
+                    playerTypeName + " has no underlying valid native player.");
+            }
+        }
+
+        internal static void PlayPlayerSession(int playerId, string playerTypeName)
+        {
+            EnsureValidPlayerSessionId(playerId, playerTypeName);
+            ThrowLifecycleCommandFailure("play", PlayPlayerNative(playerId));
+        }
+
+        internal static void PreparePlayerSession(int playerId, string playerTypeName)
+        {
+            EnsureValidPlayerSessionId(playerId, playerTypeName);
+            ThrowLifecycleCommandFailure("prepare", PreparePlayerNative(playerId));
+        }
+
+        internal static void PausePlayerSession(int playerId, string playerTypeName)
+        {
+            EnsureValidPlayerSessionId(playerId, playerTypeName);
+            ThrowLifecycleCommandFailure("pause", PausePlayerNative(playerId));
+        }
+
+        internal static void StopPlayerSession(int playerId, string playerTypeName)
+        {
+            EnsureValidPlayerSessionId(playerId, playerTypeName);
+            ThrowLifecycleCommandFailure("stop", StopPlayerNative(playerId));
+        }
+
+        internal static void SeekPlayerSession(
+            int playerId,
+            double time,
+            string playerTypeName)
+        {
+            EnsureValidPlayerSessionId(playerId, playerTypeName);
+            ThrowLifecycleCommandFailure("seek", SeekPlayerNative(playerId, time));
+        }
+
+        internal static int ClosePlayerSession(int playerId, string playerTypeName)
+        {
+            EnsureValidPlayerSessionId(playerId, playerTypeName);
+            return ClosePlayerNative(playerId);
+        }
+
+        internal static void ClosePlayerSessionSilently(int playerId)
+        {
+            try
+            {
+                if (playerId >= 0)
+                {
+                    ClosePlayerNative(playerId);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        internal static void ThrowLifecycleCommandFailure(string action, int result)
+        {
+            if (result < 0)
+            {
+                throw new Exception($"Failed to {action} with error {result}");
+            }
         }
 
         internal static RustAVPlayerHealthSnapshotV2 CreateHealthSnapshot()
@@ -2850,6 +2952,456 @@ namespace UnityAV
                 RealtimeStartRequiresVideoFrame = policy.RealtimeStartRequiresVideoFrame != 0,
                 AllowAndroidFileOutputRateBridge = policy.AllowAndroidFileOutputRateBridge != 0,
             };
+        }
+
+        internal static AudioOutputPolicyView CreateDefaultAudioOutputPolicy()
+        {
+            return new AudioOutputPolicyView
+            {
+                FileStartThresholdMilliseconds = DefaultFileAudioStartThresholdMilliseconds,
+                AndroidFileStartThresholdMilliseconds = DefaultAndroidFileAudioStartThresholdMilliseconds,
+                RealtimeStartThresholdMilliseconds = DefaultRealtimeAudioStartThresholdMilliseconds,
+                RealtimeStartupGraceMilliseconds = DefaultRealtimeAudioStartupGraceMilliseconds,
+                RealtimeStartupMinimumThresholdMilliseconds = DefaultRealtimeAudioStartupMinimumThresholdMilliseconds,
+                FileRingCapacityMilliseconds = DefaultFileAudioRingCapacityMilliseconds,
+                AndroidFileRingCapacityMilliseconds = DefaultAndroidFileAudioRingCapacityMilliseconds,
+                RealtimeRingCapacityMilliseconds = DefaultRealtimeAudioRingCapacityMilliseconds,
+                FileBufferedCeilingMilliseconds = DefaultFileAudioBufferedCeilingMilliseconds,
+                AndroidFileBufferedCeilingMilliseconds = DefaultAndroidFileAudioBufferedCeilingMilliseconds,
+                RealtimeBufferedCeilingMilliseconds = DefaultRealtimeAudioBufferedCeilingMilliseconds,
+                RealtimeStartupAdditionalSinkDelayMilliseconds = DefaultRealtimeStartupAdditionalAudioSinkDelayMilliseconds,
+                RealtimeSteadyAdditionalSinkDelayMilliseconds = DefaultRealtimeSteadyAdditionalAudioSinkDelayMilliseconds,
+                RealtimeBackendAdditionalSinkDelayMilliseconds = DefaultRealtimeBackendAdditionalAudioSinkDelayMilliseconds,
+                RealtimeStartRequiresVideoFrame = true,
+                AllowAndroidFileOutputRateBridge = true,
+            };
+        }
+
+        internal static bool ResolveAndroidFileAudioOutputRateBridgeActive(
+            AudioOutputPolicyView policy,
+            bool isRealtimeSource,
+            RuntimePlatform platform,
+            int sourceSampleRate,
+            int playbackSampleRate)
+        {
+            return !isRealtimeSource
+                && platform == RuntimePlatform.Android
+                && policy.AllowAndroidFileOutputRateBridge
+                && sourceSampleRate > 0
+                && playbackSampleRate > 0
+                && sourceSampleRate != playbackSampleRate;
+        }
+
+        internal static int ResolvePlaybackSampleRate(
+            AudioOutputPolicyView policy,
+            bool isRealtimeSource,
+            RuntimePlatform platform,
+            int sourceSampleRate,
+            int outputSampleRate)
+        {
+            if (sourceSampleRate <= 0)
+            {
+                return sourceSampleRate;
+            }
+
+            if (isRealtimeSource
+                || platform != RuntimePlatform.Android
+                || !policy.AllowAndroidFileOutputRateBridge)
+            {
+                return sourceSampleRate;
+            }
+
+            if (outputSampleRate <= 0 || outputSampleRate >= sourceSampleRate)
+            {
+                return sourceSampleRate;
+            }
+
+            if (sourceSampleRate % outputSampleRate != 0)
+            {
+                return sourceSampleRate;
+            }
+
+            return outputSampleRate;
+        }
+
+        internal static int ResolveAudioStartThresholdMilliseconds(
+            AudioOutputPolicyView policy,
+            bool isRealtimeSource,
+            bool androidFileBridgeActive)
+        {
+            if (isRealtimeSource)
+            {
+                return policy.RealtimeStartThresholdMilliseconds;
+            }
+
+            return androidFileBridgeActive
+                ? policy.AndroidFileStartThresholdMilliseconds
+                : policy.FileStartThresholdMilliseconds;
+        }
+
+        internal static int ResolveAudioRingCapacityMilliseconds(
+            AudioOutputPolicyView policy,
+            bool isRealtimeSource,
+            bool androidFileBridgeActive)
+        {
+            if (isRealtimeSource)
+            {
+                return policy.RealtimeRingCapacityMilliseconds;
+            }
+
+            return androidFileBridgeActive
+                ? policy.AndroidFileRingCapacityMilliseconds
+                : policy.FileRingCapacityMilliseconds;
+        }
+
+        internal static int ResolveAudioBufferedCeilingMilliseconds(
+            AudioOutputPolicyView policy,
+            bool isRealtimeSource,
+            bool androidFileBridgeActive)
+        {
+            if (isRealtimeSource)
+            {
+                return policy.RealtimeBufferedCeilingMilliseconds;
+            }
+
+            return androidFileBridgeActive
+                ? policy.AndroidFileBufferedCeilingMilliseconds
+                : policy.FileBufferedCeilingMilliseconds;
+        }
+
+        internal static int ResolveRealtimeStartupGraceMilliseconds(
+            AudioOutputPolicyView policy)
+        {
+            return policy.RealtimeStartupGraceMilliseconds;
+        }
+
+        internal static int ResolveRealtimeStartupMinimumThresholdMilliseconds(
+            AudioOutputPolicyView policy)
+        {
+            return policy.RealtimeStartupMinimumThresholdMilliseconds;
+        }
+
+        internal static bool ResolveRealtimeStartRequiresVideoFrame(
+            AudioOutputPolicyView policy)
+        {
+            return policy.RealtimeStartRequiresVideoFrame;
+        }
+
+        internal static int ResolveRealtimeStartupAdditionalSinkDelayMilliseconds(
+            AudioOutputPolicyView policy)
+        {
+            return policy.RealtimeStartupAdditionalSinkDelayMilliseconds;
+        }
+
+        internal static int ResolveRealtimeSteadyAdditionalSinkDelayMilliseconds(
+            AudioOutputPolicyView policy)
+        {
+            return policy.RealtimeSteadyAdditionalSinkDelayMilliseconds;
+        }
+
+        internal static int ResolveRealtimeBackendAdditionalSinkDelayMilliseconds(
+            AudioOutputPolicyView policy)
+        {
+            return policy.RealtimeBackendAdditionalSinkDelayMilliseconds;
+        }
+
+        internal static int ResolveAudioBufferSamples(
+            int audioSampleRate,
+            int audioChannels,
+            int milliseconds)
+        {
+            if (audioSampleRate <= 0 || audioChannels <= 0 || milliseconds <= 0)
+            {
+                return 0;
+            }
+
+            var sampleCount =
+                ((long)audioSampleRate * audioChannels * milliseconds) / 1000L;
+            sampleCount = Math.Max(sampleCount, audioChannels);
+            return (int)Math.Min(sampleCount, int.MaxValue);
+        }
+
+        internal static int ResolveAudioStartThresholdSamples(
+            AudioOutputPolicyView policy,
+            bool isRealtimeSource,
+            bool androidFileBridgeActive,
+            int audioSampleRate,
+            int audioChannels,
+            float startupElapsedMilliseconds,
+            bool hasPresentedStartupFrame)
+        {
+            if (audioSampleRate <= 0 || audioChannels <= 0)
+            {
+                return 0;
+            }
+
+            var thresholdSamples = ResolveAudioBufferSamples(
+                audioSampleRate,
+                audioChannels,
+                ResolveAudioStartThresholdMilliseconds(
+                    policy,
+                    isRealtimeSource,
+                    androidFileBridgeActive));
+            if (!isRealtimeSource)
+            {
+                return thresholdSamples;
+            }
+
+            if (!hasPresentedStartupFrame
+                || startupElapsedMilliseconds < policy.RealtimeStartupGraceMilliseconds)
+            {
+                return thresholdSamples;
+            }
+
+            var relaxedThresholdSamples = ResolveAudioBufferSamples(
+                audioSampleRate,
+                audioChannels,
+                policy.RealtimeStartupMinimumThresholdMilliseconds);
+            return Math.Max(Math.Min(thresholdSamples, relaxedThresholdSamples), audioChannels);
+        }
+
+        internal static bool ResolveShouldStartAudioPlayback(
+            AudioOutputPolicyView policy,
+            bool isRealtimeSource,
+            bool androidFileBridgeActive,
+            bool requiresPresentedStartupFrame,
+            bool hasPresentedStartupFrame,
+            int audioSampleRate,
+            int audioChannels,
+            int bufferedSamples,
+            float startupElapsedMilliseconds)
+        {
+            if (audioSampleRate <= 0 || audioChannels <= 0)
+            {
+                return false;
+            }
+
+            if (isRealtimeSource
+                && requiresPresentedStartupFrame
+                && !hasPresentedStartupFrame)
+            {
+                return false;
+            }
+
+            var thresholdSamples = ResolveAudioStartThresholdSamples(
+                policy,
+                isRealtimeSource,
+                androidFileBridgeActive,
+                audioSampleRate,
+                audioChannels,
+                startupElapsedMilliseconds,
+                !requiresPresentedStartupFrame || hasPresentedStartupFrame);
+            return bufferedSamples >= thresholdSamples;
+        }
+
+        internal static float ResolvePassiveAvSyncAudioResamplePitch(
+            PassiveAvSyncSnapshotView snapshot,
+            bool isRealtimeSource,
+            out bool active)
+        {
+            active = false;
+            if (!isRealtimeSource || !snapshot.AudioResampleActive)
+            {
+                return 1.0f;
+            }
+
+            if (double.IsNaN(snapshot.AudioResampleRatio)
+                || double.IsInfinity(snapshot.AudioResampleRatio)
+                || snapshot.AudioResampleRatio <= 0.0)
+            {
+                return 1.0f;
+            }
+
+            var clampedRatio = Math.Max(0.995, Math.Min(1.005, snapshot.AudioResampleRatio));
+            if (Math.Abs(clampedRatio - 1.0) < 0.0001)
+            {
+                return 1.0f;
+            }
+
+            active = true;
+            return (float)clampedRatio;
+        }
+
+        internal static int ResolveAudioBufferedCeilingSamples(
+            AudioOutputPolicyView policy,
+            bool isRealtimeSource,
+            bool androidFileBridgeActive,
+            bool audioStarted,
+            int audioSampleRate,
+            int audioChannels,
+            float startupElapsedMilliseconds,
+            bool hasPresentedStartupFrame)
+        {
+            if (audioSampleRate <= 0 || audioChannels <= 0)
+            {
+                return 0;
+            }
+
+            var steadyStateSamples = ResolveAudioBufferSamples(
+                audioSampleRate,
+                audioChannels,
+                ResolveAudioBufferedCeilingMilliseconds(
+                    policy,
+                    isRealtimeSource,
+                    androidFileBridgeActive));
+            if (audioStarted)
+            {
+                return steadyStateSamples;
+            }
+
+            return ResolveAudioStartThresholdSamples(
+                policy,
+                isRealtimeSource,
+                androidFileBridgeActive,
+                audioSampleRate,
+                audioChannels,
+                startupElapsedMilliseconds,
+                hasPresentedStartupFrame);
+        }
+
+        internal static int ResolveRealtimeAdditionalSinkDelayMilliseconds(
+            AudioOutputPolicyView policy,
+            bool isRealtimeSource,
+            bool audioStarted,
+            bool includeBackendAdditionalDelay,
+            int steadyAdditionalSinkDelayMilliseconds)
+        {
+            if (!isRealtimeSource)
+            {
+                return 0;
+            }
+
+            var delayMilliseconds = audioStarted
+                ? steadyAdditionalSinkDelayMilliseconds
+                : policy.RealtimeStartupAdditionalSinkDelayMilliseconds;
+            if (includeBackendAdditionalDelay)
+            {
+                delayMilliseconds += policy.RealtimeBackendAdditionalSinkDelayMilliseconds;
+            }
+
+            return delayMilliseconds;
+        }
+
+        internal static bool ResolveIsFileNativeVideoStartupWarmupComplete(
+            bool localWarmupCompleted,
+            bool contractWarmupAvailable,
+            bool contractWarmupComplete)
+        {
+            return localWarmupCompleted
+                || (contractWarmupAvailable && contractWarmupComplete);
+        }
+
+        internal static bool ResolveShouldWarmupFileNativeVideoStartupPresentation(
+            bool isRealtimeSource,
+            bool nativeVideoPathActive,
+            bool externalTextureTarget,
+            bool localWarmupCompleted,
+            bool contractWarmupAvailable,
+            bool contractWarmupComplete,
+            long presentedLifetimeCount)
+        {
+            return !isRealtimeSource
+                && nativeVideoPathActive
+                && externalTextureTarget
+                && !ResolveIsFileNativeVideoStartupWarmupComplete(
+                    localWarmupCompleted,
+                    contractWarmupAvailable,
+                    contractWarmupComplete)
+                && presentedLifetimeCount == 0;
+        }
+
+        internal static bool ResolveShouldHoldFileNativeVideoStartupPresentation(
+            bool warmupEnabled,
+            bool hasLastFrame,
+            long frameIndexDelta,
+            double frameTimeDeltaSec,
+            float realtimeDeltaSec,
+            int stableFrameCount,
+            int stableFrameTarget,
+            out int nextStableFrameCount)
+        {
+            nextStableFrameCount = stableFrameCount;
+            if (!warmupEnabled)
+            {
+                return false;
+            }
+
+            if (!hasLastFrame)
+            {
+                nextStableFrameCount = 0;
+                return true;
+            }
+
+            if (frameIndexDelta == 0 && frameTimeDeltaSec <= 0.0)
+            {
+                return true;
+            }
+
+            var stableCadence = frameIndexDelta == 1
+                && frameTimeDeltaSec > 0.0
+                && realtimeDeltaSec > 0.0f
+                && frameTimeDeltaSec <= 0.050
+                && realtimeDeltaSec <= Math.Max(0.050f, (float)frameTimeDeltaSec * 2.5f);
+            nextStableFrameCount = stableCadence
+                ? stableFrameCount + 1
+                : 0;
+            return nextStableFrameCount < stableFrameTarget;
+        }
+
+        internal static double ResolveBufferedAudioSecondsFromBytes(
+            int bufferedBytes,
+            int audioSampleRate,
+            int audioChannels,
+            int audioBytesPerSample)
+        {
+            if (bufferedBytes <= 0
+                || audioSampleRate <= 0
+                || audioChannels <= 0
+                || audioBytesPerSample <= 0)
+            {
+                return 0.0;
+            }
+
+            var bytesPerSecond =
+                (long)audioSampleRate * audioChannels * audioBytesPerSample;
+            if (bytesPerSecond <= 0)
+            {
+                return 0.0;
+            }
+
+            return bufferedBytes / (double)bytesPerSecond;
+        }
+
+        internal static double ResolveBufferedAudioSecondsFromSamples(
+            int bufferedSamples,
+            int audioSampleRate,
+            int audioChannels)
+        {
+            if (bufferedSamples <= 0 || audioSampleRate <= 0 || audioChannels <= 0)
+            {
+                return 0.0;
+            }
+
+            var samplesPerSecond = (long)audioSampleRate * audioChannels;
+            if (samplesPerSecond <= 0)
+            {
+                return 0.0;
+            }
+
+            return bufferedSamples / (double)samplesPerSecond;
+        }
+
+        internal static double ResolveUnityDspBufferedSeconds(
+            int audioSampleRate,
+            int dspBufferLength,
+            int dspBufferCount)
+        {
+            if (audioSampleRate <= 0 || dspBufferLength <= 0 || dspBufferCount <= 0)
+            {
+                return 0.0;
+            }
+
+            return (double)(dspBufferLength * dspBufferCount) / audioSampleRate;
         }
 
         internal static SourceTimelineContractView NormalizeSourceTimelineContract(

@@ -25,6 +25,7 @@ namespace UnityAV.Editor
         private const string AndroidPullBuildPath = "Build/CodexPullValidationAndroid/CodexPullValidation.apk";
         private const string NativeBuildPath = "Build/CodexNativeVideoValidation/CodexNativeVideoValidation.exe";
         private const string MediaPlayerAuditBuildPath = "Build/CodexMediaPlayerAudioAudit/CodexMediaPlayerAudioAudit.exe";
+        private const string AndroidMediaPlayerAuditBuildPath = "Build/CodexMediaPlayerAudioAuditAndroid/CodexMediaPlayerAudioAudit.apk";
         private const string NativePreviewBuildPath = "Build/CodexNativeVideoPreview/CodexNativeVideoPreview.exe";
         private const string SampleUri = "SampleVideo_1280x720_10mb.mp4";
         private const int DefaultVideoWidth = 1280;
@@ -32,6 +33,9 @@ namespace UnityAV.Editor
         private const string DefaultAndroidValidationProductName = "RustAVValidation";
         private const string DefaultAndroidValidationCompanyName = "zero16832";
         private const string DefaultAndroidValidationApplicationIdentifier = "com.zero16832.rustavvalidation";
+        private const string DefaultAndroidMediaPlayerAuditProductName = "RustAVMediaPlayerAudit";
+        private const string DefaultAndroidMediaPlayerAuditApplicationIdentifier =
+            "com.zero16832.rustavmediaplayeraudit";
         private const string DefaultAndroidValidationArchitectures = "ARM64";
         private const int BuildOutputDeleteRetryCount = 10;
         private const int BuildOutputDeleteRetryDelayMs = 500;
@@ -216,6 +220,60 @@ namespace UnityAV.Editor
             }
 
             Debug.Log("[CodexValidationBuild] android_pull_build_succeeded=" + outputPath);
+        }
+
+        public static void BuildAndroidMediaPlayerAudioAuditPlayerFromCi()
+        {
+            var args = new BuildArguments(Environment.GetCommandLineArgs());
+            var outputPath = args.Get("rustavOutput", AndroidMediaPlayerAuditBuildPath);
+            var version = args.Get("rustavVersion", "0.1.0");
+            var applicationIdentifier = args.Get(
+                "rustavApplicationIdentifier",
+                DefaultAndroidMediaPlayerAuditApplicationIdentifier);
+            var androidVersionCode = args.GetInt("rustavAndroidVersionCode", 1);
+            var androidArchitectures = ParseAndroidArchitectures(
+                args.Get(
+                    "rustavAndroidArchitectures",
+                    DefaultAndroidValidationArchitectures));
+            var androidAppBundle = args.GetBool("rustavAndroidAppBundle", false);
+
+            CreateMediaPlayerAudioAuditScene();
+            PrepareSingleFileBuildOutput(outputPath);
+
+            PlayerSettings.productName = DefaultAndroidMediaPlayerAuditProductName;
+            PlayerSettings.companyName = DefaultAndroidValidationCompanyName;
+            PlayerSettings.bundleVersion = version;
+            PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android, applicationIdentifier);
+            PlayerSettings.Android.bundleVersionCode = Math.Max(1, androidVersionCode);
+            PlayerSettings.SetScriptingBackend(
+                UnityEditor.Build.NamedBuildTarget.Android,
+                ScriptingImplementation.IL2CPP);
+            PlayerSettings.Android.targetArchitectures = androidArchitectures;
+            EditorUserBuildSettings.buildAppBundle = androidAppBundle;
+
+            BuildReport report;
+            try
+            {
+                report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+                {
+                    scenes = new[] { MediaPlayerAuditScenePath },
+                    locationPathName = outputPath,
+                    target = BuildTarget.Android,
+                    options = BuildOptions.Development,
+                });
+            }
+            finally
+            {
+                DeleteGeneratedValidationScene(MediaPlayerAuditScenePath);
+            }
+
+            if (report.summary.result != BuildResult.Succeeded)
+            {
+                throw new Exception(
+                    "Android MediaPlayer 音频审计包构建失败: " + report.summary.result);
+            }
+
+            Debug.Log("[CodexValidationBuild] android_media_player_audit_build_succeeded=" + outputPath);
         }
 
         private static AndroidArchitecture ParseAndroidArchitectures(string rawValue)

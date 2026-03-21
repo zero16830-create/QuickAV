@@ -1,5 +1,7 @@
 using System;
 using System.Collections;
+using System.IO;
+using System.Text;
 using UnityEngine;
 
 namespace UnityAV
@@ -23,6 +25,13 @@ namespace UnityAV
         public string StartupTimeoutSecondsArgumentName = "-startupTimeoutSeconds=";
         public string WindowWidthArgumentName = "-windowWidth=";
         public string WindowHeightArgumentName = "-windowHeight=";
+        public string AndroidUriExtraName = "rustavUri";
+        public string AndroidBackendExtraName = "rustavBackend";
+        public string AndroidValidationSecondsExtraName = "rustavValidationSeconds";
+        public string AndroidStartupTimeoutSecondsExtraName = "rustavStartupTimeoutSeconds";
+        public string AndroidWindowWidthExtraName = "rustavWindowWidth";
+        public string AndroidWindowHeightExtraName = "rustavWindowHeight";
+        public string SummaryFileName = "codex-validation-summary.txt";
         public bool ForceWindowedMode = true;
         public Transform VideoSurface;
         public Camera ValidationCamera;
@@ -45,6 +54,65 @@ namespace UnityAV
         private bool _observedStartedDuringWindow;
         private bool _observedNativeFrameDuringWindow;
         private bool _hasAudioListener;
+        private bool _observedPlaybackContractAvailable;
+        private string _observedPlaybackContractMasterTimeSec = "n/a";
+        private string _observedPlaybackContractMasterTimeUs = "n/a";
+        private string _observedPlaybackContractExternalTimeSec = "n/a";
+        private string _observedPlaybackContractExternalTimeUs = "n/a";
+        private string _observedPlaybackContractHasUsMirror = "False";
+        private bool _observedSourceTimelineAvailable;
+        private string _observedSourceTimelineModel = "n/a";
+        private string _observedSourceTimelineAnchorKind = "n/a";
+        private string _observedSourceTimelineIsRealtime = "False";
+        private string _observedSourceTimelineHasCurrentSourceTimeUs = "False";
+        private string _observedSourceTimelineCurrentSourceTimeUs = "n/a";
+        private string _observedSourceTimelineHasTimelineOriginUs = "False";
+        private string _observedSourceTimelineTimelineOriginUs = "n/a";
+        private string _observedSourceTimelineHasAnchorValueUs = "False";
+        private string _observedSourceTimelineAnchorValueUs = "n/a";
+        private string _observedSourceTimelineHasAnchorMonoUs = "False";
+        private string _observedSourceTimelineAnchorMonoUs = "n/a";
+        private bool _observedPlayerSessionAvailable;
+        private string _observedPlayerSessionLifecycleState = "n/a";
+        private string _observedPlayerSessionPublicState = "n/a";
+        private string _observedPlayerSessionRuntimeState = "n/a";
+        private string _observedPlayerSessionPlaybackIntent = "n/a";
+        private string _observedPlayerSessionStopReason = "n/a";
+        private string _observedPlayerSessionSourceState = "n/a";
+        private string _observedPlayerSessionCanSeek = "False";
+        private string _observedPlayerSessionIsRealtime = "False";
+        private string _observedPlayerSessionIsBuffering = "False";
+        private string _observedPlayerSessionIsSyncing = "False";
+        private bool _observedAudioOutputPolicyAvailable;
+        private string _observedAudioOutputPolicyFileStartMs = "n/a";
+        private string _observedAudioOutputPolicyAndroidFileStartMs = "n/a";
+        private string _observedAudioOutputPolicyRealtimeStartMs = "n/a";
+        private string _observedAudioOutputPolicyRealtimeStartupGraceMs = "n/a";
+        private string _observedAudioOutputPolicyRealtimeStartupMinimumThresholdMs = "n/a";
+        private string _observedAudioOutputPolicyFileRingCapacityMs = "n/a";
+        private string _observedAudioOutputPolicyAndroidFileRingCapacityMs = "n/a";
+        private string _observedAudioOutputPolicyRealtimeRingCapacityMs = "n/a";
+        private string _observedAudioOutputPolicyFileBufferedCeilingMs = "n/a";
+        private string _observedAudioOutputPolicyAndroidFileBufferedCeilingMs = "n/a";
+        private string _observedAudioOutputPolicyRealtimeBufferedCeilingMs = "n/a";
+        private string _observedAudioOutputPolicyRealtimeStartupAdditionalSinkDelayMs = "n/a";
+        private string _observedAudioOutputPolicyRealtimeSteadyAdditionalSinkDelayMs = "n/a";
+        private string _observedAudioOutputPolicyRealtimeBackendAdditionalSinkDelayMs = "n/a";
+        private string _observedAudioOutputPolicyRealtimeStartRequiresVideoFrame = "False";
+        private string _observedAudioOutputPolicyAllowAndroidFileOutputRateBridge = "False";
+        private bool _observedAvSyncEnterpriseAvailable;
+        private string _observedAvSyncEnterpriseSampleCount = "n/a";
+        private string _observedAvSyncEnterpriseDriftProjected2hMs = "n/a";
+        private bool _observedPassiveAvSyncAvailable;
+        private string _observedPassiveAvSyncRawOffsetUs = "n/a";
+        private string _observedPassiveAvSyncSmoothOffsetUs = "n/a";
+        private string _observedPassiveAvSyncDriftPpm = "n/a";
+        private string _observedPassiveAvSyncDriftInterceptUs = "n/a";
+        private string _observedPassiveAvSyncDriftSampleCount = "n/a";
+        private string _observedPassiveAvSyncVideoSchedule = "n/a";
+        private string _observedPassiveAvSyncAudioResampleRatio = "n/a";
+        private string _observedPassiveAvSyncAudioResampleActive = "False";
+        private string _observedPassiveAvSyncShouldRebuildAnchor = "False";
 
         private void Awake()
         {
@@ -58,14 +126,14 @@ namespace UnityAV
                 return;
             }
 
-            var overrideUri = TryReadStringArgument(UriArgumentName);
+            var overrideUri = TryReadOverrideValue(UriArgumentName, AndroidUriExtraName);
             if (!string.IsNullOrEmpty(overrideUri))
             {
                 Player.Uri = overrideUri;
                 Debug.Log("[CodexValidation] override uri=" + overrideUri);
             }
 
-            var overrideBackend = TryReadStringArgument(BackendArgumentName);
+            var overrideBackend = TryReadOverrideValue(BackendArgumentName, AndroidBackendExtraName);
             MediaBackendKind parsedBackend;
             if (TryParseBackend(overrideBackend, out parsedBackend))
             {
@@ -78,17 +146,21 @@ namespace UnityAV
 
             ValidationSeconds = TryReadFloatArgument(
                 ValidationSecondsArgumentName,
+                AndroidValidationSecondsExtraName,
                 ValidationSeconds);
             StartupTimeoutSeconds = TryReadFloatArgument(
                 StartupTimeoutSecondsArgumentName,
+                AndroidStartupTimeoutSecondsExtraName,
                 StartupTimeoutSeconds);
 
             _requestedWindowWidth = TryReadIntArgument(
                 WindowWidthArgumentName,
+                AndroidWindowWidthExtraName,
                 Player.Width,
                 out _hasExplicitWindowWidth);
             _requestedWindowHeight = TryReadIntArgument(
                 WindowHeightArgumentName,
+                AndroidWindowHeightExtraName,
                 Player.Height,
                 out _hasExplicitWindowHeight);
 
@@ -191,21 +263,23 @@ namespace UnityAV
             }
 
             var finalSnapshot = EmitStatus();
-            var validationPassed = EvaluateValidationResult(finalSnapshot);
-            var exitCode = validationPassed ? 0 : 2;
+            var validationResult = EvaluateValidationResult(finalSnapshot);
+            WriteValidationSummary(validationResult, finalSnapshot);
+            var exitCode = validationResult.Passed ? 0 : 2;
             yield return QuitAfterDelay(0.5f, exitCode);
         }
 
         private ValidationSnapshot EmitStatus()
         {
             var snapshot = CaptureSnapshot();
+            UpdateObservedContractState();
             var actualRenderer = snapshot.NativeVideoActive
                 ? Player.NativeVideoPresentationPath.ToString()
                 : "TextureFallback";
 
             Debug.Log(
                 string.Format(
-                    "[CodexValidation] time={0:F3}s texture={1} audioPlaying={2} started={3} startupElapsed={4:F3}s sourceState={5} sourcePackets={6} sourceTimeouts={7} sourceReconnects={8} window={9}x{10} textureSize={11}x{12} fullscreen={13} mode={14} backend={15} requested_renderer={16} actual_renderer={17}",
+                    "[CodexValidation] time={0:F3}s texture={1} audioPlaying={2} started={3} startupElapsed={4:F3}s sourceState={5} sourcePackets={6} sourceTimeouts={7} sourceReconnects={8} window={9}x{10} textureSize={11}x{12} fullscreen={13} mode={14} backend={15} requested_renderer={16} actual_renderer={17} playback_contract_available={18} playback_contract_master_sec={19} playback_contract_has_us_mirror={20} source_timeline_available={21} source_timeline_model={22} source_timeline_anchor_kind={23} player_session_available={24} player_session_lifecycle={25} player_session_is_realtime={26} audio_output_policy_available={27} av_sync_enterprise_available={28} av_sync_enterprise_sample_count={29} av_sync_enterprise_drift_projected_2h_ms={30}",
                     snapshot.PlaybackTime,
                     snapshot.HasTexture,
                     snapshot.AudioPlaying,
@@ -223,7 +297,20 @@ namespace UnityAV
                     Screen.fullScreenMode,
                     Player.ActualBackendKind,
                     "NativeVideoPreferred",
-                    actualRenderer));
+                    actualRenderer,
+                    _observedPlaybackContractAvailable,
+                    _observedPlaybackContractMasterTimeSec,
+                    _observedPlaybackContractHasUsMirror,
+                    _observedSourceTimelineAvailable,
+                    _observedSourceTimelineModel,
+                    _observedSourceTimelineAnchorKind,
+                    _observedPlayerSessionAvailable,
+                    _observedPlayerSessionLifecycleState,
+                    _observedPlayerSessionIsRealtime,
+                    _observedAudioOutputPolicyAvailable,
+                    _observedAvSyncEnterpriseAvailable,
+                    _observedAvSyncEnterpriseSampleCount,
+                    _observedAvSyncEnterpriseDriftProjected2hMs));
             Debug.Log(
                 string.Format(
                     "[CodexValidation] media_player_audit audioSourcePresent={0} hasAudioListener={1} nativeVideoActive={2} nativeActivationDecision={3} nativeFrame={4} actualBackend={5}",
@@ -234,7 +321,157 @@ namespace UnityAV
                     snapshot.HasPresentedNativeVideoFrame,
                     Player.ActualBackendKind));
 
+            if (snapshot.PlayerSessionAvailable)
+            {
+                Debug.Log(
+                    string.Format(
+                        "[CodexValidation] player_session_detail lifecycle={0} public={1} runtime={2} intent={3} stop_reason={4} source_state={5} can_seek={6} realtime={7} buffering={8} syncing={9}",
+                        snapshot.PlayerSessionLifecycleState,
+                        snapshot.PlayerSessionPublicState,
+                        snapshot.PlayerSessionRuntimeState,
+                        snapshot.PlayerSessionPlaybackIntent,
+                        snapshot.PlayerSessionStopReason,
+                        snapshot.PlayerSessionSourceState,
+                        snapshot.PlayerSessionCanSeek,
+                        snapshot.PlayerSessionIsRealtime,
+                        snapshot.PlayerSessionIsBuffering,
+                        snapshot.PlayerSessionIsSyncing));
+            }
+
             return snapshot;
+        }
+
+        private void UpdateObservedContractState()
+        {
+            if (Player == null)
+            {
+                return;
+            }
+
+            MediaNativeInteropCommon.PlaybackTimingContractView playbackContract;
+            if (Player.TryGetPlaybackTimingContract(out playbackContract))
+            {
+                _observedPlaybackContractAvailable = true;
+                _observedPlaybackContractMasterTimeSec = playbackContract.MasterTimeSec.ToString("F3");
+                _observedPlaybackContractMasterTimeUs = playbackContract.MasterTimeUs.ToString();
+                _observedPlaybackContractExternalTimeSec = playbackContract.ExternalTimeSec.ToString("F3");
+                _observedPlaybackContractExternalTimeUs = playbackContract.ExternalTimeUs.ToString();
+                _observedPlaybackContractHasUsMirror = playbackContract.HasMicrosecondMirror.ToString();
+            }
+
+            MediaNativeInteropCommon.SourceTimelineContractView sourceTimeline;
+            if (Player.TryGetSourceTimelineContract(out sourceTimeline))
+            {
+                _observedSourceTimelineAvailable = true;
+                _observedSourceTimelineModel = FormatSourceTimelineModel(sourceTimeline.Model);
+                _observedSourceTimelineAnchorKind = FormatSourceTimelineAnchorKind(sourceTimeline.AnchorKind);
+                _observedSourceTimelineIsRealtime = sourceTimeline.IsRealtime.ToString();
+                _observedSourceTimelineHasCurrentSourceTimeUs =
+                    sourceTimeline.HasCurrentSourceTimeUs.ToString();
+                _observedSourceTimelineCurrentSourceTimeUs =
+                    sourceTimeline.CurrentSourceTimeUs.ToString();
+                _observedSourceTimelineHasTimelineOriginUs =
+                    sourceTimeline.HasTimelineOriginUs.ToString();
+                _observedSourceTimelineTimelineOriginUs =
+                    sourceTimeline.TimelineOriginUs.ToString();
+                _observedSourceTimelineHasAnchorValueUs =
+                    sourceTimeline.HasAnchorValueUs.ToString();
+                _observedSourceTimelineAnchorValueUs =
+                    sourceTimeline.AnchorValueUs.ToString();
+                _observedSourceTimelineHasAnchorMonoUs =
+                    sourceTimeline.HasAnchorMonoUs.ToString();
+                _observedSourceTimelineAnchorMonoUs =
+                    sourceTimeline.AnchorMonoUs.ToString();
+            }
+
+            MediaNativeInteropCommon.PlayerSessionContractView playerSession;
+            if (Player.TryGetPlayerSessionContract(out playerSession))
+            {
+                _observedPlayerSessionAvailable = true;
+                _observedPlayerSessionLifecycleState =
+                    FormatPlayerSessionLifecycleState(playerSession.LifecycleState);
+                _observedPlayerSessionPublicState =
+                    FormatPlayerSessionState(playerSession.PublicState);
+                _observedPlayerSessionRuntimeState =
+                    FormatPlayerSessionState(playerSession.RuntimeState);
+                _observedPlayerSessionPlaybackIntent =
+                    FormatPlayerSessionPlaybackIntent(playerSession.PlaybackIntent);
+                _observedPlayerSessionStopReason =
+                    FormatPlayerSessionStopReason(playerSession.StopReason);
+                _observedPlayerSessionSourceState = playerSession.SourceConnectionState.ToString();
+                _observedPlayerSessionCanSeek = playerSession.CanSeek.ToString();
+                _observedPlayerSessionIsRealtime = playerSession.IsRealtime.ToString();
+                _observedPlayerSessionIsBuffering = playerSession.IsBuffering.ToString();
+                _observedPlayerSessionIsSyncing = playerSession.IsSyncing.ToString();
+            }
+
+            MediaNativeInteropCommon.AudioOutputPolicyView audioOutputPolicy;
+            if (Player.TryGetAudioOutputPolicy(out audioOutputPolicy))
+            {
+                _observedAudioOutputPolicyAvailable = true;
+                _observedAudioOutputPolicyFileStartMs =
+                    audioOutputPolicy.FileStartThresholdMilliseconds.ToString();
+                _observedAudioOutputPolicyAndroidFileStartMs =
+                    audioOutputPolicy.AndroidFileStartThresholdMilliseconds.ToString();
+                _observedAudioOutputPolicyRealtimeStartMs =
+                    audioOutputPolicy.RealtimeStartThresholdMilliseconds.ToString();
+                _observedAudioOutputPolicyRealtimeStartupGraceMs =
+                    audioOutputPolicy.RealtimeStartupGraceMilliseconds.ToString();
+                _observedAudioOutputPolicyRealtimeStartupMinimumThresholdMs =
+                    audioOutputPolicy.RealtimeStartupMinimumThresholdMilliseconds.ToString();
+                _observedAudioOutputPolicyFileRingCapacityMs =
+                    audioOutputPolicy.FileRingCapacityMilliseconds.ToString();
+                _observedAudioOutputPolicyAndroidFileRingCapacityMs =
+                    audioOutputPolicy.AndroidFileRingCapacityMilliseconds.ToString();
+                _observedAudioOutputPolicyRealtimeRingCapacityMs =
+                    audioOutputPolicy.RealtimeRingCapacityMilliseconds.ToString();
+                _observedAudioOutputPolicyFileBufferedCeilingMs =
+                    audioOutputPolicy.FileBufferedCeilingMilliseconds.ToString();
+                _observedAudioOutputPolicyAndroidFileBufferedCeilingMs =
+                    audioOutputPolicy.AndroidFileBufferedCeilingMilliseconds.ToString();
+                _observedAudioOutputPolicyRealtimeBufferedCeilingMs =
+                    audioOutputPolicy.RealtimeBufferedCeilingMilliseconds.ToString();
+                _observedAudioOutputPolicyRealtimeStartupAdditionalSinkDelayMs =
+                    audioOutputPolicy.RealtimeStartupAdditionalSinkDelayMilliseconds.ToString();
+                _observedAudioOutputPolicyRealtimeSteadyAdditionalSinkDelayMs =
+                    audioOutputPolicy.RealtimeSteadyAdditionalSinkDelayMilliseconds.ToString();
+                _observedAudioOutputPolicyRealtimeBackendAdditionalSinkDelayMs =
+                    audioOutputPolicy.RealtimeBackendAdditionalSinkDelayMilliseconds.ToString();
+                _observedAudioOutputPolicyRealtimeStartRequiresVideoFrame =
+                    audioOutputPolicy.RealtimeStartRequiresVideoFrame.ToString();
+                _observedAudioOutputPolicyAllowAndroidFileOutputRateBridge =
+                    audioOutputPolicy.AllowAndroidFileOutputRateBridge.ToString();
+            }
+
+            MediaNativeInteropCommon.AvSyncEnterpriseMetricsView enterpriseMetrics;
+            if (Player.TryGetAvSyncEnterpriseMetrics(out enterpriseMetrics))
+            {
+                _observedAvSyncEnterpriseAvailable = true;
+                _observedAvSyncEnterpriseSampleCount = enterpriseMetrics.SampleCount.ToString();
+                _observedAvSyncEnterpriseDriftProjected2hMs =
+                    enterpriseMetrics.DriftProjected2hMs.ToString("F3");
+            }
+
+            MediaNativeInteropCommon.PassiveAvSyncSnapshotView passiveAvSyncSnapshot;
+            if (Player.TryGetPassiveAvSyncSnapshot(out passiveAvSyncSnapshot))
+            {
+                _observedPassiveAvSyncAvailable = true;
+                _observedPassiveAvSyncRawOffsetUs = passiveAvSyncSnapshot.RawOffsetUs.ToString();
+                _observedPassiveAvSyncSmoothOffsetUs = passiveAvSyncSnapshot.SmoothOffsetUs.ToString();
+                _observedPassiveAvSyncDriftPpm = passiveAvSyncSnapshot.DriftPpm.ToString("F3");
+                _observedPassiveAvSyncDriftInterceptUs =
+                    passiveAvSyncSnapshot.DriftInterceptUs.ToString();
+                _observedPassiveAvSyncDriftSampleCount =
+                    passiveAvSyncSnapshot.DriftSampleCount.ToString();
+                _observedPassiveAvSyncVideoSchedule =
+                    passiveAvSyncSnapshot.VideoSchedule ?? "Unavailable";
+                _observedPassiveAvSyncAudioResampleRatio =
+                    passiveAvSyncSnapshot.AudioResampleRatio.ToString("F6");
+                _observedPassiveAvSyncAudioResampleActive =
+                    passiveAvSyncSnapshot.AudioResampleActive.ToString();
+                _observedPassiveAvSyncShouldRebuildAnchor =
+                    passiveAvSyncSnapshot.ShouldRebuildAnchor.ToString();
+            }
         }
 
         private ValidationSnapshot CaptureSnapshot()
@@ -248,6 +485,16 @@ namespace UnityAV
             MediaPlayer.PlayerRuntimeHealth health;
             var hasHealth = Player.TryGetRuntimeHealth(out health);
             var started = hasHealth ? health.IsPlaying : playbackTime >= 0.0;
+            MediaNativeInteropCommon.PlayerSessionContractView playerSessionContract;
+            var playerSessionAvailable = Player.TryGetPlayerSessionContract(out playerSessionContract);
+            MediaNativeInteropCommon.SourceTimelineContractView sourceTimelineContract;
+            var sourceTimelineAvailable = Player.TryGetSourceTimelineContract(out sourceTimelineContract);
+            MediaNativeInteropCommon.PlaybackTimingContractView playbackTimingContract;
+            var playbackContractAvailable = Player.TryGetPlaybackTimingContract(out playbackTimingContract);
+            MediaNativeInteropCommon.AvSyncEnterpriseMetricsView enterpriseMetrics;
+            var avSyncEnterpriseAvailable = Player.TryGetAvSyncEnterpriseMetrics(out enterpriseMetrics);
+            MediaNativeInteropCommon.AudioOutputPolicyView audioOutputPolicy;
+            var audioOutputPolicyAvailable = Player.TryGetAudioOutputPolicy(out audioOutputPolicy);
 
             return new ValidationSnapshot
             {
@@ -266,6 +513,52 @@ namespace UnityAV
                 NativeVideoActive = Player.IsNativeVideoPathActive,
                 NativeActivationDecision = Player.NativeVideoActivationDecision.ToString(),
                 HasPresentedNativeVideoFrame = Player.HasPresentedNativeVideoFrame,
+                PlayerSessionAvailable = playerSessionAvailable,
+                PlayerSessionLifecycleState = playerSessionAvailable
+                    ? FormatPlayerSessionLifecycleState(playerSessionContract.LifecycleState)
+                    : "n/a",
+                PlayerSessionPublicState = playerSessionAvailable
+                    ? FormatPlayerSessionState(playerSessionContract.PublicState)
+                    : "n/a",
+                PlayerSessionRuntimeState = playerSessionAvailable
+                    ? FormatPlayerSessionState(playerSessionContract.RuntimeState)
+                    : "n/a",
+                PlayerSessionPlaybackIntent = playerSessionAvailable
+                    ? FormatPlayerSessionPlaybackIntent(playerSessionContract.PlaybackIntent)
+                    : "n/a",
+                PlayerSessionStopReason = playerSessionAvailable
+                    ? FormatPlayerSessionStopReason(playerSessionContract.StopReason)
+                    : "n/a",
+                PlayerSessionSourceState = playerSessionAvailable
+                    ? playerSessionContract.SourceConnectionState.ToString()
+                    : "n/a",
+                PlayerSessionCanSeek = playerSessionAvailable
+                    ? playerSessionContract.CanSeek.ToString()
+                    : "n/a",
+                PlayerSessionIsRealtime = playerSessionAvailable
+                    ? playerSessionContract.IsRealtime.ToString()
+                    : "n/a",
+                PlayerSessionIsBuffering = playerSessionAvailable
+                    ? playerSessionContract.IsBuffering.ToString()
+                    : "n/a",
+                PlayerSessionIsSyncing = playerSessionAvailable
+                    ? playerSessionContract.IsSyncing.ToString()
+                    : "n/a",
+                SourceTimelineAvailable = sourceTimelineAvailable,
+                SourceTimelineModel = sourceTimelineAvailable ? sourceTimelineContract.Model.ToString() : "n/a",
+                SourceTimelineAnchorKind = sourceTimelineAvailable ? sourceTimelineContract.AnchorKind.ToString() : "n/a",
+                PlaybackContractAvailable = playbackContractAvailable,
+                PlaybackContractHasUsMirror = playbackContractAvailable
+                    ? playbackTimingContract.HasMicrosecondMirror.ToString()
+                    : "n/a",
+                AudioOutputPolicyAvailable = audioOutputPolicyAvailable,
+                AvSyncEnterpriseAvailable = avSyncEnterpriseAvailable,
+                AvSyncEnterpriseSampleCount = avSyncEnterpriseAvailable
+                    ? enterpriseMetrics.SampleCount.ToString()
+                    : "n/a",
+                AvSyncEnterpriseDriftProjected2hMs = avSyncEnterpriseAvailable
+                    ? enterpriseMetrics.DriftProjected2hMs.ToString("F3")
+                    : "n/a",
             };
         }
 
@@ -299,7 +592,7 @@ namespace UnityAV
             }
         }
 
-        private bool EvaluateValidationResult(ValidationSnapshot finalSnapshot)
+        private ValidationResultInfo EvaluateValidationResult(ValidationSnapshot finalSnapshot)
         {
             RecordValidationObservation(finalSnapshot);
 
@@ -314,14 +607,18 @@ namespace UnityAV
             {
                 Debug.LogError(
                     "[CodexValidation] result=failed reason=startup-timeout-no-playback");
-                return false;
+                return ValidationResultInfo.Failed(
+                    "startup-timeout-no-playback",
+                    playbackAdvance);
             }
 
             if (!_observedStartedDuringWindow)
             {
                 Debug.LogError(
                     "[CodexValidation] result=failed reason=playback-not-started");
-                return false;
+                return ValidationResultInfo.Failed(
+                    "playback-not-started",
+                    playbackAdvance);
             }
 
             if (playbackAdvance < MinimumPlaybackAdvanceSeconds)
@@ -330,7 +627,9 @@ namespace UnityAV
                     string.Format(
                         "[CodexValidation] result=failed reason=playback-stalled advance={0:F3}s",
                         playbackAdvance));
-                return false;
+                return ValidationResultInfo.Failed(
+                    "playback-stalled",
+                    playbackAdvance);
             }
 
             var textureObserved = _observedTextureDuringWindow || _observedNativeFrameDuringWindow;
@@ -338,7 +637,9 @@ namespace UnityAV
             {
                 Debug.LogError(
                     "[CodexValidation] result=failed reason=missing-video-signal");
-                return false;
+                return ValidationResultInfo.Failed(
+                    "missing-video-signal",
+                    playbackAdvance);
             }
 
             var reason = _observedAudioDuringWindow
@@ -353,7 +654,137 @@ namespace UnityAV
                     finalSnapshot.SourceTimeouts,
                     finalSnapshot.SourceReconnects));
             Debug.Log("[CodexValidation] complete");
-            return true;
+            return ValidationResultInfo.PassedWithAdvance(playbackAdvance, reason);
+        }
+
+        private void WriteValidationSummary(
+            ValidationResultInfo result,
+            ValidationSnapshot finalSnapshot)
+        {
+            try
+            {
+                UpdateObservedContractState();
+                var summaryPath = Path.Combine(
+                    Application.persistentDataPath,
+                    SummaryFileName);
+                var builder = new StringBuilder();
+                var playerSessionLifecycleState = ResolveSummaryString(
+                    _observedPlayerSessionLifecycleState,
+                    finalSnapshot.PlayerSessionLifecycleState);
+                var playerSessionPublicState = ResolveSummaryString(
+                    _observedPlayerSessionPublicState,
+                    finalSnapshot.PlayerSessionPublicState);
+                var playerSessionRuntimeState = ResolveSummaryString(
+                    _observedPlayerSessionRuntimeState,
+                    finalSnapshot.PlayerSessionRuntimeState);
+                var playerSessionPlaybackIntent = ResolveSummaryString(
+                    _observedPlayerSessionPlaybackIntent,
+                    finalSnapshot.PlayerSessionPlaybackIntent);
+                var playerSessionStopReason = ResolveSummaryString(
+                    _observedPlayerSessionStopReason,
+                    finalSnapshot.PlayerSessionStopReason);
+                var playerSessionSourceState = ResolveSummaryString(
+                    _observedPlayerSessionSourceState,
+                    finalSnapshot.PlayerSessionSourceState);
+                var playerSessionCanSeek = ResolveSummaryString(
+                    _observedPlayerSessionCanSeek,
+                    finalSnapshot.PlayerSessionCanSeek);
+                var playerSessionIsRealtime = ResolveSummaryString(
+                    _observedPlayerSessionIsRealtime,
+                    finalSnapshot.PlayerSessionIsRealtime);
+                var playerSessionIsBuffering = ResolveSummaryString(
+                    _observedPlayerSessionIsBuffering,
+                    finalSnapshot.PlayerSessionIsBuffering);
+                var playerSessionIsSyncing = ResolveSummaryString(
+                    _observedPlayerSessionIsSyncing,
+                    finalSnapshot.PlayerSessionIsSyncing);
+                builder.AppendLine("validation_result=" + (result.Passed ? "passed" : "failed"));
+                builder.AppendLine("reason=" + result.Reason);
+                builder.AppendLine("uri=" + (Player != null ? Player.Uri : string.Empty));
+                builder.AppendLine("requested_backend=" + (Player != null ? Player.PreferredBackend.ToString() : "Unavailable"));
+                builder.AppendLine("actual_backend=" + (Player != null ? Player.ActualBackendKind.ToString() : "Unavailable"));
+                builder.AppendLine("playback_advance_sec=" + result.PlaybackAdvanceSeconds.ToString("F3"));
+                builder.AppendLine("has_texture=" + finalSnapshot.HasTexture);
+                builder.AppendLine("audio_playing=" + finalSnapshot.AudioPlaying);
+                builder.AppendLine("started=" + finalSnapshot.Started);
+                builder.AppendLine("observed_texture_during_window=" + _observedTextureDuringWindow);
+                builder.AppendLine("observed_audio_during_window=" + _observedAudioDuringWindow);
+                builder.AppendLine("observed_started_during_window=" + _observedStartedDuringWindow);
+                builder.AppendLine("validation_window_start_reason=" + _validationWindowStartReason);
+                builder.AppendLine("source_state=" + finalSnapshot.SourceState);
+                builder.AppendLine("source_packets=" + finalSnapshot.SourcePackets);
+                builder.AppendLine("source_timeouts=" + finalSnapshot.SourceTimeouts);
+                builder.AppendLine("source_reconnects=" + finalSnapshot.SourceReconnects);
+                builder.AppendLine("native_video_active=" + finalSnapshot.NativeVideoActive);
+                builder.AppendLine("native_activation_decision=" + finalSnapshot.NativeActivationDecision);
+                builder.AppendLine("has_presented_native_video_frame=" + finalSnapshot.HasPresentedNativeVideoFrame);
+                builder.AppendLine("player_session_available=" + _observedPlayerSessionAvailable);
+                builder.AppendLine("player_session_lifecycle_state=" + playerSessionLifecycleState);
+                builder.AppendLine("player_session_public_state=" + playerSessionPublicState);
+                builder.AppendLine("player_session_runtime_state=" + playerSessionRuntimeState);
+                builder.AppendLine("player_session_playback_intent=" + playerSessionPlaybackIntent);
+                builder.AppendLine("player_session_stop_reason=" + playerSessionStopReason);
+                builder.AppendLine("player_session_source_state=" + playerSessionSourceState);
+                builder.AppendLine("player_session_can_seek=" + playerSessionCanSeek);
+                builder.AppendLine("player_session_is_realtime=" + playerSessionIsRealtime);
+                builder.AppendLine("player_session_is_buffering=" + playerSessionIsBuffering);
+                builder.AppendLine("player_session_is_syncing=" + playerSessionIsSyncing);
+                builder.AppendLine("source_timeline_available=" + _observedSourceTimelineAvailable);
+                builder.AppendLine("source_timeline_model=" + _observedSourceTimelineModel);
+                builder.AppendLine("source_timeline_anchor_kind=" + _observedSourceTimelineAnchorKind);
+                builder.AppendLine("source_timeline_is_realtime=" + _observedSourceTimelineIsRealtime);
+                builder.AppendLine("source_timeline_has_current_source_time_us=" + _observedSourceTimelineHasCurrentSourceTimeUs);
+                builder.AppendLine("source_timeline_current_source_time_us=" + _observedSourceTimelineCurrentSourceTimeUs);
+                builder.AppendLine("source_timeline_has_timeline_origin_us=" + _observedSourceTimelineHasTimelineOriginUs);
+                builder.AppendLine("source_timeline_timeline_origin_us=" + _observedSourceTimelineTimelineOriginUs);
+                builder.AppendLine("source_timeline_has_anchor_value_us=" + _observedSourceTimelineHasAnchorValueUs);
+                builder.AppendLine("source_timeline_anchor_value_us=" + _observedSourceTimelineAnchorValueUs);
+                builder.AppendLine("source_timeline_has_anchor_mono_us=" + _observedSourceTimelineHasAnchorMonoUs);
+                builder.AppendLine("source_timeline_anchor_mono_us=" + _observedSourceTimelineAnchorMonoUs);
+                builder.AppendLine("playback_contract_available=" + _observedPlaybackContractAvailable);
+                builder.AppendLine("playback_contract_master_sec=" + _observedPlaybackContractMasterTimeSec);
+                builder.AppendLine("playback_contract_master_us=" + _observedPlaybackContractMasterTimeUs);
+                builder.AppendLine("playback_contract_external_sec=" + _observedPlaybackContractExternalTimeSec);
+                builder.AppendLine("playback_contract_external_us=" + _observedPlaybackContractExternalTimeUs);
+                builder.AppendLine("playback_contract_has_us_mirror=" + _observedPlaybackContractHasUsMirror);
+                builder.AppendLine("audio_output_policy_available=" + _observedAudioOutputPolicyAvailable);
+                builder.AppendLine("audio_output_policy_file_start_ms=" + _observedAudioOutputPolicyFileStartMs);
+                builder.AppendLine("audio_output_policy_android_file_start_ms=" + _observedAudioOutputPolicyAndroidFileStartMs);
+                builder.AppendLine("audio_output_policy_realtime_start_ms=" + _observedAudioOutputPolicyRealtimeStartMs);
+                builder.AppendLine("audio_output_policy_realtime_startup_grace_ms=" + _observedAudioOutputPolicyRealtimeStartupGraceMs);
+                builder.AppendLine("audio_output_policy_realtime_startup_minimum_threshold_ms=" + _observedAudioOutputPolicyRealtimeStartupMinimumThresholdMs);
+                builder.AppendLine("audio_output_policy_file_ring_capacity_ms=" + _observedAudioOutputPolicyFileRingCapacityMs);
+                builder.AppendLine("audio_output_policy_android_file_ring_capacity_ms=" + _observedAudioOutputPolicyAndroidFileRingCapacityMs);
+                builder.AppendLine("audio_output_policy_realtime_ring_capacity_ms=" + _observedAudioOutputPolicyRealtimeRingCapacityMs);
+                builder.AppendLine("audio_output_policy_file_buffered_ceiling_ms=" + _observedAudioOutputPolicyFileBufferedCeilingMs);
+                builder.AppendLine("audio_output_policy_android_file_buffered_ceiling_ms=" + _observedAudioOutputPolicyAndroidFileBufferedCeilingMs);
+                builder.AppendLine("audio_output_policy_realtime_buffered_ceiling_ms=" + _observedAudioOutputPolicyRealtimeBufferedCeilingMs);
+                builder.AppendLine("audio_output_policy_realtime_startup_additional_sink_delay_ms=" + _observedAudioOutputPolicyRealtimeStartupAdditionalSinkDelayMs);
+                builder.AppendLine("audio_output_policy_realtime_steady_additional_sink_delay_ms=" + _observedAudioOutputPolicyRealtimeSteadyAdditionalSinkDelayMs);
+                builder.AppendLine("audio_output_policy_realtime_backend_additional_sink_delay_ms=" + _observedAudioOutputPolicyRealtimeBackendAdditionalSinkDelayMs);
+                builder.AppendLine("audio_output_policy_realtime_start_requires_video_frame=" + _observedAudioOutputPolicyRealtimeStartRequiresVideoFrame);
+                builder.AppendLine("audio_output_policy_allow_android_file_output_rate_bridge=" + _observedAudioOutputPolicyAllowAndroidFileOutputRateBridge);
+                builder.AppendLine("av_sync_enterprise_available=" + _observedAvSyncEnterpriseAvailable);
+                builder.AppendLine("av_sync_enterprise_sample_count=" + _observedAvSyncEnterpriseSampleCount);
+                builder.AppendLine("av_sync_enterprise_drift_projected_2h_ms=" + _observedAvSyncEnterpriseDriftProjected2hMs);
+                builder.AppendLine("passive_av_sync_available=" + _observedPassiveAvSyncAvailable);
+                builder.AppendLine("passive_av_sync_raw_offset_us=" + _observedPassiveAvSyncRawOffsetUs);
+                builder.AppendLine("passive_av_sync_smooth_offset_us=" + _observedPassiveAvSyncSmoothOffsetUs);
+                builder.AppendLine("passive_av_sync_drift_ppm=" + _observedPassiveAvSyncDriftPpm);
+                builder.AppendLine("passive_av_sync_drift_intercept_us=" + _observedPassiveAvSyncDriftInterceptUs);
+                builder.AppendLine("passive_av_sync_drift_sample_count=" + _observedPassiveAvSyncDriftSampleCount);
+                builder.AppendLine("passive_av_sync_video_schedule=" + _observedPassiveAvSyncVideoSchedule);
+                builder.AppendLine("passive_av_sync_audio_resample_ratio=" + _observedPassiveAvSyncAudioResampleRatio);
+                builder.AppendLine("passive_av_sync_audio_resample_active=" + _observedPassiveAvSyncAudioResampleActive);
+                builder.AppendLine("passive_av_sync_should_rebuild_anchor=" + _observedPassiveAvSyncShouldRebuildAnchor);
+                builder.AppendLine("summary_path=" + summaryPath);
+                File.WriteAllText(summaryPath, builder.ToString(), Encoding.UTF8);
+                Debug.Log("[CodexValidation] summary_written=" + summaryPath);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("[CodexValidation] summary_write_failed " + ex.Message);
+            }
         }
 
         private double SafeReadPlaybackTime()
@@ -416,6 +847,132 @@ namespace UnityAV
             return _hasExplicitWindowWidth || _hasExplicitWindowHeight;
         }
 
+        private static string FormatSourceTimelineModel(int value)
+        {
+            switch (value)
+            {
+                case 1:
+                    return "FileMediaPtsUs";
+                case 2:
+                    return "RtspRtpNtpMono";
+                case 3:
+                    return "RtmpBaseMonoUs";
+                default:
+                    return "Unknown";
+            }
+        }
+
+        private static string FormatSourceTimelineAnchorKind(int value)
+        {
+            switch (value)
+            {
+                case 1:
+                    return "TimelineOrigin";
+                case 2:
+                    return "RtspPlayRangeOffset";
+                case 3:
+                    return "RtmpTimestampOrigin";
+                default:
+                    return "None";
+            }
+        }
+
+        private static string FormatPlayerSessionLifecycleState(int value)
+        {
+            switch (value)
+            {
+                case 1:
+                    return "Idle";
+                case 2:
+                    return "Opening";
+                case 3:
+                    return "Prepared";
+                case 4:
+                    return "Buffering";
+                case 5:
+                    return "Syncing";
+                case 6:
+                    return "Playing";
+                case 7:
+                    return "Paused";
+                case 8:
+                    return "Stopped";
+                case 9:
+                    return "Closed";
+                case 10:
+                    return "ErrorRecovering";
+                default:
+                    return "Unknown";
+            }
+        }
+
+        private static string FormatPlayerSessionState(int value)
+        {
+            switch (value)
+            {
+                case 0:
+                    return "Idle";
+                case 1:
+                    return "Connecting";
+                case 2:
+                    return "Ready";
+                case 3:
+                    return "Playing";
+                case 4:
+                    return "Paused";
+                case 5:
+                    return "Shutdown";
+                case 6:
+                    return "Ended";
+                default:
+                    return value.ToString();
+            }
+        }
+
+        private static string FormatPlayerSessionPlaybackIntent(int value)
+        {
+            switch (value)
+            {
+                case 0:
+                    return "Stopped";
+                case 1:
+                    return "PlayRequested";
+                default:
+                    return value.ToString();
+            }
+        }
+
+        private static string FormatPlayerSessionStopReason(int value)
+        {
+            switch (value)
+            {
+                case 0:
+                    return "None";
+                case 1:
+                    return "UserStop";
+                case 2:
+                    return "EndOfStream";
+                default:
+                    return value.ToString();
+            }
+        }
+
+        private static string ResolveSummaryString(string observed, string fallback)
+        {
+            if (!string.IsNullOrWhiteSpace(observed)
+                && !string.Equals(observed, "n/a", StringComparison.OrdinalIgnoreCase))
+            {
+                return observed;
+            }
+
+            if (!string.IsNullOrWhiteSpace(fallback))
+            {
+                return fallback;
+            }
+
+            return "n/a";
+        }
+
         private void ConfigureWindow(int width, int height, string source)
         {
             if (width <= 0 || height <= 0)
@@ -461,6 +1018,22 @@ namespace UnityAV
             }
         }
 
+        private string TryReadOverrideValue(string prefix, string androidExtraName)
+        {
+            var argumentValue = TryReadStringArgument(prefix);
+            if (!string.IsNullOrEmpty(argumentValue))
+            {
+                return argumentValue;
+            }
+
+            string androidExtraValue;
+            return MediaSourceResolver.TryReadAndroidIntentStringExtra(
+                androidExtraName,
+                out androidExtraValue)
+                ? androidExtraValue
+                : string.Empty;
+        }
+
         private static string TryReadStringArgument(string prefix)
         {
             var args = Environment.GetCommandLineArgs();
@@ -480,9 +1053,13 @@ namespace UnityAV
             return string.Empty;
         }
 
-        private static int TryReadIntArgument(string prefix, int fallback, out bool hasExplicitValue)
+        private int TryReadIntArgument(
+            string prefix,
+            string androidExtraName,
+            int fallback,
+            out bool hasExplicitValue)
         {
-            var value = TryReadStringArgument(prefix);
+            var value = TryReadOverrideValue(prefix, androidExtraName);
             hasExplicitValue = !string.IsNullOrEmpty(value);
             int parsed;
             if (string.IsNullOrEmpty(value) || !int.TryParse(value, out parsed) || parsed <= 0)
@@ -493,9 +1070,12 @@ namespace UnityAV
             return parsed;
         }
 
-        private static float TryReadFloatArgument(string prefix, float fallback)
+        private float TryReadFloatArgument(
+            string prefix,
+            string androidExtraName,
+            float fallback)
         {
-            var value = TryReadStringArgument(prefix);
+            var value = TryReadOverrideValue(prefix, androidExtraName);
             float parsed;
             if (string.IsNullOrEmpty(value)
                 || !float.TryParse(value, out parsed)
@@ -560,6 +1140,53 @@ namespace UnityAV
             public bool NativeVideoActive;
             public string NativeActivationDecision;
             public bool HasPresentedNativeVideoFrame;
+            public bool PlayerSessionAvailable;
+            public string PlayerSessionLifecycleState;
+            public string PlayerSessionPublicState;
+            public string PlayerSessionRuntimeState;
+            public string PlayerSessionPlaybackIntent;
+            public string PlayerSessionStopReason;
+            public string PlayerSessionSourceState;
+            public string PlayerSessionCanSeek;
+            public string PlayerSessionIsRealtime;
+            public string PlayerSessionIsBuffering;
+            public string PlayerSessionIsSyncing;
+            public bool SourceTimelineAvailable;
+            public string SourceTimelineModel;
+            public string SourceTimelineAnchorKind;
+            public bool PlaybackContractAvailable;
+            public string PlaybackContractHasUsMirror;
+            public bool AudioOutputPolicyAvailable;
+            public bool AvSyncEnterpriseAvailable;
+            public string AvSyncEnterpriseSampleCount;
+            public string AvSyncEnterpriseDriftProjected2hMs;
+        }
+
+        private struct ValidationResultInfo
+        {
+            public bool Passed;
+            public string Reason;
+            public double PlaybackAdvanceSeconds;
+
+            public static ValidationResultInfo PassedWithAdvance(double playbackAdvanceSeconds, string reason)
+            {
+                return new ValidationResultInfo
+                {
+                    Passed = true,
+                    Reason = reason,
+                    PlaybackAdvanceSeconds = playbackAdvanceSeconds,
+                };
+            }
+
+            public static ValidationResultInfo Failed(string reason, double playbackAdvanceSeconds)
+            {
+                return new ValidationResultInfo
+                {
+                    Passed = false,
+                    Reason = reason,
+                    PlaybackAdvanceSeconds = playbackAdvanceSeconds,
+                };
+            }
         }
     }
 }
