@@ -1499,6 +1499,22 @@ namespace UnityAV
             public double PlaybackAdvanceSeconds;
         }
 
+        internal struct ValidationVideoTextureObservationView
+        {
+            public bool HasTexture;
+            public int TextureWidth;
+            public int TextureHeight;
+        }
+
+        internal struct ValidationWindowEvidenceObservationView
+        {
+            public bool ObservedTextureDuringWindow;
+            public bool ObservedAudioDuringWindow;
+            public bool ObservedStartedDuringWindow;
+            public bool ObservedNativeFrameDuringWindow;
+            public double MaxObservedPlaybackTime;
+        }
+
         internal struct AvSyncEnterpriseMetricsView
         {
             public uint SampleCount;
@@ -4837,6 +4853,64 @@ namespace UnityAV
                     ? "steady-playback-with-audio"
                     : "steady-playback-no-audio",
                 PlaybackAdvanceSeconds = playbackAdvanceSeconds,
+            };
+        }
+
+        internal static ValidationVideoTextureObservationView
+            CreatePullValidationVideoTextureObservation(
+                bool hasPresentedVideoFrame,
+                Texture texture)
+        {
+            var hasTexture = hasPresentedVideoFrame
+                && texture != null;
+            return new ValidationVideoTextureObservationView
+            {
+                HasTexture = hasTexture,
+                TextureWidth = hasTexture ? texture.width : 0,
+                TextureHeight = hasTexture ? texture.height : 0,
+            };
+        }
+
+        internal static ValidationVideoTextureObservationView
+            CreateMediaPlayerValidationVideoTextureObservation(
+                Texture texture)
+        {
+            var hasTexture = texture != null;
+            return new ValidationVideoTextureObservationView
+            {
+                HasTexture = hasTexture,
+                TextureWidth = hasTexture ? texture.width : 0,
+                TextureHeight = hasTexture ? texture.height : 0,
+            };
+        }
+
+        internal static ValidationWindowEvidenceObservationView
+            AccumulateValidationWindowEvidenceObservation(
+                bool observedTextureDuringWindow,
+                bool observedAudioDuringWindow,
+                bool observedStartedDuringWindow,
+                bool observedNativeFrameDuringWindow,
+                double maxObservedPlaybackTimeSec,
+                bool hasTexture,
+                bool audioPlaying,
+                bool started,
+                bool hasPresentedNativeVideoFrame,
+                double playbackTimeSec)
+        {
+            return new ValidationWindowEvidenceObservationView
+            {
+                ObservedTextureDuringWindow =
+                    observedTextureDuringWindow || hasTexture,
+                ObservedAudioDuringWindow =
+                    observedAudioDuringWindow || audioPlaying,
+                ObservedStartedDuringWindow =
+                    observedStartedDuringWindow || started,
+                ObservedNativeFrameDuringWindow =
+                    observedNativeFrameDuringWindow || hasPresentedNativeVideoFrame,
+                MaxObservedPlaybackTime =
+                    playbackTimeSec > maxObservedPlaybackTimeSec
+                        ? playbackTimeSec
+                        : maxObservedPlaybackTimeSec,
             };
         }
 

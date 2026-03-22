@@ -500,8 +500,9 @@ namespace UnityAV
         private ValidationSnapshot CaptureSnapshot()
         {
             var playbackTime = SafeReadPlaybackTime();
-            var texture = Player.TargetMaterial != null ? Player.TargetMaterial.mainTexture : null;
-            var hasTexture = texture != null;
+            var textureObservation =
+                MediaNativeInteropCommon.CreateMediaPlayerValidationVideoTextureObservation(
+                    Player.TargetMaterial != null ? Player.TargetMaterial.mainTexture : null);
             var audioSource = Player.GetComponent<AudioSource>();
             var audioPlaying = audioSource != null && audioSource.isPlaying;
 
@@ -557,13 +558,13 @@ namespace UnityAV
             return new ValidationSnapshot
             {
                 PlaybackTime = playbackTime,
-                HasTexture = hasTexture,
+                HasTexture = textureObservation.HasTexture,
                 AudioPlaying = audioPlaying,
                 AudioSourcePresent = audioSource != null,
                 HasAudioListener = _hasAudioListener,
                 Started = playbackStartObservation.Started,
-                TextureWidth = texture != null ? texture.width : 0,
-                TextureHeight = texture != null ? texture.height : 0,
+                TextureWidth = textureObservation.TextureWidth,
+                TextureHeight = textureObservation.TextureHeight,
                 SourceState = runtimeHealthObservation.SourceState,
                 SourcePackets = runtimeHealthObservation.SourcePackets,
                 SourceTimeouts = runtimeHealthObservation.SourceTimeouts,
@@ -615,14 +616,28 @@ namespace UnityAV
 
         private void RecordValidationObservation(ValidationSnapshot snapshot)
         {
-            _observedTextureDuringWindow |= snapshot.HasTexture;
-            _observedAudioDuringWindow |= snapshot.AudioPlaying;
-            _observedStartedDuringWindow |= snapshot.Started;
-            _observedNativeFrameDuringWindow |= snapshot.HasPresentedNativeVideoFrame;
-            if (snapshot.PlaybackTime > _maxObservedPlaybackTime)
-            {
-                _maxObservedPlaybackTime = snapshot.PlaybackTime;
-            }
+            var evidenceObservation =
+                MediaNativeInteropCommon.AccumulateValidationWindowEvidenceObservation(
+                    _observedTextureDuringWindow,
+                    _observedAudioDuringWindow,
+                    _observedStartedDuringWindow,
+                    _observedNativeFrameDuringWindow,
+                    _maxObservedPlaybackTime,
+                    snapshot.HasTexture,
+                    snapshot.AudioPlaying,
+                    snapshot.Started,
+                    snapshot.HasPresentedNativeVideoFrame,
+                    snapshot.PlaybackTime);
+            _observedTextureDuringWindow =
+                evidenceObservation.ObservedTextureDuringWindow;
+            _observedAudioDuringWindow =
+                evidenceObservation.ObservedAudioDuringWindow;
+            _observedStartedDuringWindow =
+                evidenceObservation.ObservedStartedDuringWindow;
+            _observedNativeFrameDuringWindow =
+                evidenceObservation.ObservedNativeFrameDuringWindow;
+            _maxObservedPlaybackTime =
+                evidenceObservation.MaxObservedPlaybackTime;
         }
 
         private ValidationResultInfo EvaluateValidationResult(ValidationSnapshot finalSnapshot)
