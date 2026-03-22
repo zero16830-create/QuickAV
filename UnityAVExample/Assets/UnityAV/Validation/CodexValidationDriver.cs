@@ -549,40 +549,19 @@ namespace UnityAV
             var hasHealth = Player.TryGetRuntimeHealth(out health);
             double presentedVideoTimeSec;
             var hasPresentedVideoTime = Player.TryGetPresentedVideoTimeSec(out presentedVideoTimeSec);
-            var referencePlaybackTime = hasPresentedVideoTime
-                ? presentedVideoTimeSec
-                : playbackTime;
-            if (hasHealth)
-            {
-                if (referencePlaybackTime < 0.0)
-                {
-                    referencePlaybackTime = health.CurrentTimeSec;
-                }
-                else if (health.IsRealtime
-                    && health.CurrentTimeSec > referencePlaybackTime + RealtimeReferenceLagToleranceSeconds)
-                {
-                    referencePlaybackTime = health.CurrentTimeSec;
-                }
-            }
+            var referencePlaybackObservation =
+                MediaNativeInteropCommon.CreateReferencePlaybackObservation(
+                    playbackTime,
+                    hasPresentedVideoTime,
+                    presentedVideoTimeSec,
+                    hasHealth,
+                    hasHealth ? health.CurrentTimeSec : -1.0,
+                    hasHealth && health.IsRealtime,
+                    RealtimeReferenceLagToleranceSeconds);
 
-            var referencePlaybackKind = hasPresentedVideoTime
-                ? "presented_video"
-                : "playback_time";
-            if (hasHealth)
-            {
-                if (playbackTime < 0.0 && referencePlaybackTime >= 0.0)
-                {
-                    referencePlaybackKind = "health_current_time";
-                }
-                else if (health.IsRealtime
-                    && playbackTime >= 0.0
-                    && health.CurrentTimeSec > playbackTime + RealtimeReferenceLagToleranceSeconds)
-                {
-                    referencePlaybackKind = "health_current_time";
-                }
-            }
-
-            var hasAvSyncSample = hasAudioPresentation && referencePlaybackTime >= 0.0;
+            var referencePlaybackTime = referencePlaybackObservation.ReferenceTimeSec;
+            var referencePlaybackKind = referencePlaybackObservation.ReferenceKind;
+            var hasAvSyncSample = hasAudioPresentation && referencePlaybackObservation.HasSample;
             var avSyncDeltaMilliseconds = hasAvSyncSample
                 ? (audioPresentedTimeSec - referencePlaybackTime) * 1000.0
                 : 0.0;

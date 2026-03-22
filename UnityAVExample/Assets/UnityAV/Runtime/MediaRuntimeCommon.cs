@@ -1473,6 +1473,13 @@ namespace UnityAV
             public bool AndroidFileRateBridgeActive;
         }
 
+        internal struct ReferencePlaybackObservationView
+        {
+            public double ReferenceTimeSec;
+            public string ReferenceKind;
+            public bool HasSample;
+        }
+
         internal struct AvSyncEnterpriseMetricsView
         {
             public uint SampleCount;
@@ -4488,6 +4495,56 @@ namespace UnityAV
                 HasPresentedVideoFrame = hasPresentedVideoFrame,
                 RequiresPresentedVideoFrame = requiresPresentedVideoFrame,
                 AndroidFileRateBridgeActive = androidFileRateBridgeActive,
+            };
+        }
+
+        internal static ReferencePlaybackObservationView CreateReferencePlaybackObservation(
+            double playbackTimeSec,
+            bool hasPresentedVideoTime,
+            double presentedVideoTimeSec,
+            bool hasRuntimeHealth,
+            double healthCurrentTimeSec,
+            bool healthIsRealtime,
+            double realtimeLagToleranceSeconds)
+        {
+            var referenceTimeSec = hasPresentedVideoTime
+                ? presentedVideoTimeSec
+                : playbackTimeSec;
+            if (hasRuntimeHealth)
+            {
+                if (referenceTimeSec < 0.0)
+                {
+                    referenceTimeSec = healthCurrentTimeSec;
+                }
+                else if (healthIsRealtime
+                    && healthCurrentTimeSec > referenceTimeSec + realtimeLagToleranceSeconds)
+                {
+                    referenceTimeSec = healthCurrentTimeSec;
+                }
+            }
+
+            var referenceKind = hasPresentedVideoTime
+                ? "presented_video"
+                : "playback_time";
+            if (hasRuntimeHealth)
+            {
+                if (playbackTimeSec < 0.0 && referenceTimeSec >= 0.0)
+                {
+                    referenceKind = "health_current_time";
+                }
+                else if (healthIsRealtime
+                    && playbackTimeSec >= 0.0
+                    && healthCurrentTimeSec > playbackTimeSec + realtimeLagToleranceSeconds)
+                {
+                    referenceKind = "health_current_time";
+                }
+            }
+
+            return new ReferencePlaybackObservationView
+            {
+                ReferenceTimeSec = referenceTimeSec,
+                ReferenceKind = referenceKind,
+                HasSample = referenceTimeSec >= 0.0,
             };
         }
 
