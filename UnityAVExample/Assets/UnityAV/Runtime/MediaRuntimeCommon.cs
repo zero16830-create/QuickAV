@@ -1173,6 +1173,21 @@ namespace UnityAV
             public ulong DuplicateTotal;
         }
 
+        internal struct AvSyncContractObservationView
+        {
+            public bool Available;
+            public string MasterClock;
+            public bool HasAudioClockSec;
+            public double AudioClockSec;
+            public bool HasVideoClockSec;
+            public double VideoClockSec;
+            public double ClockDeltaMs;
+            public double DriftMs;
+            public bool StartupWarmupComplete;
+            public ulong DropTotal;
+            public ulong DuplicateTotal;
+        }
+
         internal struct AudioOutputPolicyView
         {
             public int FileStartThresholdMilliseconds;
@@ -1396,6 +1411,20 @@ namespace UnityAV
 
         internal struct PassiveAvSyncSnapshotView
         {
+            public long RawOffsetUs;
+            public long SmoothOffsetUs;
+            public double DriftPpm;
+            public long DriftInterceptUs;
+            public uint DriftSampleCount;
+            public string VideoSchedule;
+            public double AudioResampleRatio;
+            public bool AudioResampleActive;
+            public bool ShouldRebuildAnchor;
+        }
+
+        internal struct PassiveAvSyncObservationView
+        {
+            public bool Available;
             public long RawOffsetUs;
             public long SmoothOffsetUs;
             public double DriftPpm;
@@ -1759,6 +1788,43 @@ namespace UnityAV
             };
         }
 
+        internal static AvSyncContractObservationView CreateAvSyncContractObservation(
+            bool available,
+            AvSyncContractView contract)
+        {
+            if (!available)
+            {
+                return new AvSyncContractObservationView
+                {
+                    Available = false,
+                    MasterClock = "Unavailable",
+                };
+            }
+
+            var hasAudioClockSec = contract.HasAudioClockSec;
+            var audioClockSec = hasAudioClockSec ? contract.AudioClockSec : 0.0;
+            var hasVideoClockSec = contract.HasVideoClockSec;
+            var videoClockSec = hasVideoClockSec ? contract.VideoClockSec : 0.0;
+            var clockDeltaMs = hasAudioClockSec && hasVideoClockSec
+                ? (audioClockSec - videoClockSec) * 1000.0
+                : 0.0;
+
+            return new AvSyncContractObservationView
+            {
+                Available = true,
+                MasterClock = contract.MasterClock.ToString(),
+                HasAudioClockSec = hasAudioClockSec,
+                AudioClockSec = audioClockSec,
+                HasVideoClockSec = hasVideoClockSec,
+                VideoClockSec = videoClockSec,
+                ClockDeltaMs = clockDeltaMs,
+                DriftMs = contract.DriftMs,
+                StartupWarmupComplete = contract.StartupWarmupComplete,
+                DropTotal = contract.DropTotal,
+                DuplicateTotal = contract.DuplicateTotal,
+            };
+        }
+
         internal static AudioOutputPolicyAuditStringsView CreateAudioOutputPolicyAuditStrings(
             bool available,
             AudioOutputPolicyView policy)
@@ -2012,6 +2078,35 @@ namespace UnityAV
                 OffsetAbsP95Us = observation.OffsetAbsP95Us.ToString(),
                 OffsetAbsP99Us = observation.OffsetAbsP99Us.ToString(),
                 OffsetAbsMaxUs = observation.OffsetAbsMaxUs.ToString(),
+            };
+        }
+
+        internal static PassiveAvSyncObservationView CreatePassiveAvSyncObservation(
+            bool available,
+            PassiveAvSyncSnapshotView snapshot)
+        {
+            if (!available)
+            {
+                return new PassiveAvSyncObservationView
+                {
+                    Available = false,
+                    VideoSchedule = "Unavailable",
+                    AudioResampleRatio = 1.0,
+                };
+            }
+
+            return new PassiveAvSyncObservationView
+            {
+                Available = true,
+                RawOffsetUs = snapshot.RawOffsetUs,
+                SmoothOffsetUs = snapshot.SmoothOffsetUs,
+                DriftPpm = snapshot.DriftPpm,
+                DriftInterceptUs = snapshot.DriftInterceptUs,
+                DriftSampleCount = snapshot.DriftSampleCount,
+                VideoSchedule = snapshot.VideoSchedule,
+                AudioResampleRatio = snapshot.AudioResampleRatio,
+                AudioResampleActive = snapshot.AudioResampleActive,
+                ShouldRebuildAnchor = snapshot.ShouldRebuildAnchor,
             };
         }
 

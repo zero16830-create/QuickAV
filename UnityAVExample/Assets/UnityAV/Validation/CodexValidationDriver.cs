@@ -590,6 +590,10 @@ namespace UnityAV
                     playbackTimingContract);
             MediaNativeInteropCommon.AvSyncContractView avSyncContract;
             var hasAvSyncContract = Player.TryGetAvSyncContract(out avSyncContract);
+            var avSyncContractObservation =
+                MediaNativeInteropCommon.CreateAvSyncContractObservation(
+                    hasAvSyncContract,
+                    avSyncContract);
             MediaNativeInteropCommon.SourceTimelineContractView sourceTimelineContract;
             var hasSourceTimelineContract = Player.TryGetSourceTimelineContract(
                 out sourceTimelineContract);
@@ -620,17 +624,10 @@ namespace UnityAV
             MediaNativeInteropCommon.PassiveAvSyncSnapshotView passiveAvSyncSnapshot;
             var hasPassiveAvSyncSnapshot = Player.TryGetPassiveAvSyncSnapshot(
                 out passiveAvSyncSnapshot);
-            var hasAvSyncContractAudioClockSec = hasAvSyncContract && avSyncContract.HasAudioClockSec;
-            var avSyncContractAudioClockSec = hasAvSyncContractAudioClockSec
-                ? avSyncContract.AudioClockSec
-                : 0.0;
-            var hasAvSyncContractVideoClockSec = hasAvSyncContract && avSyncContract.HasVideoClockSec;
-            var avSyncContractVideoClockSec = hasAvSyncContractVideoClockSec
-                ? avSyncContract.VideoClockSec
-                : 0.0;
-            var avSyncContractClockDeltaMs = hasAvSyncContractAudioClockSec && hasAvSyncContractVideoClockSec
-                ? (avSyncContractAudioClockSec - avSyncContractVideoClockSec) * 1000.0
-                : 0.0;
+            var passiveAvSyncObservation =
+                MediaNativeInteropCommon.CreatePassiveAvSyncObservation(
+                    hasPassiveAvSyncSnapshot,
+                    passiveAvSyncSnapshot);
             MediaNativeInteropCommon.NativeVideoBridgeDescriptorView bridgeDescriptor;
             var hasBridgeDescriptor = Player.TryGetNativeVideoBridgeDescriptor(out bridgeDescriptor);
             MediaNativeInteropCommon.NativeVideoPathSelectionView pathSelection;
@@ -726,19 +723,18 @@ namespace UnityAV
                     playbackTimingObservation.HasMicrosecondMirror,
                 PlaybackContractHasAudioClock =
                     playbackTimingObservation.HasAudioClock,
-                HasAvSyncContract = hasAvSyncContract,
-                AvSyncContractMasterClock =
-                    hasAvSyncContract ? avSyncContract.MasterClock.ToString() : "Unavailable",
-                AvSyncContractHasAudioClockSec = hasAvSyncContractAudioClockSec,
-                AvSyncContractAudioClockSec = avSyncContractAudioClockSec,
-                AvSyncContractHasVideoClockSec = hasAvSyncContractVideoClockSec,
-                AvSyncContractVideoClockSec = avSyncContractVideoClockSec,
-                AvSyncContractClockDeltaMs = avSyncContractClockDeltaMs,
-                AvSyncContractDriftMs = hasAvSyncContract ? avSyncContract.DriftMs : 0.0,
+                HasAvSyncContract = avSyncContractObservation.Available,
+                AvSyncContractMasterClock = avSyncContractObservation.MasterClock,
+                AvSyncContractHasAudioClockSec = avSyncContractObservation.HasAudioClockSec,
+                AvSyncContractAudioClockSec = avSyncContractObservation.AudioClockSec,
+                AvSyncContractHasVideoClockSec = avSyncContractObservation.HasVideoClockSec,
+                AvSyncContractVideoClockSec = avSyncContractObservation.VideoClockSec,
+                AvSyncContractClockDeltaMs = avSyncContractObservation.ClockDeltaMs,
+                AvSyncContractDriftMs = avSyncContractObservation.DriftMs,
                 AvSyncContractStartupWarmupComplete =
-                    hasAvSyncContract && avSyncContract.StartupWarmupComplete,
-                AvSyncContractDropTotal = hasAvSyncContract ? avSyncContract.DropTotal : 0UL,
-                AvSyncContractDuplicateTotal = hasAvSyncContract ? avSyncContract.DuplicateTotal : 0UL,
+                    avSyncContractObservation.StartupWarmupComplete,
+                AvSyncContractDropTotal = avSyncContractObservation.DropTotal,
+                AvSyncContractDuplicateTotal = avSyncContractObservation.DuplicateTotal,
                 HasSourceTimelineContract = sourceTimelineObservation.Available,
                 SourceTimelineModel = sourceTimelineObservation.Available
                     ? sourceTimelineObservation.Model
@@ -853,25 +849,18 @@ namespace UnityAV
                     avSyncEnterpriseObservation.OffsetAbsP99Us,
                 AvSyncEnterpriseOffsetAbsMaxUs =
                     avSyncEnterpriseObservation.OffsetAbsMaxUs,
-                HasPassiveAvSyncSnapshot = hasPassiveAvSyncSnapshot,
-                PassiveAvSyncRawOffsetUs =
-                    hasPassiveAvSyncSnapshot ? passiveAvSyncSnapshot.RawOffsetUs : 0L,
-                PassiveAvSyncSmoothOffsetUs =
-                    hasPassiveAvSyncSnapshot ? passiveAvSyncSnapshot.SmoothOffsetUs : 0L,
-                PassiveAvSyncDriftPpm =
-                    hasPassiveAvSyncSnapshot ? passiveAvSyncSnapshot.DriftPpm : 0.0,
-                PassiveAvSyncDriftInterceptUs =
-                    hasPassiveAvSyncSnapshot ? passiveAvSyncSnapshot.DriftInterceptUs : 0L,
-                PassiveAvSyncDriftSampleCount =
-                    hasPassiveAvSyncSnapshot ? passiveAvSyncSnapshot.DriftSampleCount : 0U,
-                PassiveAvSyncVideoSchedule =
-                    hasPassiveAvSyncSnapshot ? passiveAvSyncSnapshot.VideoSchedule : "Unavailable",
-                PassiveAvSyncAudioResampleRatio =
-                    hasPassiveAvSyncSnapshot ? passiveAvSyncSnapshot.AudioResampleRatio : 1.0,
+                HasPassiveAvSyncSnapshot = passiveAvSyncObservation.Available,
+                PassiveAvSyncRawOffsetUs = passiveAvSyncObservation.RawOffsetUs,
+                PassiveAvSyncSmoothOffsetUs = passiveAvSyncObservation.SmoothOffsetUs,
+                PassiveAvSyncDriftPpm = passiveAvSyncObservation.DriftPpm,
+                PassiveAvSyncDriftInterceptUs = passiveAvSyncObservation.DriftInterceptUs,
+                PassiveAvSyncDriftSampleCount = passiveAvSyncObservation.DriftSampleCount,
+                PassiveAvSyncVideoSchedule = passiveAvSyncObservation.VideoSchedule,
+                PassiveAvSyncAudioResampleRatio = passiveAvSyncObservation.AudioResampleRatio,
                 PassiveAvSyncAudioResampleActive =
-                    hasPassiveAvSyncSnapshot && passiveAvSyncSnapshot.AudioResampleActive,
+                    passiveAvSyncObservation.AudioResampleActive,
                 PassiveAvSyncShouldRebuildAnchor =
-                    hasPassiveAvSyncSnapshot && passiveAvSyncSnapshot.ShouldRebuildAnchor,
+                    passiveAvSyncObservation.ShouldRebuildAnchor,
                 HasBridgeDescriptor = hasBridgeDescriptor,
                 BridgeDescriptorState =
                     hasBridgeDescriptor ? bridgeDescriptor.State.ToString() : "Unavailable",
