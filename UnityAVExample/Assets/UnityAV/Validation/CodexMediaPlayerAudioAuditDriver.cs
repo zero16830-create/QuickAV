@@ -705,36 +705,32 @@ namespace UnityAV
                     Application.persistentDataPath,
                     SummaryFileName);
                 var builder = new StringBuilder();
-                var playerSessionLifecycleState = ResolveSummaryString(
-                    _observedPlayerSessionLifecycleState,
-                    finalSnapshot.PlayerSessionLifecycleState);
-                var playerSessionPublicState = ResolveSummaryString(
-                    _observedPlayerSessionPublicState,
-                    finalSnapshot.PlayerSessionPublicState);
-                var playerSessionRuntimeState = ResolveSummaryString(
-                    _observedPlayerSessionRuntimeState,
-                    finalSnapshot.PlayerSessionRuntimeState);
-                var playerSessionPlaybackIntent = ResolveSummaryString(
-                    _observedPlayerSessionPlaybackIntent,
-                    finalSnapshot.PlayerSessionPlaybackIntent);
-                var playerSessionStopReason = ResolveSummaryString(
-                    _observedPlayerSessionStopReason,
-                    finalSnapshot.PlayerSessionStopReason);
-                var playerSessionSourceState = ResolveSummaryString(
-                    _observedPlayerSessionSourceState,
-                    finalSnapshot.PlayerSessionSourceState);
-                var playerSessionCanSeek = ResolveSummaryString(
-                    _observedPlayerSessionCanSeek,
-                    finalSnapshot.PlayerSessionCanSeek);
-                var playerSessionIsRealtime = ResolveSummaryString(
-                    _observedPlayerSessionIsRealtime,
-                    finalSnapshot.PlayerSessionIsRealtime);
-                var playerSessionIsBuffering = ResolveSummaryString(
-                    _observedPlayerSessionIsBuffering,
-                    finalSnapshot.PlayerSessionIsBuffering);
-                var playerSessionIsSyncing = ResolveSummaryString(
-                    _observedPlayerSessionIsSyncing,
-                    finalSnapshot.PlayerSessionIsSyncing);
+                var resolvedPlayerSessionAudit =
+                    MediaNativeInteropCommon.CreateResolvedPlayerSessionAuditStrings(
+                        _observedPlayerSessionLifecycleState,
+                        _observedPlayerSessionPublicState,
+                        _observedPlayerSessionRuntimeState,
+                        _observedPlayerSessionPlaybackIntent,
+                        _observedPlayerSessionStopReason,
+                        _observedPlayerSessionSourceState,
+                        _observedPlayerSessionCanSeek,
+                        _observedPlayerSessionIsRealtime,
+                        _observedPlayerSessionIsBuffering,
+                        _observedPlayerSessionIsSyncing,
+                        new MediaNativeInteropCommon.PlayerSessionAuditStringsView
+                        {
+                            Available = finalSnapshot.PlayerSessionAvailable,
+                            LifecycleState = finalSnapshot.PlayerSessionLifecycleState,
+                            PublicState = finalSnapshot.PlayerSessionPublicState,
+                            RuntimeState = finalSnapshot.PlayerSessionRuntimeState,
+                            PlaybackIntent = finalSnapshot.PlayerSessionPlaybackIntent,
+                            StopReason = finalSnapshot.PlayerSessionStopReason,
+                            SourceState = finalSnapshot.PlayerSessionSourceState,
+                            CanSeek = finalSnapshot.PlayerSessionCanSeek,
+                            IsRealtime = finalSnapshot.PlayerSessionIsRealtime,
+                            IsBuffering = finalSnapshot.PlayerSessionIsBuffering,
+                            IsSyncing = finalSnapshot.PlayerSessionIsSyncing,
+                        });
                 var backendRuntimeObservation =
                     MediaNativeInteropCommon.CreateMediaPlayerBackendRuntimeObservation(
                         Player != null,
@@ -761,16 +757,16 @@ namespace UnityAV
                 builder.AppendLine("native_activation_decision=" + finalSnapshot.NativeActivationDecision);
                 builder.AppendLine("has_presented_native_video_frame=" + finalSnapshot.HasPresentedNativeVideoFrame);
                 builder.AppendLine("player_session_available=" + _observedPlayerSessionAvailable);
-                builder.AppendLine("player_session_lifecycle_state=" + playerSessionLifecycleState);
-                builder.AppendLine("player_session_public_state=" + playerSessionPublicState);
-                builder.AppendLine("player_session_runtime_state=" + playerSessionRuntimeState);
-                builder.AppendLine("player_session_playback_intent=" + playerSessionPlaybackIntent);
-                builder.AppendLine("player_session_stop_reason=" + playerSessionStopReason);
-                builder.AppendLine("player_session_source_state=" + playerSessionSourceState);
-                builder.AppendLine("player_session_can_seek=" + playerSessionCanSeek);
-                builder.AppendLine("player_session_is_realtime=" + playerSessionIsRealtime);
-                builder.AppendLine("player_session_is_buffering=" + playerSessionIsBuffering);
-                builder.AppendLine("player_session_is_syncing=" + playerSessionIsSyncing);
+                builder.AppendLine("player_session_lifecycle_state=" + resolvedPlayerSessionAudit.LifecycleState);
+                builder.AppendLine("player_session_public_state=" + resolvedPlayerSessionAudit.PublicState);
+                builder.AppendLine("player_session_runtime_state=" + resolvedPlayerSessionAudit.RuntimeState);
+                builder.AppendLine("player_session_playback_intent=" + resolvedPlayerSessionAudit.PlaybackIntent);
+                builder.AppendLine("player_session_stop_reason=" + resolvedPlayerSessionAudit.StopReason);
+                builder.AppendLine("player_session_source_state=" + resolvedPlayerSessionAudit.SourceState);
+                builder.AppendLine("player_session_can_seek=" + resolvedPlayerSessionAudit.CanSeek);
+                builder.AppendLine("player_session_is_realtime=" + resolvedPlayerSessionAudit.IsRealtime);
+                builder.AppendLine("player_session_is_buffering=" + resolvedPlayerSessionAudit.IsBuffering);
+                builder.AppendLine("player_session_is_syncing=" + resolvedPlayerSessionAudit.IsSyncing);
                 builder.AppendLine("source_timeline_available=" + _observedSourceTimelineAvailable);
                 builder.AppendLine("source_timeline_model=" + _observedSourceTimelineModel);
                 builder.AppendLine("source_timeline_anchor_kind=" + _observedSourceTimelineAnchorKind);
@@ -887,22 +883,6 @@ namespace UnityAV
         private bool HasExplicitWindowOverride()
         {
             return _hasExplicitWindowWidth || _hasExplicitWindowHeight;
-        }
-
-        private static string ResolveSummaryString(string observed, string fallback)
-        {
-            if (!string.IsNullOrWhiteSpace(observed)
-                && !string.Equals(observed, "n/a", StringComparison.OrdinalIgnoreCase))
-            {
-                return observed;
-            }
-
-            if (!string.IsNullOrWhiteSpace(fallback))
-            {
-                return fallback;
-            }
-
-            return "n/a";
         }
 
         private void ConfigureWindow(int width, int height, string source)

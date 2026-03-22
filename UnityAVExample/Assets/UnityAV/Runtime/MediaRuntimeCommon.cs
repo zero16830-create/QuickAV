@@ -2349,6 +2349,35 @@ namespace UnityAV
             };
         }
 
+        internal static PlayerSessionAuditStringsView CreateResolvedPlayerSessionAuditStrings(
+            string observedLifecycleState,
+            string observedPublicState,
+            string observedRuntimeState,
+            string observedPlaybackIntent,
+            string observedStopReason,
+            string observedSourceState,
+            string observedCanSeek,
+            string observedIsRealtime,
+            string observedIsBuffering,
+            string observedIsSyncing,
+            PlayerSessionAuditStringsView fallback)
+        {
+            return new PlayerSessionAuditStringsView
+            {
+                Available = fallback.Available,
+                LifecycleState = ResolveAuditString(observedLifecycleState, fallback.LifecycleState),
+                PublicState = ResolveAuditString(observedPublicState, fallback.PublicState),
+                RuntimeState = ResolveAuditString(observedRuntimeState, fallback.RuntimeState),
+                PlaybackIntent = ResolveAuditString(observedPlaybackIntent, fallback.PlaybackIntent),
+                StopReason = ResolveAuditString(observedStopReason, fallback.StopReason),
+                SourceState = ResolveAuditString(observedSourceState, fallback.SourceState),
+                CanSeek = ResolveAuditString(observedCanSeek, fallback.CanSeek),
+                IsRealtime = ResolveAuditString(observedIsRealtime, fallback.IsRealtime),
+                IsBuffering = ResolveAuditString(observedIsBuffering, fallback.IsBuffering),
+                IsSyncing = ResolveAuditString(observedIsSyncing, fallback.IsSyncing),
+            };
+        }
+
         internal static SourceTimelineObservationView CreateSourceTimelineObservation(
             bool available,
             SourceTimelineContractView contract)
@@ -4552,6 +4581,22 @@ namespace UnityAV
                 ReferenceKind = referenceKind,
                 HasSample = referenceTimeSec >= 0.0,
             };
+        }
+
+        private static string ResolveAuditString(string observed, string fallback)
+        {
+            if (!string.IsNullOrWhiteSpace(observed)
+                && !string.Equals(observed, "n/a", StringComparison.OrdinalIgnoreCase))
+            {
+                return observed;
+            }
+
+            if (!string.IsNullOrWhiteSpace(fallback))
+            {
+                return fallback;
+            }
+
+            return "n/a";
         }
 
         internal static PlaybackStartObservationView CreatePlaybackStartObservation(
