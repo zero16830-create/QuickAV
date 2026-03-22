@@ -1230,6 +1230,44 @@ namespace UnityAV
             public bool AndroidFileRateBridgeActive;
         }
 
+        internal struct PlayerSessionObservationView
+        {
+            public bool Available;
+            public string LifecycleState;
+            public int PublicState;
+            public int RuntimeState;
+            public int PlaybackIntent;
+            public int StopReason;
+            public string SourceState;
+            public bool CanSeek;
+            public bool IsRealtime;
+            public bool IsBuffering;
+            public bool IsSyncing;
+            public bool AudioStartStateReported;
+            public bool ShouldStartAudio;
+            public int AudioStartBlockReason;
+            public int RequiredBufferedSamples;
+            public int ReportedBufferedSamples;
+            public bool RequiresPresentedVideoFrame;
+            public bool HasPresentedVideoFrame;
+            public bool AndroidFileRateBridgeActive;
+        }
+
+        internal struct PlayerSessionAuditStringsView
+        {
+            public bool Available;
+            public string LifecycleState;
+            public string PublicState;
+            public string RuntimeState;
+            public string PlaybackIntent;
+            public string StopReason;
+            public string SourceState;
+            public string CanSeek;
+            public string IsRealtime;
+            public string IsBuffering;
+            public string IsSyncing;
+        }
+
         internal struct AudioStartupObservationView
         {
             public int AudioSampleRate;
@@ -1272,6 +1310,20 @@ namespace UnityAV
             public float Pitch;
             public bool Active;
             public string Source;
+        }
+
+        internal struct PassiveAvSyncAuditStringsView
+        {
+            public bool Available;
+            public string RawOffsetUs;
+            public string SmoothOffsetUs;
+            public string DriftPpm;
+            public string DriftInterceptUs;
+            public string DriftSampleCount;
+            public string VideoSchedule;
+            public string AudioResampleRatio;
+            public string AudioResampleActive;
+            public string ShouldRebuildAnchor;
         }
 
         internal struct AudioStartRuntimeCommandView
@@ -1569,6 +1621,113 @@ namespace UnityAV
                     observation.RealtimeStartRequiresVideoFrame.ToString(),
                 AllowAndroidFileOutputRateBridge =
                     observation.AllowAndroidFileOutputRateBridge.ToString(),
+            };
+        }
+
+        internal static PlayerSessionObservationView CreatePlayerSessionObservation(
+            bool available,
+            PlayerSessionContractView contract)
+        {
+            if (!available)
+            {
+                return default(PlayerSessionObservationView);
+            }
+
+            return new PlayerSessionObservationView
+            {
+                Available = true,
+                LifecycleState = FormatPlayerSessionLifecycleState(contract.LifecycleState),
+                PublicState = contract.PublicState,
+                RuntimeState = contract.RuntimeState,
+                PlaybackIntent = contract.PlaybackIntent,
+                StopReason = contract.StopReason,
+                SourceState = contract.SourceConnectionState.ToString(),
+                CanSeek = contract.CanSeek,
+                IsRealtime = contract.IsRealtime,
+                IsBuffering = contract.IsBuffering,
+                IsSyncing = contract.IsSyncing,
+                AudioStartStateReported = contract.AudioStartStateReported,
+                ShouldStartAudio = contract.ShouldStartAudio,
+                AudioStartBlockReason = contract.AudioStartBlockReason,
+                RequiredBufferedSamples = contract.RequiredBufferedSamples,
+                ReportedBufferedSamples = contract.ReportedBufferedSamples,
+                RequiresPresentedVideoFrame = contract.RequiresPresentedVideoFrame,
+                HasPresentedVideoFrame = contract.HasPresentedVideoFrame,
+                AndroidFileRateBridgeActive = contract.AndroidFileRateBridgeActive,
+            };
+        }
+
+        internal static PlayerSessionAuditStringsView CreatePlayerSessionAuditStrings(
+            bool available,
+            PlayerSessionContractView contract)
+        {
+            if (!available)
+            {
+                return new PlayerSessionAuditStringsView
+                {
+                    Available = false,
+                    LifecycleState = "n/a",
+                    PublicState = "n/a",
+                    RuntimeState = "n/a",
+                    PlaybackIntent = "n/a",
+                    StopReason = "n/a",
+                    SourceState = "n/a",
+                    CanSeek = "False",
+                    IsRealtime = "False",
+                    IsBuffering = "False",
+                    IsSyncing = "False",
+                };
+            }
+
+            return new PlayerSessionAuditStringsView
+            {
+                Available = true,
+                LifecycleState = FormatPlayerSessionLifecycleState(contract.LifecycleState),
+                PublicState = FormatPlayerSessionState(contract.PublicState),
+                RuntimeState = FormatPlayerSessionState(contract.RuntimeState),
+                PlaybackIntent = FormatPlayerSessionPlaybackIntent(contract.PlaybackIntent),
+                StopReason = FormatPlayerSessionStopReason(contract.StopReason),
+                SourceState = contract.SourceConnectionState.ToString(),
+                CanSeek = contract.CanSeek.ToString(),
+                IsRealtime = contract.IsRealtime.ToString(),
+                IsBuffering = contract.IsBuffering.ToString(),
+                IsSyncing = contract.IsSyncing.ToString(),
+            };
+        }
+
+        internal static PassiveAvSyncAuditStringsView CreatePassiveAvSyncAuditStrings(
+            bool available,
+            PassiveAvSyncSnapshotView snapshot)
+        {
+            if (!available)
+            {
+                return new PassiveAvSyncAuditStringsView
+                {
+                    Available = false,
+                    RawOffsetUs = "n/a",
+                    SmoothOffsetUs = "n/a",
+                    DriftPpm = "n/a",
+                    DriftInterceptUs = "n/a",
+                    DriftSampleCount = "n/a",
+                    VideoSchedule = "n/a",
+                    AudioResampleRatio = "n/a",
+                    AudioResampleActive = "False",
+                    ShouldRebuildAnchor = "False",
+                };
+            }
+
+            return new PassiveAvSyncAuditStringsView
+            {
+                Available = true,
+                RawOffsetUs = snapshot.RawOffsetUs.ToString(),
+                SmoothOffsetUs = snapshot.SmoothOffsetUs.ToString(),
+                DriftPpm = snapshot.DriftPpm.ToString("F3"),
+                DriftInterceptUs = snapshot.DriftInterceptUs.ToString(),
+                DriftSampleCount = snapshot.DriftSampleCount.ToString(),
+                VideoSchedule = snapshot.VideoSchedule ?? "Unavailable",
+                AudioResampleRatio = snapshot.AudioResampleRatio.ToString("F6"),
+                AudioResampleActive = snapshot.AudioResampleActive.ToString(),
+                ShouldRebuildAnchor = snapshot.ShouldRebuildAnchor.ToString(),
             };
         }
 
@@ -3914,6 +4073,86 @@ namespace UnityAV
                     return "RebuildSyncAnchor";
                 default:
                     return "Unknown";
+            }
+        }
+
+        internal static string FormatPlayerSessionLifecycleState(int value)
+        {
+            switch (value)
+            {
+                case 1:
+                    return "Idle";
+                case 2:
+                    return "Opening";
+                case 3:
+                    return "Prepared";
+                case 4:
+                    return "Buffering";
+                case 5:
+                    return "Syncing";
+                case 6:
+                    return "Playing";
+                case 7:
+                    return "Paused";
+                case 8:
+                    return "Stopped";
+                case 9:
+                    return "Closed";
+                case 10:
+                    return "ErrorRecovering";
+                default:
+                    return "Unknown";
+            }
+        }
+
+        internal static string FormatPlayerSessionState(int value)
+        {
+            switch (value)
+            {
+                case 0:
+                    return "Idle";
+                case 1:
+                    return "Connecting";
+                case 2:
+                    return "Ready";
+                case 3:
+                    return "Playing";
+                case 4:
+                    return "Paused";
+                case 5:
+                    return "Shutdown";
+                case 6:
+                    return "Ended";
+                default:
+                    return value.ToString();
+            }
+        }
+
+        internal static string FormatPlayerSessionPlaybackIntent(int value)
+        {
+            switch (value)
+            {
+                case 0:
+                    return "Stopped";
+                case 1:
+                    return "PlayRequested";
+                default:
+                    return value.ToString();
+            }
+        }
+
+        internal static string FormatPlayerSessionStopReason(int value)
+        {
+            switch (value)
+            {
+                case 0:
+                    return "None";
+                case 1:
+                    return "UserStop";
+                case 2:
+                    return "EndOfStream";
+                default:
+                    return value.ToString();
             }
         }
 

@@ -114,6 +114,22 @@ namespace UnityAV
         private string _observedPassiveAvSyncAudioResampleActive = "False";
         private string _observedPassiveAvSyncShouldRebuildAnchor = "False";
 
+        private void ApplyObservedPlayerSession(
+            MediaNativeInteropCommon.PlayerSessionAuditStringsView observation)
+        {
+            _observedPlayerSessionAvailable = observation.Available;
+            _observedPlayerSessionLifecycleState = observation.LifecycleState;
+            _observedPlayerSessionPublicState = observation.PublicState;
+            _observedPlayerSessionRuntimeState = observation.RuntimeState;
+            _observedPlayerSessionPlaybackIntent = observation.PlaybackIntent;
+            _observedPlayerSessionStopReason = observation.StopReason;
+            _observedPlayerSessionSourceState = observation.SourceState;
+            _observedPlayerSessionCanSeek = observation.CanSeek;
+            _observedPlayerSessionIsRealtime = observation.IsRealtime;
+            _observedPlayerSessionIsBuffering = observation.IsBuffering;
+            _observedPlayerSessionIsSyncing = observation.IsSyncing;
+        }
+
         private void ApplyObservedAudioOutputPolicy(
             MediaNativeInteropCommon.AudioOutputPolicyAuditStringsView observation)
         {
@@ -149,6 +165,21 @@ namespace UnityAV
                 observation.RealtimeStartRequiresVideoFrame;
             _observedAudioOutputPolicyAllowAndroidFileOutputRateBridge =
                 observation.AllowAndroidFileOutputRateBridge;
+        }
+
+        private void ApplyObservedPassiveAvSync(
+            MediaNativeInteropCommon.PassiveAvSyncAuditStringsView observation)
+        {
+            _observedPassiveAvSyncAvailable = observation.Available;
+            _observedPassiveAvSyncRawOffsetUs = observation.RawOffsetUs;
+            _observedPassiveAvSyncSmoothOffsetUs = observation.SmoothOffsetUs;
+            _observedPassiveAvSyncDriftPpm = observation.DriftPpm;
+            _observedPassiveAvSyncDriftInterceptUs = observation.DriftInterceptUs;
+            _observedPassiveAvSyncDriftSampleCount = observation.DriftSampleCount;
+            _observedPassiveAvSyncVideoSchedule = observation.VideoSchedule;
+            _observedPassiveAvSyncAudioResampleRatio = observation.AudioResampleRatio;
+            _observedPassiveAvSyncAudioResampleActive = observation.AudioResampleActive;
+            _observedPassiveAvSyncShouldRebuildAnchor = observation.ShouldRebuildAnchor;
         }
 
         private void Awake()
@@ -422,25 +453,10 @@ namespace UnityAV
             }
 
             MediaNativeInteropCommon.PlayerSessionContractView playerSession;
-            if (Player.TryGetPlayerSessionContract(out playerSession))
-            {
-                _observedPlayerSessionAvailable = true;
-                _observedPlayerSessionLifecycleState =
-                    FormatPlayerSessionLifecycleState(playerSession.LifecycleState);
-                _observedPlayerSessionPublicState =
-                    FormatPlayerSessionState(playerSession.PublicState);
-                _observedPlayerSessionRuntimeState =
-                    FormatPlayerSessionState(playerSession.RuntimeState);
-                _observedPlayerSessionPlaybackIntent =
-                    FormatPlayerSessionPlaybackIntent(playerSession.PlaybackIntent);
-                _observedPlayerSessionStopReason =
-                    FormatPlayerSessionStopReason(playerSession.StopReason);
-                _observedPlayerSessionSourceState = playerSession.SourceConnectionState.ToString();
-                _observedPlayerSessionCanSeek = playerSession.CanSeek.ToString();
-                _observedPlayerSessionIsRealtime = playerSession.IsRealtime.ToString();
-                _observedPlayerSessionIsBuffering = playerSession.IsBuffering.ToString();
-                _observedPlayerSessionIsSyncing = playerSession.IsSyncing.ToString();
-            }
+            ApplyObservedPlayerSession(
+                MediaNativeInteropCommon.CreatePlayerSessionAuditStrings(
+                    Player.TryGetPlayerSessionContract(out playerSession),
+                    playerSession));
 
             MediaNativeInteropCommon.AudioOutputPolicyView audioOutputPolicy;
             ApplyObservedAudioOutputPolicy(
@@ -458,25 +474,10 @@ namespace UnityAV
             }
 
             MediaNativeInteropCommon.PassiveAvSyncSnapshotView passiveAvSyncSnapshot;
-            if (Player.TryGetPassiveAvSyncSnapshot(out passiveAvSyncSnapshot))
-            {
-                _observedPassiveAvSyncAvailable = true;
-                _observedPassiveAvSyncRawOffsetUs = passiveAvSyncSnapshot.RawOffsetUs.ToString();
-                _observedPassiveAvSyncSmoothOffsetUs = passiveAvSyncSnapshot.SmoothOffsetUs.ToString();
-                _observedPassiveAvSyncDriftPpm = passiveAvSyncSnapshot.DriftPpm.ToString("F3");
-                _observedPassiveAvSyncDriftInterceptUs =
-                    passiveAvSyncSnapshot.DriftInterceptUs.ToString();
-                _observedPassiveAvSyncDriftSampleCount =
-                    passiveAvSyncSnapshot.DriftSampleCount.ToString();
-                _observedPassiveAvSyncVideoSchedule =
-                    passiveAvSyncSnapshot.VideoSchedule ?? "Unavailable";
-                _observedPassiveAvSyncAudioResampleRatio =
-                    passiveAvSyncSnapshot.AudioResampleRatio.ToString("F6");
-                _observedPassiveAvSyncAudioResampleActive =
-                    passiveAvSyncSnapshot.AudioResampleActive.ToString();
-                _observedPassiveAvSyncShouldRebuildAnchor =
-                    passiveAvSyncSnapshot.ShouldRebuildAnchor.ToString();
-            }
+            ApplyObservedPassiveAvSync(
+                MediaNativeInteropCommon.CreatePassiveAvSyncAuditStrings(
+                    Player.TryGetPassiveAvSyncSnapshot(out passiveAvSyncSnapshot),
+                    passiveAvSyncSnapshot));
         }
 
         private ValidationSnapshot CaptureSnapshot()
@@ -492,6 +493,10 @@ namespace UnityAV
             var started = hasHealth ? health.IsPlaying : playbackTime >= 0.0;
             MediaNativeInteropCommon.PlayerSessionContractView playerSessionContract;
             var playerSessionAvailable = Player.TryGetPlayerSessionContract(out playerSessionContract);
+            var playerSessionObservation =
+                MediaNativeInteropCommon.CreatePlayerSessionAuditStrings(
+                    playerSessionAvailable,
+                    playerSessionContract);
             MediaNativeInteropCommon.SourceTimelineContractView sourceTimelineContract;
             var sourceTimelineAvailable = Player.TryGetSourceTimelineContract(out sourceTimelineContract);
             MediaNativeInteropCommon.PlaybackTimingContractView playbackTimingContract;
@@ -518,37 +523,17 @@ namespace UnityAV
                 NativeVideoActive = Player.IsNativeVideoPathActive,
                 NativeActivationDecision = Player.NativeVideoActivationDecision.ToString(),
                 HasPresentedNativeVideoFrame = Player.HasPresentedNativeVideoFrame,
-                PlayerSessionAvailable = playerSessionAvailable,
-                PlayerSessionLifecycleState = playerSessionAvailable
-                    ? FormatPlayerSessionLifecycleState(playerSessionContract.LifecycleState)
-                    : "n/a",
-                PlayerSessionPublicState = playerSessionAvailable
-                    ? FormatPlayerSessionState(playerSessionContract.PublicState)
-                    : "n/a",
-                PlayerSessionRuntimeState = playerSessionAvailable
-                    ? FormatPlayerSessionState(playerSessionContract.RuntimeState)
-                    : "n/a",
-                PlayerSessionPlaybackIntent = playerSessionAvailable
-                    ? FormatPlayerSessionPlaybackIntent(playerSessionContract.PlaybackIntent)
-                    : "n/a",
-                PlayerSessionStopReason = playerSessionAvailable
-                    ? FormatPlayerSessionStopReason(playerSessionContract.StopReason)
-                    : "n/a",
-                PlayerSessionSourceState = playerSessionAvailable
-                    ? playerSessionContract.SourceConnectionState.ToString()
-                    : "n/a",
-                PlayerSessionCanSeek = playerSessionAvailable
-                    ? playerSessionContract.CanSeek.ToString()
-                    : "n/a",
-                PlayerSessionIsRealtime = playerSessionAvailable
-                    ? playerSessionContract.IsRealtime.ToString()
-                    : "n/a",
-                PlayerSessionIsBuffering = playerSessionAvailable
-                    ? playerSessionContract.IsBuffering.ToString()
-                    : "n/a",
-                PlayerSessionIsSyncing = playerSessionAvailable
-                    ? playerSessionContract.IsSyncing.ToString()
-                    : "n/a",
+                PlayerSessionAvailable = playerSessionObservation.Available,
+                PlayerSessionLifecycleState = playerSessionObservation.LifecycleState,
+                PlayerSessionPublicState = playerSessionObservation.PublicState,
+                PlayerSessionRuntimeState = playerSessionObservation.RuntimeState,
+                PlayerSessionPlaybackIntent = playerSessionObservation.PlaybackIntent,
+                PlayerSessionStopReason = playerSessionObservation.StopReason,
+                PlayerSessionSourceState = playerSessionObservation.SourceState,
+                PlayerSessionCanSeek = playerSessionObservation.CanSeek,
+                PlayerSessionIsRealtime = playerSessionObservation.IsRealtime,
+                PlayerSessionIsBuffering = playerSessionObservation.IsBuffering,
+                PlayerSessionIsSyncing = playerSessionObservation.IsSyncing,
                 SourceTimelineAvailable = sourceTimelineAvailable,
                 SourceTimelineModel = sourceTimelineAvailable ? sourceTimelineContract.Model.ToString() : "n/a",
                 SourceTimelineAnchorKind = sourceTimelineAvailable ? sourceTimelineContract.AnchorKind.ToString() : "n/a",
@@ -879,86 +864,6 @@ namespace UnityAV
                     return "RtmpTimestampOrigin";
                 default:
                     return "None";
-            }
-        }
-
-        private static string FormatPlayerSessionLifecycleState(int value)
-        {
-            switch (value)
-            {
-                case 1:
-                    return "Idle";
-                case 2:
-                    return "Opening";
-                case 3:
-                    return "Prepared";
-                case 4:
-                    return "Buffering";
-                case 5:
-                    return "Syncing";
-                case 6:
-                    return "Playing";
-                case 7:
-                    return "Paused";
-                case 8:
-                    return "Stopped";
-                case 9:
-                    return "Closed";
-                case 10:
-                    return "ErrorRecovering";
-                default:
-                    return "Unknown";
-            }
-        }
-
-        private static string FormatPlayerSessionState(int value)
-        {
-            switch (value)
-            {
-                case 0:
-                    return "Idle";
-                case 1:
-                    return "Connecting";
-                case 2:
-                    return "Ready";
-                case 3:
-                    return "Playing";
-                case 4:
-                    return "Paused";
-                case 5:
-                    return "Shutdown";
-                case 6:
-                    return "Ended";
-                default:
-                    return value.ToString();
-            }
-        }
-
-        private static string FormatPlayerSessionPlaybackIntent(int value)
-        {
-            switch (value)
-            {
-                case 0:
-                    return "Stopped";
-                case 1:
-                    return "PlayRequested";
-                default:
-                    return value.ToString();
-            }
-        }
-
-        private static string FormatPlayerSessionStopReason(int value)
-        {
-            switch (value)
-            {
-                case 0:
-                    return "None";
-                case 1:
-                    return "UserStop";
-                case 2:
-                    return "EndOfStream";
-                default:
-                    return value.ToString();
             }
         }
 

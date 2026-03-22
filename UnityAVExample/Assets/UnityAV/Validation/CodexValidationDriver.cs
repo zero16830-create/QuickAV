@@ -592,6 +592,10 @@ namespace UnityAV
             MediaNativeInteropCommon.PlayerSessionContractView playerSessionContract;
             var hasPlayerSessionContract = Player.TryGetPlayerSessionContract(
                 out playerSessionContract);
+            var playerSessionObservation =
+                MediaNativeInteropCommon.CreatePlayerSessionObservation(
+                    hasPlayerSessionContract,
+                    playerSessionContract);
             MediaNativeInteropCommon.AudioOutputPolicyView audioOutputPolicy;
             var hasAudioOutputPolicy = Player.TryGetAudioOutputPolicy(out audioOutputPolicy);
             var audioOutputPolicyObservation =
@@ -764,45 +768,45 @@ namespace UnityAV
                     hasSourceTimelineContract ? sourceTimelineContract.AnchorMonoUs : 0L,
                 SourceTimelineIsRealtime =
                     hasSourceTimelineContract && sourceTimelineContract.IsRealtime,
-                HasPlayerSessionContract = hasPlayerSessionContract,
-                PlayerSessionLifecycleState = hasPlayerSessionContract
-                    ? FormatPlayerSessionLifecycleState(playerSessionContract.LifecycleState)
+                HasPlayerSessionContract = playerSessionObservation.Available,
+                PlayerSessionLifecycleState = playerSessionObservation.Available
+                    ? playerSessionObservation.LifecycleState
                     : "Unavailable",
                 PlayerSessionPublicState =
-                    hasPlayerSessionContract ? playerSessionContract.PublicState : -1,
+                    playerSessionObservation.Available ? playerSessionObservation.PublicState : -1,
                 PlayerSessionRuntimeState =
-                    hasPlayerSessionContract ? playerSessionContract.RuntimeState : -1,
+                    playerSessionObservation.Available ? playerSessionObservation.RuntimeState : -1,
                 PlayerSessionPlaybackIntent =
-                    hasPlayerSessionContract ? playerSessionContract.PlaybackIntent : -1,
+                    playerSessionObservation.Available
+                        ? playerSessionObservation.PlaybackIntent
+                        : -1,
                 PlayerSessionStopReason =
-                    hasPlayerSessionContract ? playerSessionContract.StopReason : -1,
-                PlayerSessionSourceState = hasPlayerSessionContract
-                    ? playerSessionContract.SourceConnectionState.ToString()
+                    playerSessionObservation.Available ? playerSessionObservation.StopReason : -1,
+                PlayerSessionSourceState = playerSessionObservation.Available
+                    ? playerSessionObservation.SourceState
                     : "Unavailable",
-                PlayerSessionCanSeek =
-                    hasPlayerSessionContract && playerSessionContract.CanSeek,
-                PlayerSessionIsRealtime =
-                    hasPlayerSessionContract && playerSessionContract.IsRealtime,
-                PlayerSessionIsBuffering =
-                    hasPlayerSessionContract && playerSessionContract.IsBuffering,
-                PlayerSessionIsSyncing =
-                    hasPlayerSessionContract && playerSessionContract.IsSyncing,
+                PlayerSessionCanSeek = playerSessionObservation.CanSeek,
+                PlayerSessionIsRealtime = playerSessionObservation.IsRealtime,
+                PlayerSessionIsBuffering = playerSessionObservation.IsBuffering,
+                PlayerSessionIsSyncing = playerSessionObservation.IsSyncing,
                 PlayerSessionAudioStartStateReported =
-                    hasPlayerSessionContract && playerSessionContract.AudioStartStateReported,
+                    playerSessionObservation.AudioStartStateReported,
                 PlayerSessionShouldStartAudio =
-                    hasPlayerSessionContract && playerSessionContract.ShouldStartAudio,
+                    playerSessionObservation.ShouldStartAudio,
                 PlayerSessionAudioStartBlockReason =
-                    hasPlayerSessionContract ? playerSessionContract.AudioStartBlockReason : -1,
+                    playerSessionObservation.Available
+                        ? playerSessionObservation.AudioStartBlockReason
+                        : -1,
                 PlayerSessionRequiredBufferedSamples =
-                    hasPlayerSessionContract ? playerSessionContract.RequiredBufferedSamples : 0,
+                    playerSessionObservation.RequiredBufferedSamples,
                 PlayerSessionReportedBufferedSamples =
-                    hasPlayerSessionContract ? playerSessionContract.ReportedBufferedSamples : 0,
+                    playerSessionObservation.ReportedBufferedSamples,
                 PlayerSessionRequiresPresentedVideoFrame =
-                    hasPlayerSessionContract && playerSessionContract.RequiresPresentedVideoFrame,
+                    playerSessionObservation.RequiresPresentedVideoFrame,
                 PlayerSessionHasPresentedVideoFrame =
-                    hasPlayerSessionContract && playerSessionContract.HasPresentedVideoFrame,
+                    playerSessionObservation.HasPresentedVideoFrame,
                 PlayerSessionAndroidFileRateBridgeActive =
-                    hasPlayerSessionContract && playerSessionContract.AndroidFileRateBridgeActive,
+                    playerSessionObservation.AndroidFileRateBridgeActive,
                 HasAudioOutputPolicy = audioOutputPolicyObservation.Available,
                 AudioOutputPolicyFileStartThresholdMs =
                     audioOutputPolicyObservation.FileStartThresholdMilliseconds,
@@ -1823,35 +1827,6 @@ namespace UnityAV
                     return "RtmpTimestampOrigin";
                 default:
                     return "None";
-            }
-        }
-
-        private static string FormatPlayerSessionLifecycleState(int value)
-        {
-            switch (value)
-            {
-                case 1:
-                    return "Idle";
-                case 2:
-                    return "Opening";
-                case 3:
-                    return "Prepared";
-                case 4:
-                    return "Buffering";
-                case 5:
-                    return "Syncing";
-                case 6:
-                    return "Playing";
-                case 7:
-                    return "Paused";
-                case 8:
-                    return "Stopped";
-                case 9:
-                    return "Closed";
-                case 10:
-                    return "ErrorRecovering";
-                default:
-                    return "Unknown";
             }
         }
 
