@@ -581,6 +581,10 @@ namespace UnityAV
                 : 0.0;
             MediaNativeInteropCommon.VideoFrameContractView frameContract;
             var hasFrameContract = Player.TryGetLatestVideoFrameContract(out frameContract);
+            var frameContractObservation =
+                MediaNativeInteropCommon.CreateVideoFrameObservation(
+                    hasFrameContract,
+                    frameContract);
             MediaNativeInteropCommon.PlaybackTimingContractView playbackTimingContract;
             var hasPlaybackTimingContract = Player.TryGetPlaybackTimingContract(
                 out playbackTimingContract);
@@ -630,12 +634,28 @@ namespace UnityAV
                     passiveAvSyncSnapshot);
             MediaNativeInteropCommon.NativeVideoBridgeDescriptorView bridgeDescriptor;
             var hasBridgeDescriptor = Player.TryGetNativeVideoBridgeDescriptor(out bridgeDescriptor);
+            var bridgeDescriptorObservation =
+                MediaNativeInteropCommon.CreateNativeVideoBridgeDescriptorObservation(
+                    hasBridgeDescriptor,
+                    bridgeDescriptor);
             MediaNativeInteropCommon.NativeVideoPathSelectionView pathSelection;
             var hasPathSelection = Player.TryGetNativeVideoPathSelection(out pathSelection);
+            var pathSelectionObservation =
+                MediaNativeInteropCommon.CreateNativeVideoPathSelectionObservation(
+                    hasPathSelection,
+                    pathSelection);
             MediaNativeInteropCommon.WgpuRenderDescriptorView wgpuDescriptor;
             var hasWgpuRenderDescriptor = Player.TryGetWgpuRenderDescriptor(out wgpuDescriptor);
+            var wgpuDescriptorObservation =
+                MediaNativeInteropCommon.CreateWgpuRenderDescriptorObservation(
+                    hasWgpuRenderDescriptor,
+                    wgpuDescriptor);
             MediaNativeInteropCommon.WgpuRenderStateView wgpuState;
             var hasWgpuRenderState = Player.TryGetWgpuRenderStateView(out wgpuState);
+            var wgpuStateObservation =
+                MediaNativeInteropCommon.CreateWgpuRenderStateObservation(
+                    hasWgpuRenderState,
+                    wgpuState);
             var hasRealtimeLatencySample = false;
             var realtimeLatencyMilliseconds = 0.0;
             var publisherElapsedTimeSec = 0.0;
@@ -692,12 +712,10 @@ namespace UnityAV
                 PresentedVideoTimeSec = hasPresentedVideoTime ? presentedVideoTimeSec : -1.0,
                 ReferencePlaybackTimeSec = referencePlaybackTime,
                 ReferencePlaybackKind = referencePlaybackKind,
-                HasFrameContract = hasFrameContract,
-                FrameContractMemoryKind = hasFrameContract ? frameContract.MemoryKind.ToString() : "Unavailable",
-                FrameContractDynamicRange =
-                    hasFrameContract ? frameContract.Color.DynamicRange.ToString() : "Unavailable",
-                FrameContractNominalFps =
-                    hasFrameContract && frameContract.HasNominalFps ? frameContract.NominalFps : 0.0,
+                HasFrameContract = frameContractObservation.Available,
+                FrameContractMemoryKind = frameContractObservation.MemoryKind,
+                FrameContractDynamicRange = frameContractObservation.DynamicRange,
+                FrameContractNominalFps = frameContractObservation.NominalFps,
                 HasPlaybackTimingContract = playbackTimingObservation.Available,
                 PlaybackContractMasterTimeSec = playbackTimingObservation.MasterTimeSec,
                 PlaybackContractMasterTimeUs = playbackTimingObservation.MasterTimeUs,
@@ -861,64 +879,54 @@ namespace UnityAV
                     passiveAvSyncObservation.AudioResampleActive,
                 PassiveAvSyncShouldRebuildAnchor =
                     passiveAvSyncObservation.ShouldRebuildAnchor,
-                HasBridgeDescriptor = hasBridgeDescriptor,
-                BridgeDescriptorState =
-                    hasBridgeDescriptor ? bridgeDescriptor.State.ToString() : "Unavailable",
-                BridgeDescriptorRuntimeKind =
-                    hasBridgeDescriptor ? bridgeDescriptor.RuntimeKind.ToString() : "Unavailable",
+                HasBridgeDescriptor = bridgeDescriptorObservation.Available,
+                BridgeDescriptorState = bridgeDescriptorObservation.State,
+                BridgeDescriptorRuntimeKind = bridgeDescriptorObservation.RuntimeKind,
                 BridgeDescriptorZeroCopySupported =
-                    hasBridgeDescriptor && bridgeDescriptor.ZeroCopySupported,
+                    bridgeDescriptorObservation.ZeroCopySupported,
                 BridgeDescriptorDirectBindable =
-                    hasBridgeDescriptor && bridgeDescriptor.PresentedFrameDirectBindable,
+                    bridgeDescriptorObservation.PresentedFrameDirectBindable,
                 BridgeDescriptorSourcePlaneTexturesSupported =
-                    hasBridgeDescriptor && bridgeDescriptor.SourcePlaneTexturesSupported,
+                    bridgeDescriptorObservation.SourcePlaneTexturesSupported,
                 BridgeDescriptorFallbackCopyPath =
-                    hasBridgeDescriptor && bridgeDescriptor.FallbackCopyPath,
-                HasPathSelection = hasPathSelection,
-                PathSelectionKind = hasPathSelection ? pathSelection.Kind.ToString() : "Unavailable",
-                PathSelectionSourceMemoryKind =
-                    hasPathSelection ? pathSelection.SourceMemoryKind.ToString() : "Unavailable",
-                PathSelectionPresentedMemoryKind =
-                    hasPathSelection ? pathSelection.PresentedMemoryKind.ToString() : "Unavailable",
-                PathSelectionTargetZeroCopy = hasPathSelection && pathSelection.TargetZeroCopy,
+                    bridgeDescriptorObservation.FallbackCopyPath,
+                HasPathSelection = pathSelectionObservation.Available,
+                PathSelectionKind = pathSelectionObservation.Kind,
+                PathSelectionSourceMemoryKind = pathSelectionObservation.SourceMemoryKind,
+                PathSelectionPresentedMemoryKind = pathSelectionObservation.PresentedMemoryKind,
+                PathSelectionTargetZeroCopy = pathSelectionObservation.TargetZeroCopy,
                 PathSelectionSourcePlaneTexturesSupported =
-                    hasPathSelection && pathSelection.SourcePlaneTexturesSupported,
-                PathSelectionCpuFallback = hasPathSelection && pathSelection.CpuFallback,
-                HasWgpuRenderDescriptor = hasWgpuRenderDescriptor,
-                WgpuRuntimeReady = hasWgpuRenderDescriptor && wgpuDescriptor.RuntimeReady,
-                WgpuOutputWidth = hasWgpuRenderDescriptor ? wgpuDescriptor.OutputWidth : 0,
-                WgpuOutputHeight = hasWgpuRenderDescriptor ? wgpuDescriptor.OutputHeight : 0,
-                WgpuSupportsYuv420p = hasWgpuRenderDescriptor && wgpuDescriptor.SupportsYuv420p,
-                WgpuSupportsNv12 = hasWgpuRenderDescriptor && wgpuDescriptor.SupportsNv12,
-                WgpuSupportsP010 = hasWgpuRenderDescriptor && wgpuDescriptor.SupportsP010,
-                WgpuSupportsRgba32 = hasWgpuRenderDescriptor && wgpuDescriptor.SupportsRgba32,
+                    pathSelectionObservation.SourcePlaneTexturesSupported,
+                PathSelectionCpuFallback = pathSelectionObservation.CpuFallback,
+                HasWgpuRenderDescriptor = wgpuDescriptorObservation.Available,
+                WgpuRuntimeReady = wgpuDescriptorObservation.RuntimeReady,
+                WgpuOutputWidth = wgpuDescriptorObservation.OutputWidth,
+                WgpuOutputHeight = wgpuDescriptorObservation.OutputHeight,
+                WgpuSupportsYuv420p = wgpuDescriptorObservation.SupportsYuv420p,
+                WgpuSupportsNv12 = wgpuDescriptorObservation.SupportsNv12,
+                WgpuSupportsP010 = wgpuDescriptorObservation.SupportsP010,
+                WgpuSupportsRgba32 = wgpuDescriptorObservation.SupportsRgba32,
                 WgpuSupportsExternalTextureRgba =
-                    hasWgpuRenderDescriptor && wgpuDescriptor.SupportsExternalTextureRgba,
+                    wgpuDescriptorObservation.SupportsExternalTextureRgba,
                 WgpuSupportsExternalTextureYu12 =
-                    hasWgpuRenderDescriptor && wgpuDescriptor.SupportsExternalTextureYu12,
+                    wgpuDescriptorObservation.SupportsExternalTextureYu12,
                 WgpuReadbackExportSupported =
-                    hasWgpuRenderDescriptor && wgpuDescriptor.ReadbackExportSupported,
-                HasWgpuRenderState = hasWgpuRenderState,
-                WgpuRenderPath = hasWgpuRenderState ? wgpuState.RenderPath.ToString() : "Unavailable",
-                WgpuSourceMemoryKind =
-                    hasWgpuRenderState ? wgpuState.SourceMemoryKind.ToString() : "Unavailable",
-                WgpuPresentedMemoryKind =
-                    hasWgpuRenderState ? wgpuState.PresentedMemoryKind.ToString() : "Unavailable",
-                WgpuSourcePixelFormat =
-                    hasWgpuRenderState ? wgpuState.SourcePixelFormat.ToString() : "Unavailable",
-                WgpuPresentedPixelFormat =
-                    hasWgpuRenderState ? wgpuState.PresentedPixelFormat.ToString() : "Unavailable",
-                WgpuExternalTextureFormat =
-                    hasWgpuRenderState ? wgpuState.ExternalTextureFormat.ToString() : "Unavailable",
-                WgpuHasRenderedFrame = hasWgpuRenderState && wgpuState.HasRenderedFrame,
-                WgpuRenderedFrameIndex = hasWgpuRenderState ? wgpuState.RenderedFrameIndex : 0,
-                WgpuRenderedTimeSec = hasWgpuRenderState ? wgpuState.RenderedTimeSec : 0.0,
-                WgpuHasRenderError = hasWgpuRenderState && wgpuState.HasRenderError,
-                WgpuRenderErrorKind =
-                    hasWgpuRenderState ? wgpuState.RenderErrorKind.ToString() : "Unavailable",
-                WgpuUploadPlaneCount = hasWgpuRenderState ? wgpuState.UploadPlaneCount : 0,
-                WgpuSourceZeroCopy = hasWgpuRenderState && wgpuState.SourceZeroCopy,
-                WgpuCpuFallback = hasWgpuRenderState && wgpuState.CpuFallback,
+                    wgpuDescriptorObservation.ReadbackExportSupported,
+                HasWgpuRenderState = wgpuStateObservation.Available,
+                WgpuRenderPath = wgpuStateObservation.RenderPath,
+                WgpuSourceMemoryKind = wgpuStateObservation.SourceMemoryKind,
+                WgpuPresentedMemoryKind = wgpuStateObservation.PresentedMemoryKind,
+                WgpuSourcePixelFormat = wgpuStateObservation.SourcePixelFormat,
+                WgpuPresentedPixelFormat = wgpuStateObservation.PresentedPixelFormat,
+                WgpuExternalTextureFormat = wgpuStateObservation.ExternalTextureFormat,
+                WgpuHasRenderedFrame = wgpuStateObservation.HasRenderedFrame,
+                WgpuRenderedFrameIndex = wgpuStateObservation.RenderedFrameIndex,
+                WgpuRenderedTimeSec = wgpuStateObservation.RenderedTimeSec,
+                WgpuHasRenderError = wgpuStateObservation.HasRenderError,
+                WgpuRenderErrorKind = wgpuStateObservation.RenderErrorKind,
+                WgpuUploadPlaneCount = wgpuStateObservation.UploadPlaneCount,
+                WgpuSourceZeroCopy = wgpuStateObservation.SourceZeroCopy,
+                WgpuCpuFallback = wgpuStateObservation.CpuFallback,
                 HasRealtimeLatencySample = hasRealtimeLatencySample,
                 RealtimeLatencyMilliseconds = realtimeLatencyMilliseconds,
                 PublisherElapsedTimeSec = publisherElapsedTimeSec,

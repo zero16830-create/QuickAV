@@ -960,6 +960,17 @@ namespace UnityAV
             public bool SourcePlaneViewsSupported;
         }
 
+        internal struct NativeVideoBridgeDescriptorObservationView
+        {
+            public bool Available;
+            public string State;
+            public string RuntimeKind;
+            public bool ZeroCopySupported;
+            public bool PresentedFrameDirectBindable;
+            public bool SourcePlaneTexturesSupported;
+            public bool FallbackCopyPath;
+        }
+
         internal struct NativeVideoPathSelectionView
         {
             public NativeVideoPathKind Kind;
@@ -974,11 +985,37 @@ namespace UnityAV
             public bool CpuFallback;
         }
 
+        internal struct NativeVideoPathSelectionObservationView
+        {
+            public bool Available;
+            public string Kind;
+            public string SourceMemoryKind;
+            public string PresentedMemoryKind;
+            public bool TargetZeroCopy;
+            public bool SourcePlaneTexturesSupported;
+            public bool CpuFallback;
+        }
+
         internal struct WgpuRenderDescriptorView
         {
             public int OutputWidth;
             public int OutputHeight;
             public bool RuntimeReady;
+            public bool SupportsYuv420p;
+            public bool SupportsNv12;
+            public bool SupportsP010;
+            public bool SupportsRgba32;
+            public bool SupportsExternalTextureRgba;
+            public bool SupportsExternalTextureYu12;
+            public bool ReadbackExportSupported;
+        }
+
+        internal struct WgpuRenderDescriptorObservationView
+        {
+            public bool Available;
+            public bool RuntimeReady;
+            public int OutputWidth;
+            public int OutputHeight;
             public bool SupportsYuv420p;
             public bool SupportsNv12;
             public bool SupportsP010;
@@ -1003,6 +1040,25 @@ namespace UnityAV
             public double RenderedTimeSec;
             public bool HasRenderError;
             public WgpuRenderError RenderErrorKind;
+            public int UploadPlaneCount;
+            public bool SourceZeroCopy;
+            public bool CpuFallback;
+        }
+
+        internal struct WgpuRenderStateObservationView
+        {
+            public bool Available;
+            public string RenderPath;
+            public string SourceMemoryKind;
+            public string PresentedMemoryKind;
+            public string SourcePixelFormat;
+            public string PresentedPixelFormat;
+            public string ExternalTextureFormat;
+            public bool HasRenderedFrame;
+            public long RenderedFrameIndex;
+            public double RenderedTimeSec;
+            public bool HasRenderError;
+            public string RenderErrorKind;
             public int UploadPlaneCount;
             public bool SourceZeroCopy;
             public bool CpuFallback;
@@ -1096,6 +1152,14 @@ namespace UnityAV
             public double TimelineOriginSec;
             public ulong SeekEpoch;
             public bool Discontinuity;
+        }
+
+        internal struct VideoFrameObservationView
+        {
+            public bool Available;
+            public string MemoryKind;
+            public string DynamicRange;
+            public double NominalFps;
         }
 
         internal struct PlaybackTimingContractView
@@ -1564,6 +1628,29 @@ namespace UnityAV
             }
         }
 
+        internal static VideoFrameObservationView CreateVideoFrameObservation(
+            bool available,
+            VideoFrameContractView contract)
+        {
+            if (!available)
+            {
+                return new VideoFrameObservationView
+                {
+                    Available = false,
+                    MemoryKind = "Unavailable",
+                    DynamicRange = "Unavailable",
+                };
+            }
+
+            return new VideoFrameObservationView
+            {
+                Available = true,
+                MemoryKind = contract.MemoryKind.ToString(),
+                DynamicRange = contract.Color.DynamicRange.ToString(),
+                NominalFps = contract.HasNominalFps ? contract.NominalFps : 0.0,
+            };
+        }
+
         internal static bool TryReadPlaybackTimingContract(
             GetPlaybackTimingContractDelegate getPlaybackTimingContract,
             int playerId,
@@ -1825,6 +1912,59 @@ namespace UnityAV
             };
         }
 
+        internal static NativeVideoBridgeDescriptorObservationView CreateNativeVideoBridgeDescriptorObservation(
+            bool available,
+            NativeVideoBridgeDescriptorView descriptor)
+        {
+            if (!available)
+            {
+                return new NativeVideoBridgeDescriptorObservationView
+                {
+                    Available = false,
+                    State = "Unavailable",
+                    RuntimeKind = "Unavailable",
+                };
+            }
+
+            return new NativeVideoBridgeDescriptorObservationView
+            {
+                Available = true,
+                State = descriptor.State.ToString(),
+                RuntimeKind = descriptor.RuntimeKind.ToString(),
+                ZeroCopySupported = descriptor.ZeroCopySupported,
+                PresentedFrameDirectBindable = descriptor.PresentedFrameDirectBindable,
+                SourcePlaneTexturesSupported = descriptor.SourcePlaneTexturesSupported,
+                FallbackCopyPath = descriptor.FallbackCopyPath,
+            };
+        }
+
+        internal static NativeVideoPathSelectionObservationView CreateNativeVideoPathSelectionObservation(
+            bool available,
+            NativeVideoPathSelectionView selection)
+        {
+            if (!available)
+            {
+                return new NativeVideoPathSelectionObservationView
+                {
+                    Available = false,
+                    Kind = "Unavailable",
+                    SourceMemoryKind = "Unavailable",
+                    PresentedMemoryKind = "Unavailable",
+                };
+            }
+
+            return new NativeVideoPathSelectionObservationView
+            {
+                Available = true,
+                Kind = selection.Kind.ToString(),
+                SourceMemoryKind = selection.SourceMemoryKind.ToString(),
+                PresentedMemoryKind = selection.PresentedMemoryKind.ToString(),
+                TargetZeroCopy = selection.TargetZeroCopy,
+                SourcePlaneTexturesSupported = selection.SourcePlaneTexturesSupported,
+                CpuFallback = selection.CpuFallback,
+            };
+        }
+
         internal static AudioOutputPolicyAuditStringsView CreateAudioOutputPolicyAuditStrings(
             bool available,
             AudioOutputPolicyView policy)
@@ -2081,6 +2221,31 @@ namespace UnityAV
             };
         }
 
+        internal static WgpuRenderDescriptorObservationView CreateWgpuRenderDescriptorObservation(
+            bool available,
+            WgpuRenderDescriptorView descriptor)
+        {
+            if (!available)
+            {
+                return default(WgpuRenderDescriptorObservationView);
+            }
+
+            return new WgpuRenderDescriptorObservationView
+            {
+                Available = true,
+                RuntimeReady = descriptor.RuntimeReady,
+                OutputWidth = descriptor.OutputWidth,
+                OutputHeight = descriptor.OutputHeight,
+                SupportsYuv420p = descriptor.SupportsYuv420p,
+                SupportsNv12 = descriptor.SupportsNv12,
+                SupportsP010 = descriptor.SupportsP010,
+                SupportsRgba32 = descriptor.SupportsRgba32,
+                SupportsExternalTextureRgba = descriptor.SupportsExternalTextureRgba,
+                SupportsExternalTextureYu12 = descriptor.SupportsExternalTextureYu12,
+                ReadbackExportSupported = descriptor.ReadbackExportSupported,
+            };
+        }
+
         internal static PassiveAvSyncObservationView CreatePassiveAvSyncObservation(
             bool available,
             PassiveAvSyncSnapshotView snapshot)
@@ -2107,6 +2272,45 @@ namespace UnityAV
                 AudioResampleRatio = snapshot.AudioResampleRatio,
                 AudioResampleActive = snapshot.AudioResampleActive,
                 ShouldRebuildAnchor = snapshot.ShouldRebuildAnchor,
+            };
+        }
+
+        internal static WgpuRenderStateObservationView CreateWgpuRenderStateObservation(
+            bool available,
+            WgpuRenderStateView state)
+        {
+            if (!available)
+            {
+                return new WgpuRenderStateObservationView
+                {
+                    Available = false,
+                    RenderPath = "Unavailable",
+                    SourceMemoryKind = "Unavailable",
+                    PresentedMemoryKind = "Unavailable",
+                    SourcePixelFormat = "Unavailable",
+                    PresentedPixelFormat = "Unavailable",
+                    ExternalTextureFormat = "Unavailable",
+                    RenderErrorKind = "Unavailable",
+                };
+            }
+
+            return new WgpuRenderStateObservationView
+            {
+                Available = true,
+                RenderPath = state.RenderPath.ToString(),
+                SourceMemoryKind = state.SourceMemoryKind.ToString(),
+                PresentedMemoryKind = state.PresentedMemoryKind.ToString(),
+                SourcePixelFormat = state.SourcePixelFormat.ToString(),
+                PresentedPixelFormat = state.PresentedPixelFormat.ToString(),
+                ExternalTextureFormat = state.ExternalTextureFormat.ToString(),
+                HasRenderedFrame = state.HasRenderedFrame,
+                RenderedFrameIndex = state.RenderedFrameIndex,
+                RenderedTimeSec = state.RenderedTimeSec,
+                HasRenderError = state.HasRenderError,
+                RenderErrorKind = state.RenderErrorKind.ToString(),
+                UploadPlaneCount = state.UploadPlaneCount,
+                SourceZeroCopy = state.SourceZeroCopy,
+                CpuFallback = state.CpuFallback,
             };
         }
 
