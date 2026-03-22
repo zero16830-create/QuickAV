@@ -949,63 +949,43 @@ namespace UnityAV
         {
             RecordValidationObservation(finalSnapshot);
 
-            var playbackAdvance = 0.0;
-            if (_maxObservedPlaybackTime >= 0.0 && _validationWindowInitialPlaybackTime >= 0.0)
-            {
-                playbackAdvance = _maxObservedPlaybackTime - _validationWindowInitialPlaybackTime;
-            }
+            var resultObservation =
+                MediaNativeInteropCommon.CreatePullValidationResultObservation(
+                    _validationWindowStartReason,
+                    _observedStartedDuringWindow,
+                    _observedTextureDuringWindow,
+                    _observedAudioDuringWindow,
+                    RequireAudioOutput,
+                    Player.EnableAudio,
+                    MinimumPlaybackAdvanceSeconds,
+                    _validationWindowInitialPlaybackTime,
+                    _maxObservedPlaybackTime);
+            var playbackAdvance = resultObservation.PlaybackAdvanceSeconds;
 
-            if (_validationWindowStartReason == "startup-timeout"
-                && !_observedStartedDuringWindow)
+            if (!resultObservation.Passed)
             {
-                Debug.LogError(
-                    "[CodexValidation] result=failed reason=startup-timeout-no-playback");
-                return ValidationResultInfo.Failed(
-                    "startup-timeout-no-playback",
-                    playbackAdvance);
-            }
+                if (resultObservation.Reason == "playback-stalled")
+                {
+                    Debug.LogError(
+                        string.Format(
+                            "[CodexValidation] result=failed reason=playback-stalled advance={0:F3}s",
+                            playbackAdvance));
+                }
+                else
+                {
+                    Debug.LogError(
+                        "[CodexValidation] result=failed reason=" + resultObservation.Reason);
+                }
 
-            if (!_observedStartedDuringWindow)
-            {
-                Debug.LogError(
-                    "[CodexValidation] result=failed reason=playback-not-started");
                 return ValidationResultInfo.Failed(
-                    "playback-not-started",
-                    playbackAdvance);
-            }
-
-            if (!_observedTextureDuringWindow)
-            {
-                Debug.LogError(
-                    "[CodexValidation] result=failed reason=missing-video-frame");
-                return ValidationResultInfo.Failed(
-                    "missing-video-frame",
-                    playbackAdvance);
-            }
-
-            if (RequireAudioOutput && Player.EnableAudio && !_observedAudioDuringWindow)
-            {
-                Debug.LogError(
-                    "[CodexValidation] result=failed reason=audio-not-playing");
-                return ValidationResultInfo.Failed(
-                    "audio-not-playing",
-                    playbackAdvance);
-            }
-
-            if (playbackAdvance < MinimumPlaybackAdvanceSeconds)
-            {
-                Debug.LogError(
-                    string.Format(
-                        "[CodexValidation] result=failed reason=playback-stalled advance={0:F3}s",
-                        playbackAdvance));
-                return ValidationResultInfo.Failed(
-                    "playback-stalled",
+                    resultObservation.Reason,
                     playbackAdvance);
             }
 
             Debug.Log(
                 string.Format(
-                    "[CodexValidation] result=passed reason=steady-playback advance={0:F3}s sourceState={1} sourceTimeouts={2} sourceReconnects={3}",
+                    "[CodexValidation] result=passed reason={0} advance={1:F3}s sourceState={2} sourceTimeouts={3} sourceReconnects={4}",
+                    resultObservation.Reason,
                     playbackAdvance,
                     finalSnapshot.SourceState,
                     finalSnapshot.SourceTimeouts,

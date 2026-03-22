@@ -1492,6 +1492,13 @@ namespace UnityAV
             public string Reason;
         }
 
+        internal struct ValidationResultObservationView
+        {
+            public bool Passed;
+            public string Reason;
+            public double PlaybackAdvanceSeconds;
+        }
+
         internal struct AvSyncEnterpriseMetricsView
         {
             public uint SampleCount;
@@ -4674,6 +4681,162 @@ namespace UnityAV
             {
                 ShouldStart = false,
                 Reason = string.Empty,
+            };
+        }
+
+        private static double ComputeValidationPlaybackAdvanceSeconds(
+            double initialPlaybackTimeSec,
+            double maxObservedPlaybackTimeSec)
+        {
+            if (maxObservedPlaybackTimeSec >= 0.0
+                && initialPlaybackTimeSec >= 0.0)
+            {
+                return maxObservedPlaybackTimeSec - initialPlaybackTimeSec;
+            }
+
+            return 0.0;
+        }
+
+        internal static ValidationResultObservationView
+            CreatePullValidationResultObservation(
+                string validationWindowStartReason,
+                bool observedStartedDuringWindow,
+                bool observedTextureDuringWindow,
+                bool observedAudioDuringWindow,
+                bool requireAudioOutput,
+                bool audioEnabled,
+                double minimumPlaybackAdvanceSeconds,
+                double validationWindowInitialPlaybackTimeSec,
+                double maxObservedPlaybackTimeSec)
+        {
+            var playbackAdvanceSeconds = ComputeValidationPlaybackAdvanceSeconds(
+                validationWindowInitialPlaybackTimeSec,
+                maxObservedPlaybackTimeSec);
+
+            if (validationWindowStartReason == "startup-timeout"
+                && !observedStartedDuringWindow)
+            {
+                return new ValidationResultObservationView
+                {
+                    Passed = false,
+                    Reason = "startup-timeout-no-playback",
+                    PlaybackAdvanceSeconds = playbackAdvanceSeconds,
+                };
+            }
+
+            if (!observedStartedDuringWindow)
+            {
+                return new ValidationResultObservationView
+                {
+                    Passed = false,
+                    Reason = "playback-not-started",
+                    PlaybackAdvanceSeconds = playbackAdvanceSeconds,
+                };
+            }
+
+            if (!observedTextureDuringWindow)
+            {
+                return new ValidationResultObservationView
+                {
+                    Passed = false,
+                    Reason = "missing-video-frame",
+                    PlaybackAdvanceSeconds = playbackAdvanceSeconds,
+                };
+            }
+
+            if (requireAudioOutput
+                && audioEnabled
+                && !observedAudioDuringWindow)
+            {
+                return new ValidationResultObservationView
+                {
+                    Passed = false,
+                    Reason = "audio-not-playing",
+                    PlaybackAdvanceSeconds = playbackAdvanceSeconds,
+                };
+            }
+
+            if (playbackAdvanceSeconds < minimumPlaybackAdvanceSeconds)
+            {
+                return new ValidationResultObservationView
+                {
+                    Passed = false,
+                    Reason = "playback-stalled",
+                    PlaybackAdvanceSeconds = playbackAdvanceSeconds,
+                };
+            }
+
+            return new ValidationResultObservationView
+            {
+                Passed = true,
+                Reason = "steady-playback",
+                PlaybackAdvanceSeconds = playbackAdvanceSeconds,
+            };
+        }
+
+        internal static ValidationResultObservationView
+            CreateMediaPlayerValidationResultObservation(
+                string validationWindowStartReason,
+                bool observedStartedDuringWindow,
+                bool observedTextureDuringWindow,
+                bool observedNativeFrameDuringWindow,
+                bool observedAudioDuringWindow,
+                double minimumPlaybackAdvanceSeconds,
+                double validationWindowInitialPlaybackTimeSec,
+                double maxObservedPlaybackTimeSec)
+        {
+            var playbackAdvanceSeconds = ComputeValidationPlaybackAdvanceSeconds(
+                validationWindowInitialPlaybackTimeSec,
+                maxObservedPlaybackTimeSec);
+
+            if (validationWindowStartReason == "startup-timeout"
+                && !observedStartedDuringWindow)
+            {
+                return new ValidationResultObservationView
+                {
+                    Passed = false,
+                    Reason = "startup-timeout-no-playback",
+                    PlaybackAdvanceSeconds = playbackAdvanceSeconds,
+                };
+            }
+
+            if (!observedStartedDuringWindow)
+            {
+                return new ValidationResultObservationView
+                {
+                    Passed = false,
+                    Reason = "playback-not-started",
+                    PlaybackAdvanceSeconds = playbackAdvanceSeconds,
+                };
+            }
+
+            if (playbackAdvanceSeconds < minimumPlaybackAdvanceSeconds)
+            {
+                return new ValidationResultObservationView
+                {
+                    Passed = false,
+                    Reason = "playback-stalled",
+                    PlaybackAdvanceSeconds = playbackAdvanceSeconds,
+                };
+            }
+
+            if (!observedTextureDuringWindow && !observedNativeFrameDuringWindow)
+            {
+                return new ValidationResultObservationView
+                {
+                    Passed = false,
+                    Reason = "missing-video-signal",
+                    PlaybackAdvanceSeconds = playbackAdvanceSeconds,
+                };
+            }
+
+            return new ValidationResultObservationView
+            {
+                Passed = true,
+                Reason = observedAudioDuringWindow
+                    ? "steady-playback-with-audio"
+                    : "steady-playback-no-audio",
+                PlaybackAdvanceSeconds = playbackAdvanceSeconds,
             };
         }
 

@@ -629,65 +629,49 @@ namespace UnityAV
         {
             RecordValidationObservation(finalSnapshot);
 
-            var playbackAdvance = 0.0;
-            if (_maxObservedPlaybackTime >= 0.0 && _validationWindowInitialPlaybackTime >= 0.0)
-            {
-                playbackAdvance = _maxObservedPlaybackTime - _validationWindowInitialPlaybackTime;
-            }
+            var resultObservation =
+                MediaNativeInteropCommon.CreateMediaPlayerValidationResultObservation(
+                    _validationWindowStartReason,
+                    _observedStartedDuringWindow,
+                    _observedTextureDuringWindow,
+                    _observedNativeFrameDuringWindow,
+                    _observedAudioDuringWindow,
+                    MinimumPlaybackAdvanceSeconds,
+                    _validationWindowInitialPlaybackTime,
+                    _maxObservedPlaybackTime);
+            var playbackAdvance = resultObservation.PlaybackAdvanceSeconds;
 
-            if (_validationWindowStartReason == "startup-timeout"
-                && !_observedStartedDuringWindow)
+            if (!resultObservation.Passed)
             {
-                Debug.LogError(
-                    "[CodexValidation] result=failed reason=startup-timeout-no-playback");
+                if (resultObservation.Reason == "playback-stalled")
+                {
+                    Debug.LogError(
+                        string.Format(
+                            "[CodexValidation] result=failed reason=playback-stalled advance={0:F3}s",
+                            playbackAdvance));
+                }
+                else
+                {
+                    Debug.LogError(
+                        "[CodexValidation] result=failed reason=" + resultObservation.Reason);
+                }
+
                 return ValidationResultInfo.Failed(
-                    "startup-timeout-no-playback",
+                    resultObservation.Reason,
                     playbackAdvance);
             }
-
-            if (!_observedStartedDuringWindow)
-            {
-                Debug.LogError(
-                    "[CodexValidation] result=failed reason=playback-not-started");
-                return ValidationResultInfo.Failed(
-                    "playback-not-started",
-                    playbackAdvance);
-            }
-
-            if (playbackAdvance < MinimumPlaybackAdvanceSeconds)
-            {
-                Debug.LogError(
-                    string.Format(
-                        "[CodexValidation] result=failed reason=playback-stalled advance={0:F3}s",
-                        playbackAdvance));
-                return ValidationResultInfo.Failed(
-                    "playback-stalled",
-                    playbackAdvance);
-            }
-
-            var textureObserved = _observedTextureDuringWindow || _observedNativeFrameDuringWindow;
-            if (!textureObserved)
-            {
-                Debug.LogError(
-                    "[CodexValidation] result=failed reason=missing-video-signal");
-                return ValidationResultInfo.Failed(
-                    "missing-video-signal",
-                    playbackAdvance);
-            }
-
-            var reason = _observedAudioDuringWindow
-                ? "steady-playback-with-audio"
-                : "steady-playback-no-audio";
             Debug.Log(
                 string.Format(
                     "[CodexValidation] result=passed reason={0} advance={1:F3}s sourceState={2} sourceTimeouts={3} sourceReconnects={4}",
-                    reason,
+                    resultObservation.Reason,
                     playbackAdvance,
                     finalSnapshot.SourceState,
                     finalSnapshot.SourceTimeouts,
                     finalSnapshot.SourceReconnects));
             Debug.Log("[CodexValidation] complete");
-            return ValidationResultInfo.PassedWithAdvance(playbackAdvance, reason);
+            return ValidationResultInfo.PassedWithAdvance(
+                playbackAdvance,
+                resultObservation.Reason);
         }
 
         private void WriteValidationSummary(
