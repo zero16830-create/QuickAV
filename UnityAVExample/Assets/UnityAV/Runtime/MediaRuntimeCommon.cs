@@ -931,6 +931,22 @@ namespace UnityAV
             public double CurrentTimeSec;
         }
 
+        internal struct BackendRuntimeObservationView
+        {
+            public bool Available;
+            public string RequestedBackend;
+            public string ActualBackend;
+            public string RequestedVideoRenderer;
+            public string ActualVideoRenderer;
+        }
+
+        internal struct NativeVideoRuntimeObservationView
+        {
+            public bool Available;
+            public string PresentationPath;
+            public string ActivationDecision;
+        }
+
         internal struct NativeVideoInteropCapsView
         {
             public MediaBackendKind BackendKind;
@@ -1768,6 +1784,85 @@ namespace UnityAV
                 DurationSec = -1.0,
                 SourceLastActivityAgeSec = health.SourceLastActivityAgeSec,
                 CurrentTimeSec = health.CurrentTimeSec,
+            };
+        }
+
+        internal static BackendRuntimeObservationView CreatePullBackendRuntimeObservation(
+            bool available,
+            MediaBackendKind requestedBackend,
+            MediaBackendKind actualBackend,
+            MediaPlayerPull.PullVideoRendererKind requestedVideoRenderer,
+            MediaPlayerPull.PullVideoRendererKind actualVideoRenderer)
+        {
+            if (!available)
+            {
+                return new BackendRuntimeObservationView
+                {
+                    Available = false,
+                    RequestedBackend = "Unavailable",
+                    ActualBackend = "Unavailable",
+                    RequestedVideoRenderer = "Unavailable",
+                    ActualVideoRenderer = "Unavailable",
+                };
+            }
+
+            return new BackendRuntimeObservationView
+            {
+                Available = true,
+                RequestedBackend = requestedBackend.ToString(),
+                ActualBackend = actualBackend.ToString(),
+                RequestedVideoRenderer = requestedVideoRenderer.ToString(),
+                ActualVideoRenderer = actualVideoRenderer.ToString(),
+            };
+        }
+
+        internal static BackendRuntimeObservationView CreateMediaPlayerBackendRuntimeObservation(
+            bool available,
+            MediaBackendKind requestedBackend,
+            MediaBackendKind actualBackend)
+        {
+            if (!available)
+            {
+                return new BackendRuntimeObservationView
+                {
+                    Available = false,
+                    RequestedBackend = "Unavailable",
+                    ActualBackend = "Unavailable",
+                    RequestedVideoRenderer = "Unavailable",
+                    ActualVideoRenderer = "Unavailable",
+                };
+            }
+
+            return new BackendRuntimeObservationView
+            {
+                Available = true,
+                RequestedBackend = requestedBackend.ToString(),
+                ActualBackend = actualBackend.ToString(),
+                RequestedVideoRenderer = "Unavailable",
+                ActualVideoRenderer = "Unavailable",
+            };
+        }
+
+        internal static NativeVideoRuntimeObservationView CreateNativeVideoRuntimeObservation(
+            bool available,
+            MediaPlayer.NativeVideoPresentationPathKind presentationPath,
+            MediaPlayer.NativeVideoActivationDecisionKind activationDecision)
+        {
+            if (!available)
+            {
+                return new NativeVideoRuntimeObservationView
+                {
+                    Available = false,
+                    PresentationPath = "Unavailable",
+                    ActivationDecision = "Unavailable",
+                };
+            }
+
+            return new NativeVideoRuntimeObservationView
+            {
+                Available = true,
+                PresentationPath = presentationPath.ToString(),
+                ActivationDecision = activationDecision.ToString(),
             };
         }
 

@@ -377,8 +377,22 @@ namespace UnityAV
         {
             var snapshot = CaptureSnapshot();
             UpdateObservedContractState();
+            var backendRuntimeObservation =
+                MediaNativeInteropCommon.CreateMediaPlayerBackendRuntimeObservation(
+                    Player != null,
+                    Player != null ? Player.PreferredBackend : default(MediaBackendKind),
+                    Player != null ? Player.ActualBackendKind : default(MediaBackendKind));
+            var nativeVideoRuntimeObservation =
+                MediaNativeInteropCommon.CreateNativeVideoRuntimeObservation(
+                    Player != null,
+                    Player != null
+                        ? Player.NativeVideoPresentationPath
+                        : default(MediaPlayer.NativeVideoPresentationPathKind),
+                    Player != null
+                        ? Player.NativeVideoActivationDecision
+                        : default(MediaPlayer.NativeVideoActivationDecisionKind));
             var actualRenderer = snapshot.NativeVideoActive
-                ? Player.NativeVideoPresentationPath.ToString()
+                ? nativeVideoRuntimeObservation.PresentationPath
                 : "TextureFallback";
 
             Debug.Log(
@@ -399,7 +413,7 @@ namespace UnityAV
                     snapshot.TextureHeight,
                     Screen.fullScreen,
                     Screen.fullScreenMode,
-                    Player.ActualBackendKind,
+                    backendRuntimeObservation.ActualBackend,
                     "NativeVideoPreferred",
                     actualRenderer,
                     _observedPlaybackContractAvailable,
@@ -423,7 +437,7 @@ namespace UnityAV
                     snapshot.NativeVideoActive,
                     snapshot.NativeActivationDecision,
                     snapshot.HasPresentedNativeVideoFrame,
-                    Player.ActualBackendKind));
+                    backendRuntimeObservation.ActualBackend));
 
             if (snapshot.PlayerSessionAvailable)
             {
@@ -530,6 +544,15 @@ namespace UnityAV
                     enterpriseMetrics);
             MediaNativeInteropCommon.AudioOutputPolicyView audioOutputPolicy;
             var audioOutputPolicyAvailable = Player.TryGetAudioOutputPolicy(out audioOutputPolicy);
+            var nativeVideoRuntimeObservation =
+                MediaNativeInteropCommon.CreateNativeVideoRuntimeObservation(
+                    Player != null,
+                    Player != null
+                        ? Player.NativeVideoPresentationPath
+                        : default(MediaPlayer.NativeVideoPresentationPathKind),
+                    Player != null
+                        ? Player.NativeVideoActivationDecision
+                        : default(MediaPlayer.NativeVideoActivationDecisionKind));
 
             return new ValidationSnapshot
             {
@@ -546,7 +569,7 @@ namespace UnityAV
                 SourceTimeouts = runtimeHealthObservation.SourceTimeouts,
                 SourceReconnects = runtimeHealthObservation.SourceReconnects,
                 NativeVideoActive = Player.IsNativeVideoPathActive,
-                NativeActivationDecision = Player.NativeVideoActivationDecision.ToString(),
+                NativeActivationDecision = nativeVideoRuntimeObservation.ActivationDecision,
                 HasPresentedNativeVideoFrame = Player.HasPresentedNativeVideoFrame,
                 PlayerSessionAvailable = playerSessionObservation.Available,
                 PlayerSessionLifecycleState = playerSessionObservation.LifecycleState,
@@ -708,11 +731,16 @@ namespace UnityAV
                 var playerSessionIsSyncing = ResolveSummaryString(
                     _observedPlayerSessionIsSyncing,
                     finalSnapshot.PlayerSessionIsSyncing);
+                var backendRuntimeObservation =
+                    MediaNativeInteropCommon.CreateMediaPlayerBackendRuntimeObservation(
+                        Player != null,
+                        Player != null ? Player.PreferredBackend : default(MediaBackendKind),
+                        Player != null ? Player.ActualBackendKind : default(MediaBackendKind));
                 builder.AppendLine("validation_result=" + (result.Passed ? "passed" : "failed"));
                 builder.AppendLine("reason=" + result.Reason);
                 builder.AppendLine("uri=" + (Player != null ? Player.Uri : string.Empty));
-                builder.AppendLine("requested_backend=" + (Player != null ? Player.PreferredBackend.ToString() : "Unavailable"));
-                builder.AppendLine("actual_backend=" + (Player != null ? Player.ActualBackendKind.ToString() : "Unavailable"));
+                builder.AppendLine("requested_backend=" + backendRuntimeObservation.RequestedBackend);
+                builder.AppendLine("actual_backend=" + backendRuntimeObservation.ActualBackend);
                 builder.AppendLine("playback_advance_sec=" + result.PlaybackAdvanceSeconds.ToString("F3"));
                 builder.AppendLine("has_texture=" + finalSnapshot.HasTexture);
                 builder.AppendLine("audio_playing=" + finalSnapshot.AudioPlaying);

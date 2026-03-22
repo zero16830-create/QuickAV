@@ -266,6 +266,13 @@ namespace UnityAV
         private ValidationSnapshot EmitStatus()
         {
             var snapshot = CaptureSnapshot();
+            var backendRuntimeObservation =
+                MediaNativeInteropCommon.CreatePullBackendRuntimeObservation(
+                    Player != null,
+                    Player != null ? Player.PreferredBackend : default(MediaBackendKind),
+                    Player != null ? Player.ActualBackendKind : default(MediaBackendKind),
+                    Player != null ? Player.VideoRenderer : default(MediaPlayerPull.PullVideoRendererKind),
+                    Player != null ? Player.ActualVideoRenderer : default(MediaPlayerPull.PullVideoRendererKind));
 
             Debug.Log(string.Format(
                 "[CodexValidation] time={0:F3}s texture={1} audioPlaying={2} started={3} startupElapsed={4:F3}s sourceState={5} sourcePackets={6} sourceTimeouts={7} sourceReconnects={8} window={9}x{10} textureSize={11}x{12} fullscreen={13} mode={14} backend={15} requested_renderer={16} actual_renderer={17} frame_contract_available={18} frame_contract_memory={19} frame_contract_dynamic_range={20} frame_contract_nominal_fps={21:F2} playback_contract_available={22} playback_contract_master_sec={23:F3} av_sync_contract_available={24} av_sync_contract_master={25} av_sync_contract_drift_ms={26:F1} bridge_descriptor_available={27} bridge_descriptor_state={28} bridge_descriptor_runtime={29} bridge_descriptor_zero_copy={30} bridge_descriptor_direct_bindable={31} bridge_descriptor_source_plane_textures={32} bridge_descriptor_fallback_copy={33} path_selection_available={34} path_selection_kind={35} path_selection_source_memory={36} path_selection_presented_memory={37} path_selection_target_zero_copy={38} path_selection_source_plane_textures={39} path_selection_cpu_fallback={40} source_timeline_available={41} source_timeline_model={42} player_session_available={43} player_session_lifecycle={44} av_sync_enterprise_available={45} av_sync_enterprise_sample_count={46}",
@@ -284,9 +291,9 @@ namespace UnityAV
                 snapshot.TextureHeight,
                 Screen.fullScreen,
                 Screen.fullScreenMode,
-                Player.ActualBackendKind,
-                Player.VideoRenderer,
-                Player.ActualVideoRenderer,
+                backendRuntimeObservation.ActualBackend,
+                backendRuntimeObservation.RequestedVideoRenderer,
+                backendRuntimeObservation.ActualVideoRenderer,
                 snapshot.HasFrameContract,
                 snapshot.FrameContractMemoryKind,
                 snapshot.FrameContractDynamicRange,
@@ -1047,14 +1054,21 @@ namespace UnityAV
                 var summaryPath = Path.Combine(
                     Application.persistentDataPath,
                     SummaryFileName);
+                var backendRuntimeObservation =
+                    MediaNativeInteropCommon.CreatePullBackendRuntimeObservation(
+                        Player != null,
+                        Player != null ? Player.PreferredBackend : default(MediaBackendKind),
+                        Player != null ? Player.ActualBackendKind : default(MediaBackendKind),
+                        Player != null ? Player.VideoRenderer : default(MediaPlayerPull.PullVideoRendererKind),
+                        Player != null ? Player.ActualVideoRenderer : default(MediaPlayerPull.PullVideoRendererKind));
                 var builder = new StringBuilder();
                 builder.AppendLine("validation_result=" + (result.Passed ? "passed" : "failed"));
                 builder.AppendLine("reason=" + result.Reason);
                 builder.AppendLine("uri=" + (Player != null ? Player.Uri : string.Empty));
-                builder.AppendLine("requested_backend=" + (Player != null ? Player.PreferredBackend.ToString() : "Unavailable"));
-                builder.AppendLine("actual_backend=" + (Player != null ? Player.ActualBackendKind.ToString() : "Unavailable"));
-                builder.AppendLine("requested_video_renderer=" + (Player != null ? Player.VideoRenderer.ToString() : "Unavailable"));
-                builder.AppendLine("actual_video_renderer=" + (Player != null ? Player.ActualVideoRenderer.ToString() : "Unavailable"));
+                builder.AppendLine("requested_backend=" + backendRuntimeObservation.RequestedBackend);
+                builder.AppendLine("actual_backend=" + backendRuntimeObservation.ActualBackend);
+                builder.AppendLine("requested_video_renderer=" + backendRuntimeObservation.RequestedVideoRenderer);
+                builder.AppendLine("actual_video_renderer=" + backendRuntimeObservation.ActualVideoRenderer);
                 builder.AppendLine("require_audio_output=" + RequireAudioOutput);
                 builder.AppendLine("playback_advance_sec=" + result.PlaybackAdvanceSeconds.ToString("F3"));
                 builder.AppendLine("has_texture=" + finalSnapshot.HasTexture);
