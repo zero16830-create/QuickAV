@@ -1480,6 +1480,12 @@ namespace UnityAV
             public bool HasSample;
         }
 
+        internal struct PlaybackStartObservationView
+        {
+            public bool Started;
+            public string Source;
+        }
+
         internal struct AvSyncEnterpriseMetricsView
         {
             public uint SampleCount;
@@ -4545,6 +4551,48 @@ namespace UnityAV
                 ReferenceTimeSec = referenceTimeSec,
                 ReferenceKind = referenceKind,
                 HasSample = referenceTimeSec >= 0.0,
+            };
+        }
+
+        internal static PlaybackStartObservationView CreatePlaybackStartObservation(
+            bool hasReportedStarted,
+            bool reportedStarted,
+            bool runtimeHealthAvailable,
+            bool runtimeHealthIsPlaying,
+            double playbackTimeSec,
+            bool preferReportedStarted)
+        {
+            if (preferReportedStarted && hasReportedStarted)
+            {
+                return new PlaybackStartObservationView
+                {
+                    Started = reportedStarted,
+                    Source = "reported_flag",
+                };
+            }
+
+            if (runtimeHealthAvailable)
+            {
+                return new PlaybackStartObservationView
+                {
+                    Started = runtimeHealthIsPlaying,
+                    Source = "runtime_health",
+                };
+            }
+
+            if (hasReportedStarted)
+            {
+                return new PlaybackStartObservationView
+                {
+                    Started = reportedStarted,
+                    Source = "reported_flag",
+                };
+            }
+
+            return new PlaybackStartObservationView
+            {
+                Started = playbackTimeSec >= 0.0,
+                Source = "playback_time",
             };
         }
 

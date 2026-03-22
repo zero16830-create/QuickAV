@@ -515,9 +515,14 @@ namespace UnityAV
                 MediaNativeInteropCommon.CreateRuntimeHealthObservation(
                     hasHealth,
                     health);
-            var started = runtimeHealthObservation.Available
-                ? runtimeHealthObservation.IsPlaying
-                : playbackTime >= 0.0;
+            var playbackStartObservation =
+                MediaNativeInteropCommon.CreatePlaybackStartObservation(
+                    false,
+                    false,
+                    runtimeHealthObservation.Available,
+                    runtimeHealthObservation.IsPlaying,
+                    playbackTime,
+                    false);
             MediaNativeInteropCommon.PlayerSessionContractView playerSessionContract;
             var playerSessionAvailable = Player.TryGetPlayerSessionContract(out playerSessionContract);
             var playerSessionObservation =
@@ -560,7 +565,7 @@ namespace UnityAV
                 AudioPlaying = audioPlaying,
                 AudioSourcePresent = audioSource != null,
                 HasAudioListener = _hasAudioListener,
-                Started = started,
+                Started = playbackStartObservation.Started,
                 TextureWidth = texture != null ? texture.width : 0,
                 TextureHeight = texture != null ? texture.height : 0,
                 SourceState = runtimeHealthObservation.SourceState,

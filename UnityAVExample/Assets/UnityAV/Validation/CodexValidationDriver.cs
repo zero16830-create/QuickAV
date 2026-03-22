@@ -569,6 +569,14 @@ namespace UnityAV
                 MediaNativeInteropCommon.CreateRuntimeHealthObservation(
                     hasHealth,
                     health);
+            var playbackStartObservation =
+                MediaNativeInteropCommon.CreatePlaybackStartObservation(
+                    true,
+                    Player.HasStartedPlayback,
+                    runtimeHealthObservation.Available,
+                    runtimeHealthObservation.IsPlaying,
+                    playbackTime,
+                    true);
             MediaNativeInteropCommon.VideoFrameContractView frameContract;
             var hasFrameContract = Player.TryGetLatestVideoFrameContract(out frameContract);
             var frameContractObservation =
@@ -679,7 +687,7 @@ namespace UnityAV
                 PlaybackTime = playbackTime,
                 HasTexture = hasTexture,
                 AudioPlaying = audioPlaying,
-                Started = Player.HasStartedPlayback,
+                Started = playbackStartObservation.Started,
                 TextureWidth = textureWidth,
                 TextureHeight = textureHeight,
                 HasRuntimeHealth = runtimeHealthObservation.Available,
