@@ -765,12 +765,8 @@ namespace UnityAV
                 AvSyncContractDropTotal = avSyncContractObservation.DropTotal,
                 AvSyncContractDuplicateTotal = avSyncContractObservation.DuplicateTotal,
                 HasSourceTimelineContract = sourceTimelineObservation.Available,
-                SourceTimelineModel = sourceTimelineObservation.Available
-                    ? sourceTimelineObservation.Model
-                    : "Unavailable",
-                SourceTimelineAnchorKind = sourceTimelineObservation.Available
-                    ? sourceTimelineObservation.AnchorKind
-                    : "Unavailable",
+                SourceTimelineModel = sourceTimelineObservation.Model,
+                SourceTimelineAnchorKind = sourceTimelineObservation.AnchorKind,
                 SourceTimelineHasCurrentSourceTimeUs =
                     sourceTimelineObservation.HasCurrentSourceTimeUs,
                 SourceTimelineCurrentSourceTimeUs =
@@ -790,22 +786,12 @@ namespace UnityAV
                 SourceTimelineIsRealtime =
                     sourceTimelineObservation.IsRealtime,
                 HasPlayerSessionContract = playerSessionObservation.Available,
-                PlayerSessionLifecycleState = playerSessionObservation.Available
-                    ? playerSessionObservation.LifecycleState
-                    : "Unavailable",
-                PlayerSessionPublicState =
-                    playerSessionObservation.Available ? playerSessionObservation.PublicState : -1,
-                PlayerSessionRuntimeState =
-                    playerSessionObservation.Available ? playerSessionObservation.RuntimeState : -1,
-                PlayerSessionPlaybackIntent =
-                    playerSessionObservation.Available
-                        ? playerSessionObservation.PlaybackIntent
-                        : -1,
-                PlayerSessionStopReason =
-                    playerSessionObservation.Available ? playerSessionObservation.StopReason : -1,
-                PlayerSessionSourceState = playerSessionObservation.Available
-                    ? playerSessionObservation.SourceState
-                    : "Unavailable",
+                PlayerSessionLifecycleState = playerSessionObservation.LifecycleState,
+                PlayerSessionPublicState = playerSessionObservation.PublicState,
+                PlayerSessionRuntimeState = playerSessionObservation.RuntimeState,
+                PlayerSessionPlaybackIntent = playerSessionObservation.PlaybackIntent,
+                PlayerSessionStopReason = playerSessionObservation.StopReason,
+                PlayerSessionSourceState = playerSessionObservation.SourceState,
                 PlayerSessionCanSeek = playerSessionObservation.CanSeek,
                 PlayerSessionIsRealtime = playerSessionObservation.IsRealtime,
                 PlayerSessionIsBuffering = playerSessionObservation.IsBuffering,
@@ -815,9 +801,7 @@ namespace UnityAV
                 PlayerSessionShouldStartAudio =
                     playerSessionObservation.ShouldStartAudio,
                 PlayerSessionAudioStartBlockReason =
-                    playerSessionObservation.Available
-                        ? playerSessionObservation.AudioStartBlockReason
-                        : -1,
+                    playerSessionObservation.AudioStartBlockReason,
                 PlayerSessionRequiredBufferedSamples =
                     playerSessionObservation.RequiredBufferedSamples,
                 PlayerSessionReportedBufferedSamples =

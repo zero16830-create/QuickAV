@@ -2243,7 +2243,28 @@ namespace UnityAV
         {
             if (!available)
             {
-                return default(PlayerSessionObservationView);
+                return new PlayerSessionObservationView
+                {
+                    Available = false,
+                    LifecycleState = "Unavailable",
+                    PublicState = -1,
+                    RuntimeState = -1,
+                    PlaybackIntent = -1,
+                    StopReason = -1,
+                    SourceState = "Unavailable",
+                    CanSeek = false,
+                    IsRealtime = false,
+                    IsBuffering = false,
+                    IsSyncing = false,
+                    AudioStartStateReported = false,
+                    ShouldStartAudio = false,
+                    AudioStartBlockReason = -1,
+                    RequiredBufferedSamples = 0,
+                    ReportedBufferedSamples = 0,
+                    RequiresPresentedVideoFrame = false,
+                    HasPresentedVideoFrame = false,
+                    AndroidFileRateBridgeActive = false,
+                };
             }
 
             return new PlayerSessionObservationView
@@ -2314,7 +2335,21 @@ namespace UnityAV
         {
             if (!available)
             {
-                return default(SourceTimelineObservationView);
+                return new SourceTimelineObservationView
+                {
+                    Available = false,
+                    Model = "Unavailable",
+                    AnchorKind = "Unavailable",
+                    HasCurrentSourceTimeUs = false,
+                    CurrentSourceTimeUs = 0,
+                    HasTimelineOriginUs = false,
+                    TimelineOriginUs = 0,
+                    HasAnchorValueUs = false,
+                    AnchorValueUs = 0,
+                    HasAnchorMonoUs = false,
+                    AnchorMonoUs = 0,
+                    IsRealtime = false,
+                };
             }
 
             return new SourceTimelineObservationView
