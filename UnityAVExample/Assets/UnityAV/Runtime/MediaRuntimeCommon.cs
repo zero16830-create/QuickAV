@@ -1118,6 +1118,48 @@ namespace UnityAV
             public bool HasAudioClock;
         }
 
+        internal struct PlaybackTimingObservationView
+        {
+            public bool Available;
+            public bool HasMicrosecondMirror;
+            public double MasterTimeSec;
+            public long MasterTimeUs;
+            public double ExternalTimeSec;
+            public long ExternalTimeUs;
+            public bool HasAudioTimeSec;
+            public double AudioTimeSec;
+            public bool HasAudioTimeUs;
+            public long AudioTimeUs;
+            public bool HasAudioPresentedTimeSec;
+            public double AudioPresentedTimeSec;
+            public bool HasAudioPresentedTimeUs;
+            public long AudioPresentedTimeUs;
+            public double AudioSinkDelaySec;
+            public long AudioSinkDelayUs;
+            public bool HasAudioClock;
+        }
+
+        internal struct PlaybackTimingAuditStringsView
+        {
+            public bool Available;
+            public string HasMicrosecondMirror;
+            public string MasterTimeSec;
+            public string MasterTimeUs;
+            public string ExternalTimeSec;
+            public string ExternalTimeUs;
+            public string HasAudioTimeSec;
+            public string AudioTimeSec;
+            public string HasAudioTimeUs;
+            public string AudioTimeUs;
+            public string HasAudioPresentedTimeSec;
+            public string AudioPresentedTimeSec;
+            public string HasAudioPresentedTimeUs;
+            public string AudioPresentedTimeUs;
+            public string AudioSinkDelaySec;
+            public string AudioSinkDelayUs;
+            public string HasAudioClock;
+        }
+
         internal struct AvSyncContractView
         {
             public AvSyncMasterClockKind MasterClock;
@@ -1322,6 +1364,34 @@ namespace UnityAV
             public long OffsetAbsP95Us;
             public long OffsetAbsP99Us;
             public long OffsetAbsMaxUs;
+        }
+
+        internal struct AvSyncEnterpriseObservationView
+        {
+            public bool Available;
+            public uint SampleCount;
+            public long WindowSpanUs;
+            public long LatestRawOffsetUs;
+            public long LatestSmoothOffsetUs;
+            public double DriftSlopePpm;
+            public double DriftProjected2hMs;
+            public long OffsetAbsP95Us;
+            public long OffsetAbsP99Us;
+            public long OffsetAbsMaxUs;
+        }
+
+        internal struct AvSyncEnterpriseAuditStringsView
+        {
+            public bool Available;
+            public string SampleCount;
+            public string WindowSpanUs;
+            public string LatestRawOffsetUs;
+            public string LatestSmoothOffsetUs;
+            public string DriftSlopePpm;
+            public string DriftProjected2hMs;
+            public string OffsetAbsP95Us;
+            public string OffsetAbsP99Us;
+            public string OffsetAbsMaxUs;
         }
 
         internal struct PassiveAvSyncSnapshotView
@@ -1599,6 +1669,96 @@ namespace UnityAV
             };
         }
 
+        internal static PlaybackTimingObservationView CreatePlaybackTimingObservation(
+            bool available,
+            PlaybackTimingContractView contract)
+        {
+            if (!available)
+            {
+                return default(PlaybackTimingObservationView);
+            }
+
+            return new PlaybackTimingObservationView
+            {
+                Available = true,
+                HasMicrosecondMirror = contract.HasMicrosecondMirror,
+                MasterTimeSec = contract.MasterTimeSec,
+                MasterTimeUs = contract.MasterTimeUs,
+                ExternalTimeSec = contract.ExternalTimeSec,
+                ExternalTimeUs = contract.ExternalTimeUs,
+                HasAudioTimeSec = contract.HasAudioTimeSec,
+                AudioTimeSec = contract.AudioTimeSec,
+                HasAudioTimeUs = contract.HasAudioTimeUs,
+                AudioTimeUs = contract.AudioTimeUs,
+                HasAudioPresentedTimeSec = contract.HasAudioPresentedTimeSec,
+                AudioPresentedTimeSec = contract.AudioPresentedTimeSec,
+                HasAudioPresentedTimeUs = contract.HasAudioPresentedTimeUs,
+                AudioPresentedTimeUs = contract.AudioPresentedTimeUs,
+                AudioSinkDelaySec = contract.AudioSinkDelaySec,
+                AudioSinkDelayUs = contract.AudioSinkDelayUs,
+                HasAudioClock = contract.HasAudioClock,
+            };
+        }
+
+        internal static PlaybackTimingAuditStringsView CreatePlaybackTimingAuditStrings(
+            bool available,
+            PlaybackTimingContractView contract)
+        {
+            var observation = CreatePlaybackTimingObservation(available, contract);
+            if (!observation.Available)
+            {
+                return new PlaybackTimingAuditStringsView
+                {
+                    Available = false,
+                    HasMicrosecondMirror = "False",
+                    MasterTimeSec = "n/a",
+                    MasterTimeUs = "n/a",
+                    ExternalTimeSec = "n/a",
+                    ExternalTimeUs = "n/a",
+                    HasAudioTimeSec = "False",
+                    AudioTimeSec = "n/a",
+                    HasAudioTimeUs = "False",
+                    AudioTimeUs = "n/a",
+                    HasAudioPresentedTimeSec = "False",
+                    AudioPresentedTimeSec = "n/a",
+                    HasAudioPresentedTimeUs = "False",
+                    AudioPresentedTimeUs = "n/a",
+                    AudioSinkDelaySec = "n/a",
+                    AudioSinkDelayUs = "n/a",
+                    HasAudioClock = "False",
+                };
+            }
+
+            return new PlaybackTimingAuditStringsView
+            {
+                Available = true,
+                HasMicrosecondMirror = observation.HasMicrosecondMirror.ToString(),
+                MasterTimeSec = observation.MasterTimeSec.ToString("F3"),
+                MasterTimeUs = observation.MasterTimeUs.ToString(),
+                ExternalTimeSec = observation.ExternalTimeSec.ToString("F3"),
+                ExternalTimeUs = observation.ExternalTimeUs.ToString(),
+                HasAudioTimeSec = observation.HasAudioTimeSec.ToString(),
+                AudioTimeSec = observation.HasAudioTimeSec
+                    ? observation.AudioTimeSec.ToString("F3")
+                    : "n/a",
+                HasAudioTimeUs = observation.HasAudioTimeUs.ToString(),
+                AudioTimeUs = observation.HasAudioTimeUs
+                    ? observation.AudioTimeUs.ToString()
+                    : "n/a",
+                HasAudioPresentedTimeSec = observation.HasAudioPresentedTimeSec.ToString(),
+                AudioPresentedTimeSec = observation.HasAudioPresentedTimeSec
+                    ? observation.AudioPresentedTimeSec.ToString("F3")
+                    : "n/a",
+                HasAudioPresentedTimeUs = observation.HasAudioPresentedTimeUs.ToString(),
+                AudioPresentedTimeUs = observation.HasAudioPresentedTimeUs
+                    ? observation.AudioPresentedTimeUs.ToString()
+                    : "n/a",
+                AudioSinkDelaySec = observation.AudioSinkDelaySec.ToString("F3"),
+                AudioSinkDelayUs = observation.AudioSinkDelayUs.ToString(),
+                HasAudioClock = observation.HasAudioClock.ToString(),
+            };
+        }
+
         internal static AudioOutputPolicyAuditStringsView CreateAudioOutputPolicyAuditStrings(
             bool available,
             AudioOutputPolicyView policy)
@@ -1791,6 +1951,67 @@ namespace UnityAV
                 HasAnchorMonoUs = observation.HasAnchorMonoUs.ToString(),
                 AnchorMonoUs = observation.AnchorMonoUs.ToString(),
                 IsRealtime = observation.IsRealtime.ToString(),
+            };
+        }
+
+        internal static AvSyncEnterpriseObservationView CreateAvSyncEnterpriseObservation(
+            bool available,
+            AvSyncEnterpriseMetricsView metrics)
+        {
+            if (!available)
+            {
+                return default(AvSyncEnterpriseObservationView);
+            }
+
+            return new AvSyncEnterpriseObservationView
+            {
+                Available = true,
+                SampleCount = metrics.SampleCount,
+                WindowSpanUs = metrics.WindowSpanUs,
+                LatestRawOffsetUs = metrics.LatestRawOffsetUs,
+                LatestSmoothOffsetUs = metrics.LatestSmoothOffsetUs,
+                DriftSlopePpm = metrics.DriftSlopePpm,
+                DriftProjected2hMs = metrics.DriftProjected2hMs,
+                OffsetAbsP95Us = metrics.OffsetAbsP95Us,
+                OffsetAbsP99Us = metrics.OffsetAbsP99Us,
+                OffsetAbsMaxUs = metrics.OffsetAbsMaxUs,
+            };
+        }
+
+        internal static AvSyncEnterpriseAuditStringsView CreateAvSyncEnterpriseAuditStrings(
+            bool available,
+            AvSyncEnterpriseMetricsView metrics)
+        {
+            var observation = CreateAvSyncEnterpriseObservation(available, metrics);
+            if (!observation.Available)
+            {
+                return new AvSyncEnterpriseAuditStringsView
+                {
+                    Available = false,
+                    SampleCount = "n/a",
+                    WindowSpanUs = "n/a",
+                    LatestRawOffsetUs = "n/a",
+                    LatestSmoothOffsetUs = "n/a",
+                    DriftSlopePpm = "n/a",
+                    DriftProjected2hMs = "n/a",
+                    OffsetAbsP95Us = "n/a",
+                    OffsetAbsP99Us = "n/a",
+                    OffsetAbsMaxUs = "n/a",
+                };
+            }
+
+            return new AvSyncEnterpriseAuditStringsView
+            {
+                Available = true,
+                SampleCount = observation.SampleCount.ToString(),
+                WindowSpanUs = observation.WindowSpanUs.ToString(),
+                LatestRawOffsetUs = observation.LatestRawOffsetUs.ToString(),
+                LatestSmoothOffsetUs = observation.LatestSmoothOffsetUs.ToString(),
+                DriftSlopePpm = observation.DriftSlopePpm.ToString("F3"),
+                DriftProjected2hMs = observation.DriftProjected2hMs.ToString("F3"),
+                OffsetAbsP95Us = observation.OffsetAbsP95Us.ToString(),
+                OffsetAbsP99Us = observation.OffsetAbsP99Us.ToString(),
+                OffsetAbsMaxUs = observation.OffsetAbsMaxUs.ToString(),
             };
         }
 

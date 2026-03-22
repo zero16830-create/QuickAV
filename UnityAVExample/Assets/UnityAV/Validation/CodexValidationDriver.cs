@@ -584,6 +584,10 @@ namespace UnityAV
             MediaNativeInteropCommon.PlaybackTimingContractView playbackTimingContract;
             var hasPlaybackTimingContract = Player.TryGetPlaybackTimingContract(
                 out playbackTimingContract);
+            var playbackTimingObservation =
+                MediaNativeInteropCommon.CreatePlaybackTimingObservation(
+                    hasPlaybackTimingContract,
+                    playbackTimingContract);
             MediaNativeInteropCommon.AvSyncContractView avSyncContract;
             var hasAvSyncContract = Player.TryGetAvSyncContract(out avSyncContract);
             MediaNativeInteropCommon.SourceTimelineContractView sourceTimelineContract;
@@ -609,6 +613,10 @@ namespace UnityAV
             MediaNativeInteropCommon.AvSyncEnterpriseMetricsView avSyncEnterpriseMetrics;
             var hasAvSyncEnterpriseMetrics = Player.TryGetAvSyncEnterpriseMetrics(
                 out avSyncEnterpriseMetrics);
+            var avSyncEnterpriseObservation =
+                MediaNativeInteropCommon.CreateAvSyncEnterpriseObservation(
+                    hasAvSyncEnterpriseMetrics,
+                    avSyncEnterpriseMetrics);
             MediaNativeInteropCommon.PassiveAvSyncSnapshotView passiveAvSyncSnapshot;
             var hasPassiveAvSyncSnapshot = Player.TryGetPassiveAvSyncSnapshot(
                 out passiveAvSyncSnapshot);
@@ -693,47 +701,31 @@ namespace UnityAV
                     hasFrameContract ? frameContract.Color.DynamicRange.ToString() : "Unavailable",
                 FrameContractNominalFps =
                     hasFrameContract && frameContract.HasNominalFps ? frameContract.NominalFps : 0.0,
-                HasPlaybackTimingContract = hasPlaybackTimingContract,
-                PlaybackContractMasterTimeSec =
-                    hasPlaybackTimingContract ? playbackTimingContract.MasterTimeSec : 0.0,
-                PlaybackContractMasterTimeUs =
-                    hasPlaybackTimingContract ? playbackTimingContract.MasterTimeUs : 0L,
-                PlaybackContractExternalTimeSec =
-                    hasPlaybackTimingContract ? playbackTimingContract.ExternalTimeSec : 0.0,
-                PlaybackContractExternalTimeUs =
-                    hasPlaybackTimingContract ? playbackTimingContract.ExternalTimeUs : 0L,
-                PlaybackContractHasAudioTimeSec =
-                    hasPlaybackTimingContract && playbackTimingContract.HasAudioTimeSec,
-                PlaybackContractAudioTimeSec =
-                    hasPlaybackTimingContract && playbackTimingContract.HasAudioTimeSec
-                        ? playbackTimingContract.AudioTimeSec
-                        : 0.0,
-                PlaybackContractHasAudioTimeUs =
-                    hasPlaybackTimingContract && playbackTimingContract.HasAudioTimeUs,
-                PlaybackContractAudioTimeUs =
-                    hasPlaybackTimingContract && playbackTimingContract.HasAudioTimeUs
-                        ? playbackTimingContract.AudioTimeUs
-                        : 0L,
+                HasPlaybackTimingContract = playbackTimingObservation.Available,
+                PlaybackContractMasterTimeSec = playbackTimingObservation.MasterTimeSec,
+                PlaybackContractMasterTimeUs = playbackTimingObservation.MasterTimeUs,
+                PlaybackContractExternalTimeSec = playbackTimingObservation.ExternalTimeSec,
+                PlaybackContractExternalTimeUs = playbackTimingObservation.ExternalTimeUs,
+                PlaybackContractHasAudioTimeSec = playbackTimingObservation.HasAudioTimeSec,
+                PlaybackContractAudioTimeSec = playbackTimingObservation.AudioTimeSec,
+                PlaybackContractHasAudioTimeUs = playbackTimingObservation.HasAudioTimeUs,
+                PlaybackContractAudioTimeUs = playbackTimingObservation.AudioTimeUs,
                 PlaybackContractHasAudioPresentedTimeSec =
-                    hasPlaybackTimingContract && playbackTimingContract.HasAudioPresentedTimeSec,
+                    playbackTimingObservation.HasAudioPresentedTimeSec,
                 PlaybackContractAudioPresentedTimeSec =
-                    hasPlaybackTimingContract && playbackTimingContract.HasAudioPresentedTimeSec
-                        ? playbackTimingContract.AudioPresentedTimeSec
-                        : 0.0,
+                    playbackTimingObservation.AudioPresentedTimeSec,
                 PlaybackContractHasAudioPresentedTimeUs =
-                    hasPlaybackTimingContract && playbackTimingContract.HasAudioPresentedTimeUs,
+                    playbackTimingObservation.HasAudioPresentedTimeUs,
                 PlaybackContractAudioPresentedTimeUs =
-                    hasPlaybackTimingContract && playbackTimingContract.HasAudioPresentedTimeUs
-                        ? playbackTimingContract.AudioPresentedTimeUs
-                        : 0L,
+                    playbackTimingObservation.AudioPresentedTimeUs,
                 PlaybackContractAudioSinkDelaySec =
-                    hasPlaybackTimingContract ? playbackTimingContract.AudioSinkDelaySec : 0.0,
+                    playbackTimingObservation.AudioSinkDelaySec,
                 PlaybackContractAudioSinkDelayUs =
-                    hasPlaybackTimingContract ? playbackTimingContract.AudioSinkDelayUs : 0L,
+                    playbackTimingObservation.AudioSinkDelayUs,
                 PlaybackContractHasMicrosecondMirror =
-                    hasPlaybackTimingContract && playbackTimingContract.HasMicrosecondMirror,
+                    playbackTimingObservation.HasMicrosecondMirror,
                 PlaybackContractHasAudioClock =
-                    hasPlaybackTimingContract && playbackTimingContract.HasAudioClock,
+                    playbackTimingObservation.HasAudioClock,
                 HasAvSyncContract = hasAvSyncContract,
                 AvSyncContractMasterClock =
                     hasAvSyncContract ? avSyncContract.MasterClock.ToString() : "Unavailable",
@@ -844,25 +836,23 @@ namespace UnityAV
                     audioOutputPolicyObservation.RealtimeStartRequiresVideoFrame,
                 AudioOutputPolicyAllowAndroidFileOutputRateBridge =
                     audioOutputPolicyObservation.AllowAndroidFileOutputRateBridge,
-                HasAvSyncEnterpriseMetrics = hasAvSyncEnterpriseMetrics,
-                AvSyncEnterpriseSampleCount =
-                    hasAvSyncEnterpriseMetrics ? avSyncEnterpriseMetrics.SampleCount : 0U,
-                AvSyncEnterpriseWindowSpanUs =
-                    hasAvSyncEnterpriseMetrics ? avSyncEnterpriseMetrics.WindowSpanUs : 0L,
+                HasAvSyncEnterpriseMetrics = avSyncEnterpriseObservation.Available,
+                AvSyncEnterpriseSampleCount = avSyncEnterpriseObservation.SampleCount,
+                AvSyncEnterpriseWindowSpanUs = avSyncEnterpriseObservation.WindowSpanUs,
                 AvSyncEnterpriseLatestRawOffsetUs =
-                    hasAvSyncEnterpriseMetrics ? avSyncEnterpriseMetrics.LatestRawOffsetUs : 0L,
+                    avSyncEnterpriseObservation.LatestRawOffsetUs,
                 AvSyncEnterpriseLatestSmoothOffsetUs =
-                    hasAvSyncEnterpriseMetrics ? avSyncEnterpriseMetrics.LatestSmoothOffsetUs : 0L,
+                    avSyncEnterpriseObservation.LatestSmoothOffsetUs,
                 AvSyncEnterpriseDriftSlopePpm =
-                    hasAvSyncEnterpriseMetrics ? avSyncEnterpriseMetrics.DriftSlopePpm : 0.0,
+                    avSyncEnterpriseObservation.DriftSlopePpm,
                 AvSyncEnterpriseDriftProjected2hMs =
-                    hasAvSyncEnterpriseMetrics ? avSyncEnterpriseMetrics.DriftProjected2hMs : 0.0,
+                    avSyncEnterpriseObservation.DriftProjected2hMs,
                 AvSyncEnterpriseOffsetAbsP95Us =
-                    hasAvSyncEnterpriseMetrics ? avSyncEnterpriseMetrics.OffsetAbsP95Us : 0L,
+                    avSyncEnterpriseObservation.OffsetAbsP95Us,
                 AvSyncEnterpriseOffsetAbsP99Us =
-                    hasAvSyncEnterpriseMetrics ? avSyncEnterpriseMetrics.OffsetAbsP99Us : 0L,
+                    avSyncEnterpriseObservation.OffsetAbsP99Us,
                 AvSyncEnterpriseOffsetAbsMaxUs =
-                    hasAvSyncEnterpriseMetrics ? avSyncEnterpriseMetrics.OffsetAbsMaxUs : 0L,
+                    avSyncEnterpriseObservation.OffsetAbsMaxUs,
                 HasPassiveAvSyncSnapshot = hasPassiveAvSyncSnapshot,
                 PassiveAvSyncRawOffsetUs =
                     hasPassiveAvSyncSnapshot ? passiveAvSyncSnapshot.RawOffsetUs : 0L,

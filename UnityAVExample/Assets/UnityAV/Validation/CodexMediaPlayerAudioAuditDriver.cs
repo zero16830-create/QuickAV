@@ -114,6 +114,17 @@ namespace UnityAV
         private string _observedPassiveAvSyncAudioResampleActive = "False";
         private string _observedPassiveAvSyncShouldRebuildAnchor = "False";
 
+        private void ApplyObservedPlaybackTiming(
+            MediaNativeInteropCommon.PlaybackTimingAuditStringsView observation)
+        {
+            _observedPlaybackContractAvailable = observation.Available;
+            _observedPlaybackContractMasterTimeSec = observation.MasterTimeSec;
+            _observedPlaybackContractMasterTimeUs = observation.MasterTimeUs;
+            _observedPlaybackContractExternalTimeSec = observation.ExternalTimeSec;
+            _observedPlaybackContractExternalTimeUs = observation.ExternalTimeUs;
+            _observedPlaybackContractHasUsMirror = observation.HasMicrosecondMirror;
+        }
+
         private void ApplyObservedPlayerSession(
             MediaNativeInteropCommon.PlayerSessionAuditStringsView observation)
         {
@@ -182,6 +193,14 @@ namespace UnityAV
                 observation.RealtimeStartRequiresVideoFrame;
             _observedAudioOutputPolicyAllowAndroidFileOutputRateBridge =
                 observation.AllowAndroidFileOutputRateBridge;
+        }
+
+        private void ApplyObservedAvSyncEnterprise(
+            MediaNativeInteropCommon.AvSyncEnterpriseAuditStringsView observation)
+        {
+            _observedAvSyncEnterpriseAvailable = observation.Available;
+            _observedAvSyncEnterpriseSampleCount = observation.SampleCount;
+            _observedAvSyncEnterpriseDriftProjected2hMs = observation.DriftProjected2hMs;
         }
 
         private void ApplyObservedPassiveAvSync(
@@ -434,15 +453,10 @@ namespace UnityAV
             }
 
             MediaNativeInteropCommon.PlaybackTimingContractView playbackContract;
-            if (Player.TryGetPlaybackTimingContract(out playbackContract))
-            {
-                _observedPlaybackContractAvailable = true;
-                _observedPlaybackContractMasterTimeSec = playbackContract.MasterTimeSec.ToString("F3");
-                _observedPlaybackContractMasterTimeUs = playbackContract.MasterTimeUs.ToString();
-                _observedPlaybackContractExternalTimeSec = playbackContract.ExternalTimeSec.ToString("F3");
-                _observedPlaybackContractExternalTimeUs = playbackContract.ExternalTimeUs.ToString();
-                _observedPlaybackContractHasUsMirror = playbackContract.HasMicrosecondMirror.ToString();
-            }
+            ApplyObservedPlaybackTiming(
+                MediaNativeInteropCommon.CreatePlaybackTimingAuditStrings(
+                    Player.TryGetPlaybackTimingContract(out playbackContract),
+                    playbackContract));
 
             MediaNativeInteropCommon.SourceTimelineContractView sourceTimeline;
             ApplyObservedSourceTimeline(
@@ -463,13 +477,10 @@ namespace UnityAV
                     audioOutputPolicy));
 
             MediaNativeInteropCommon.AvSyncEnterpriseMetricsView enterpriseMetrics;
-            if (Player.TryGetAvSyncEnterpriseMetrics(out enterpriseMetrics))
-            {
-                _observedAvSyncEnterpriseAvailable = true;
-                _observedAvSyncEnterpriseSampleCount = enterpriseMetrics.SampleCount.ToString();
-                _observedAvSyncEnterpriseDriftProjected2hMs =
-                    enterpriseMetrics.DriftProjected2hMs.ToString("F3");
-            }
+            ApplyObservedAvSyncEnterprise(
+                MediaNativeInteropCommon.CreateAvSyncEnterpriseAuditStrings(
+                    Player.TryGetAvSyncEnterpriseMetrics(out enterpriseMetrics),
+                    enterpriseMetrics));
 
             MediaNativeInteropCommon.PassiveAvSyncSnapshotView passiveAvSyncSnapshot;
             ApplyObservedPassiveAvSync(
@@ -502,9 +513,15 @@ namespace UnityAV
                     sourceTimelineAvailable,
                     sourceTimelineContract);
             MediaNativeInteropCommon.PlaybackTimingContractView playbackTimingContract;
-            var playbackContractAvailable = Player.TryGetPlaybackTimingContract(out playbackTimingContract);
+            var playbackContractObservation =
+                MediaNativeInteropCommon.CreatePlaybackTimingAuditStrings(
+                    Player.TryGetPlaybackTimingContract(out playbackTimingContract),
+                    playbackTimingContract);
             MediaNativeInteropCommon.AvSyncEnterpriseMetricsView enterpriseMetrics;
-            var avSyncEnterpriseAvailable = Player.TryGetAvSyncEnterpriseMetrics(out enterpriseMetrics);
+            var avSyncEnterpriseObservation =
+                MediaNativeInteropCommon.CreateAvSyncEnterpriseAuditStrings(
+                    Player.TryGetAvSyncEnterpriseMetrics(out enterpriseMetrics),
+                    enterpriseMetrics);
             MediaNativeInteropCommon.AudioOutputPolicyView audioOutputPolicy;
             var audioOutputPolicyAvailable = Player.TryGetAudioOutputPolicy(out audioOutputPolicy);
 
@@ -539,18 +556,13 @@ namespace UnityAV
                 SourceTimelineAvailable = sourceTimelineObservation.Available,
                 SourceTimelineModel = sourceTimelineObservation.Model,
                 SourceTimelineAnchorKind = sourceTimelineObservation.AnchorKind,
-                PlaybackContractAvailable = playbackContractAvailable,
-                PlaybackContractHasUsMirror = playbackContractAvailable
-                    ? playbackTimingContract.HasMicrosecondMirror.ToString()
-                    : "n/a",
+                PlaybackContractAvailable = playbackContractObservation.Available,
+                PlaybackContractHasUsMirror = playbackContractObservation.HasMicrosecondMirror,
                 AudioOutputPolicyAvailable = audioOutputPolicyAvailable,
-                AvSyncEnterpriseAvailable = avSyncEnterpriseAvailable,
-                AvSyncEnterpriseSampleCount = avSyncEnterpriseAvailable
-                    ? enterpriseMetrics.SampleCount.ToString()
-                    : "n/a",
-                AvSyncEnterpriseDriftProjected2hMs = avSyncEnterpriseAvailable
-                    ? enterpriseMetrics.DriftProjected2hMs.ToString("F3")
-                    : "n/a",
+                AvSyncEnterpriseAvailable = avSyncEnterpriseObservation.Available,
+                AvSyncEnterpriseSampleCount = avSyncEnterpriseObservation.SampleCount,
+                AvSyncEnterpriseDriftProjected2hMs =
+                    avSyncEnterpriseObservation.DriftProjected2hMs,
             };
         }
 
