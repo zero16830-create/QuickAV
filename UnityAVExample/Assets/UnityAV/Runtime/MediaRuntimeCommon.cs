@@ -1486,6 +1486,12 @@ namespace UnityAV
             public string Source;
         }
 
+        internal struct ValidationWindowStartObservationView
+        {
+            public bool ShouldStart;
+            public string Reason;
+        }
+
         internal struct AvSyncEnterpriseMetricsView
         {
             public uint SampleCount;
@@ -4597,6 +4603,78 @@ namespace UnityAV
             }
 
             return "n/a";
+        }
+
+        internal static ValidationWindowStartObservationView
+            CreatePullValidationWindowStartObservation(
+                bool hasTexture,
+                bool requireAudioOutput,
+                bool audioEnabled,
+                bool audioPlaying,
+                float startupElapsedSeconds,
+                float startupTimeoutSeconds)
+        {
+            var outputsReady = hasTexture
+                && (!requireAudioOutput || !audioEnabled || audioPlaying);
+            if (outputsReady)
+            {
+                return new ValidationWindowStartObservationView
+                {
+                    ShouldStart = true,
+                    Reason = "av-output-start",
+                };
+            }
+
+            if (startupElapsedSeconds >= startupTimeoutSeconds)
+            {
+                return new ValidationWindowStartObservationView
+                {
+                    ShouldStart = true,
+                    Reason = "startup-timeout",
+                };
+            }
+
+            return new ValidationWindowStartObservationView
+            {
+                ShouldStart = false,
+                Reason = string.Empty,
+            };
+        }
+
+        internal static ValidationWindowStartObservationView
+            CreateMediaPlayerValidationWindowStartObservation(
+                bool started,
+                double playbackTimeSec,
+                bool hasPresentedNativeVideoFrame,
+                float startupElapsedSeconds,
+                float startupTimeoutSeconds)
+        {
+            var outputsReady = started
+                || playbackTimeSec >= 0.1
+                || hasPresentedNativeVideoFrame;
+            if (outputsReady)
+            {
+                return new ValidationWindowStartObservationView
+                {
+                    ShouldStart = true,
+                    Reason = "playback-start",
+                };
+            }
+
+            if (startupElapsedSeconds >= startupTimeoutSeconds)
+            {
+                return new ValidationWindowStartObservationView
+                {
+                    ShouldStart = true,
+                    Reason = "startup-timeout",
+                };
+            }
+
+            return new ValidationWindowStartObservationView
+            {
+                ShouldStart = false,
+                Reason = string.Empty,
+            };
         }
 
         internal static PlaybackStartObservationView CreatePlaybackStartObservation(

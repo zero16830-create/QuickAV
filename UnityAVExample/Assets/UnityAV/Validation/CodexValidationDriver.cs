@@ -217,22 +217,20 @@ namespace UnityAV
                 if (!_validationWindowStarted)
                 {
                     var startupElapsed = now - startTime;
-                    var outputsReady = snapshot.HasTexture
-                        && (!RequireAudioOutput || !Player.EnableAudio || snapshot.AudioPlaying);
-                    if (outputsReady)
+                    var validationWindowStartObservation =
+                        MediaNativeInteropCommon.CreatePullValidationWindowStartObservation(
+                            snapshot.HasTexture,
+                            RequireAudioOutput,
+                            Player.EnableAudio,
+                            snapshot.AudioPlaying,
+                            startupElapsed,
+                            StartupTimeoutSeconds);
+                    if (validationWindowStartObservation.ShouldStart)
                     {
                         StartValidationWindow(
                             now,
                             startupElapsed,
-                            "av-output-start",
-                            snapshot.PlaybackTime);
-                    }
-                    else if (startupElapsed >= StartupTimeoutSeconds)
-                    {
-                        StartValidationWindow(
-                            now,
-                            startupElapsed,
-                            "startup-timeout",
+                            validationWindowStartObservation.Reason,
                             snapshot.PlaybackTime);
                     }
                 }

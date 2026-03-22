@@ -326,23 +326,19 @@ namespace UnityAV
                 if (!_validationWindowStarted)
                 {
                     var startupElapsed = now - startTime;
-                    var outputsReady = snapshot.Started
-                        || snapshot.PlaybackTime >= 0.1
-                        || snapshot.HasPresentedNativeVideoFrame;
-                    if (outputsReady)
+                    var validationWindowStartObservation =
+                        MediaNativeInteropCommon.CreateMediaPlayerValidationWindowStartObservation(
+                            snapshot.Started,
+                            snapshot.PlaybackTime,
+                            snapshot.HasPresentedNativeVideoFrame,
+                            startupElapsed,
+                            StartupTimeoutSeconds);
+                    if (validationWindowStartObservation.ShouldStart)
                     {
                         StartValidationWindow(
                             now,
                             startupElapsed,
-                            "playback-start",
-                            snapshot.PlaybackTime);
-                    }
-                    else if (startupElapsed >= StartupTimeoutSeconds)
-                    {
-                        StartValidationWindow(
-                            now,
-                            startupElapsed,
-                            "startup-timeout",
+                            validationWindowStartObservation.Reason,
                             snapshot.PlaybackTime);
                     }
                 }
