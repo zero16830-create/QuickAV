@@ -385,15 +385,13 @@ namespace UnityAV
             var nativeVideoRuntimeObservation =
                 MediaNativeInteropCommon.CreateNativeVideoRuntimeObservation(
                     Player != null,
+                    snapshot.NativeVideoActive,
                     Player != null
                         ? Player.NativeVideoPresentationPath
                         : default(MediaPlayer.NativeVideoPresentationPathKind),
                     Player != null
                         ? Player.NativeVideoActivationDecision
                         : default(MediaPlayer.NativeVideoActivationDecisionKind));
-            var actualRenderer = snapshot.NativeVideoActive
-                ? nativeVideoRuntimeObservation.PresentationPath
-                : "TextureFallback";
 
             Debug.Log(
                 string.Format(
@@ -415,7 +413,7 @@ namespace UnityAV
                     Screen.fullScreenMode,
                     backendRuntimeObservation.ActualBackend,
                     "NativeVideoPreferred",
-                    actualRenderer,
+                    nativeVideoRuntimeObservation.ActualRenderer,
                     _observedPlaybackContractAvailable,
                     _observedPlaybackContractMasterTimeSec,
                     _observedPlaybackContractHasUsMirror,
@@ -547,6 +545,7 @@ namespace UnityAV
             var nativeVideoRuntimeObservation =
                 MediaNativeInteropCommon.CreateNativeVideoRuntimeObservation(
                     Player != null,
+                    Player != null && Player.IsNativeVideoPathActive,
                     Player != null
                         ? Player.NativeVideoPresentationPath
                         : default(MediaPlayer.NativeVideoPresentationPathKind),

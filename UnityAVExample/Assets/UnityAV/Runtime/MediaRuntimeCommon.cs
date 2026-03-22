@@ -943,6 +943,7 @@ namespace UnityAV
         internal struct NativeVideoRuntimeObservationView
         {
             public bool Available;
+            public string ActualRenderer;
             public string PresentationPath;
             public string ActivationDecision;
         }
@@ -1845,6 +1846,7 @@ namespace UnityAV
 
         internal static NativeVideoRuntimeObservationView CreateNativeVideoRuntimeObservation(
             bool available,
+            bool nativeVideoActive,
             MediaPlayer.NativeVideoPresentationPathKind presentationPath,
             MediaPlayer.NativeVideoActivationDecisionKind activationDecision)
         {
@@ -1853,15 +1855,20 @@ namespace UnityAV
                 return new NativeVideoRuntimeObservationView
                 {
                     Available = false,
+                    ActualRenderer = "Unavailable",
                     PresentationPath = "Unavailable",
                     ActivationDecision = "Unavailable",
                 };
             }
 
+            var presentationPathString = presentationPath.ToString();
             return new NativeVideoRuntimeObservationView
             {
                 Available = true,
-                PresentationPath = presentationPath.ToString(),
+                ActualRenderer = nativeVideoActive
+                    ? presentationPathString
+                    : "TextureFallback",
+                PresentationPath = presentationPathString,
                 ActivationDecision = activationDecision.ToString(),
             };
         }
