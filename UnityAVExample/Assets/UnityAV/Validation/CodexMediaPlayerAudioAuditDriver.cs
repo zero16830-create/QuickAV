@@ -130,6 +130,23 @@ namespace UnityAV
             _observedPlayerSessionIsSyncing = observation.IsSyncing;
         }
 
+        private void ApplyObservedSourceTimeline(
+            MediaNativeInteropCommon.SourceTimelineAuditStringsView observation)
+        {
+            _observedSourceTimelineAvailable = observation.Available;
+            _observedSourceTimelineModel = observation.Model;
+            _observedSourceTimelineAnchorKind = observation.AnchorKind;
+            _observedSourceTimelineIsRealtime = observation.IsRealtime;
+            _observedSourceTimelineHasCurrentSourceTimeUs = observation.HasCurrentSourceTimeUs;
+            _observedSourceTimelineCurrentSourceTimeUs = observation.CurrentSourceTimeUs;
+            _observedSourceTimelineHasTimelineOriginUs = observation.HasTimelineOriginUs;
+            _observedSourceTimelineTimelineOriginUs = observation.TimelineOriginUs;
+            _observedSourceTimelineHasAnchorValueUs = observation.HasAnchorValueUs;
+            _observedSourceTimelineAnchorValueUs = observation.AnchorValueUs;
+            _observedSourceTimelineHasAnchorMonoUs = observation.HasAnchorMonoUs;
+            _observedSourceTimelineAnchorMonoUs = observation.AnchorMonoUs;
+        }
+
         private void ApplyObservedAudioOutputPolicy(
             MediaNativeInteropCommon.AudioOutputPolicyAuditStringsView observation)
         {
@@ -428,29 +445,10 @@ namespace UnityAV
             }
 
             MediaNativeInteropCommon.SourceTimelineContractView sourceTimeline;
-            if (Player.TryGetSourceTimelineContract(out sourceTimeline))
-            {
-                _observedSourceTimelineAvailable = true;
-                _observedSourceTimelineModel = FormatSourceTimelineModel(sourceTimeline.Model);
-                _observedSourceTimelineAnchorKind = FormatSourceTimelineAnchorKind(sourceTimeline.AnchorKind);
-                _observedSourceTimelineIsRealtime = sourceTimeline.IsRealtime.ToString();
-                _observedSourceTimelineHasCurrentSourceTimeUs =
-                    sourceTimeline.HasCurrentSourceTimeUs.ToString();
-                _observedSourceTimelineCurrentSourceTimeUs =
-                    sourceTimeline.CurrentSourceTimeUs.ToString();
-                _observedSourceTimelineHasTimelineOriginUs =
-                    sourceTimeline.HasTimelineOriginUs.ToString();
-                _observedSourceTimelineTimelineOriginUs =
-                    sourceTimeline.TimelineOriginUs.ToString();
-                _observedSourceTimelineHasAnchorValueUs =
-                    sourceTimeline.HasAnchorValueUs.ToString();
-                _observedSourceTimelineAnchorValueUs =
-                    sourceTimeline.AnchorValueUs.ToString();
-                _observedSourceTimelineHasAnchorMonoUs =
-                    sourceTimeline.HasAnchorMonoUs.ToString();
-                _observedSourceTimelineAnchorMonoUs =
-                    sourceTimeline.AnchorMonoUs.ToString();
-            }
+            ApplyObservedSourceTimeline(
+                MediaNativeInteropCommon.CreateSourceTimelineAuditStrings(
+                    Player.TryGetSourceTimelineContract(out sourceTimeline),
+                    sourceTimeline));
 
             MediaNativeInteropCommon.PlayerSessionContractView playerSession;
             ApplyObservedPlayerSession(
@@ -499,6 +497,10 @@ namespace UnityAV
                     playerSessionContract);
             MediaNativeInteropCommon.SourceTimelineContractView sourceTimelineContract;
             var sourceTimelineAvailable = Player.TryGetSourceTimelineContract(out sourceTimelineContract);
+            var sourceTimelineObservation =
+                MediaNativeInteropCommon.CreateSourceTimelineAuditStrings(
+                    sourceTimelineAvailable,
+                    sourceTimelineContract);
             MediaNativeInteropCommon.PlaybackTimingContractView playbackTimingContract;
             var playbackContractAvailable = Player.TryGetPlaybackTimingContract(out playbackTimingContract);
             MediaNativeInteropCommon.AvSyncEnterpriseMetricsView enterpriseMetrics;
@@ -534,9 +536,9 @@ namespace UnityAV
                 PlayerSessionIsRealtime = playerSessionObservation.IsRealtime,
                 PlayerSessionIsBuffering = playerSessionObservation.IsBuffering,
                 PlayerSessionIsSyncing = playerSessionObservation.IsSyncing,
-                SourceTimelineAvailable = sourceTimelineAvailable,
-                SourceTimelineModel = sourceTimelineAvailable ? sourceTimelineContract.Model.ToString() : "n/a",
-                SourceTimelineAnchorKind = sourceTimelineAvailable ? sourceTimelineContract.AnchorKind.ToString() : "n/a",
+                SourceTimelineAvailable = sourceTimelineObservation.Available,
+                SourceTimelineModel = sourceTimelineObservation.Model,
+                SourceTimelineAnchorKind = sourceTimelineObservation.AnchorKind,
                 PlaybackContractAvailable = playbackContractAvailable,
                 PlaybackContractHasUsMirror = playbackContractAvailable
                     ? playbackTimingContract.HasMicrosecondMirror.ToString()
@@ -835,36 +837,6 @@ namespace UnityAV
         private bool HasExplicitWindowOverride()
         {
             return _hasExplicitWindowWidth || _hasExplicitWindowHeight;
-        }
-
-        private static string FormatSourceTimelineModel(int value)
-        {
-            switch (value)
-            {
-                case 1:
-                    return "FileMediaPtsUs";
-                case 2:
-                    return "RtspRtpNtpMono";
-                case 3:
-                    return "RtmpBaseMonoUs";
-                default:
-                    return "Unknown";
-            }
-        }
-
-        private static string FormatSourceTimelineAnchorKind(int value)
-        {
-            switch (value)
-            {
-                case 1:
-                    return "TimelineOrigin";
-                case 2:
-                    return "RtspPlayRangeOffset";
-                case 3:
-                    return "RtmpTimestampOrigin";
-                default:
-                    return "None";
-            }
         }
 
         private static string ResolveSummaryString(string observed, string fallback)

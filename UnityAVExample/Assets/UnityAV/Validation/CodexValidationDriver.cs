@@ -589,6 +589,10 @@ namespace UnityAV
             MediaNativeInteropCommon.SourceTimelineContractView sourceTimelineContract;
             var hasSourceTimelineContract = Player.TryGetSourceTimelineContract(
                 out sourceTimelineContract);
+            var sourceTimelineObservation =
+                MediaNativeInteropCommon.CreateSourceTimelineObservation(
+                    hasSourceTimelineContract,
+                    sourceTimelineContract);
             MediaNativeInteropCommon.PlayerSessionContractView playerSessionContract;
             var hasPlayerSessionContract = Player.TryGetPlayerSessionContract(
                 out playerSessionContract);
@@ -743,31 +747,31 @@ namespace UnityAV
                     hasAvSyncContract && avSyncContract.StartupWarmupComplete,
                 AvSyncContractDropTotal = hasAvSyncContract ? avSyncContract.DropTotal : 0UL,
                 AvSyncContractDuplicateTotal = hasAvSyncContract ? avSyncContract.DuplicateTotal : 0UL,
-                HasSourceTimelineContract = hasSourceTimelineContract,
-                SourceTimelineModel = hasSourceTimelineContract
-                    ? FormatSourceTimelineModel(sourceTimelineContract.Model)
+                HasSourceTimelineContract = sourceTimelineObservation.Available,
+                SourceTimelineModel = sourceTimelineObservation.Available
+                    ? sourceTimelineObservation.Model
                     : "Unavailable",
-                SourceTimelineAnchorKind = hasSourceTimelineContract
-                    ? FormatSourceTimelineAnchorKind(sourceTimelineContract.AnchorKind)
+                SourceTimelineAnchorKind = sourceTimelineObservation.Available
+                    ? sourceTimelineObservation.AnchorKind
                     : "Unavailable",
                 SourceTimelineHasCurrentSourceTimeUs =
-                    hasSourceTimelineContract && sourceTimelineContract.HasCurrentSourceTimeUs,
+                    sourceTimelineObservation.HasCurrentSourceTimeUs,
                 SourceTimelineCurrentSourceTimeUs =
-                    hasSourceTimelineContract ? sourceTimelineContract.CurrentSourceTimeUs : 0L,
+                    sourceTimelineObservation.CurrentSourceTimeUs,
                 SourceTimelineHasTimelineOriginUs =
-                    hasSourceTimelineContract && sourceTimelineContract.HasTimelineOriginUs,
+                    sourceTimelineObservation.HasTimelineOriginUs,
                 SourceTimelineTimelineOriginUs =
-                    hasSourceTimelineContract ? sourceTimelineContract.TimelineOriginUs : 0L,
+                    sourceTimelineObservation.TimelineOriginUs,
                 SourceTimelineHasAnchorValueUs =
-                    hasSourceTimelineContract && sourceTimelineContract.HasAnchorValueUs,
+                    sourceTimelineObservation.HasAnchorValueUs,
                 SourceTimelineAnchorValueUs =
-                    hasSourceTimelineContract ? sourceTimelineContract.AnchorValueUs : 0L,
+                    sourceTimelineObservation.AnchorValueUs,
                 SourceTimelineHasAnchorMonoUs =
-                    hasSourceTimelineContract && sourceTimelineContract.HasAnchorMonoUs,
+                    sourceTimelineObservation.HasAnchorMonoUs,
                 SourceTimelineAnchorMonoUs =
-                    hasSourceTimelineContract ? sourceTimelineContract.AnchorMonoUs : 0L,
+                    sourceTimelineObservation.AnchorMonoUs,
                 SourceTimelineIsRealtime =
-                    hasSourceTimelineContract && sourceTimelineContract.IsRealtime,
+                    sourceTimelineObservation.IsRealtime,
                 HasPlayerSessionContract = playerSessionObservation.Available,
                 PlayerSessionLifecycleState = playerSessionObservation.Available
                     ? playerSessionObservation.LifecycleState
@@ -1798,36 +1802,6 @@ namespace UnityAV
             public double RealtimeReferenceTimeSec;
             public bool HasRealtimeProbeSample;
             public long RealtimeProbeUnixMs;
-        }
-
-        private static string FormatSourceTimelineModel(int value)
-        {
-            switch (value)
-            {
-                case 1:
-                    return "FileMediaPtsUs";
-                case 2:
-                    return "RtspRtpNtpMono";
-                case 3:
-                    return "RtmpBaseMonoUs";
-                default:
-                    return "Unknown";
-            }
-        }
-
-        private static string FormatSourceTimelineAnchorKind(int value)
-        {
-            switch (value)
-            {
-                case 1:
-                    return "TimelineOrigin";
-                case 2:
-                    return "RtspPlayRangeOffset";
-                case 3:
-                    return "RtmpTimestampOrigin";
-                default:
-                    return "None";
-            }
         }
 
         private struct ValidationResultInfo

@@ -1268,6 +1268,38 @@ namespace UnityAV
             public string IsSyncing;
         }
 
+        internal struct SourceTimelineObservationView
+        {
+            public bool Available;
+            public string Model;
+            public string AnchorKind;
+            public bool HasCurrentSourceTimeUs;
+            public long CurrentSourceTimeUs;
+            public bool HasTimelineOriginUs;
+            public long TimelineOriginUs;
+            public bool HasAnchorValueUs;
+            public long AnchorValueUs;
+            public bool HasAnchorMonoUs;
+            public long AnchorMonoUs;
+            public bool IsRealtime;
+        }
+
+        internal struct SourceTimelineAuditStringsView
+        {
+            public bool Available;
+            public string Model;
+            public string AnchorKind;
+            public string HasCurrentSourceTimeUs;
+            public string CurrentSourceTimeUs;
+            public string HasTimelineOriginUs;
+            public string TimelineOriginUs;
+            public string HasAnchorValueUs;
+            public string AnchorValueUs;
+            public string HasAnchorMonoUs;
+            public string AnchorMonoUs;
+            public string IsRealtime;
+        }
+
         internal struct AudioStartupObservationView
         {
             public int AudioSampleRate;
@@ -1692,6 +1724,73 @@ namespace UnityAV
                 IsRealtime = contract.IsRealtime.ToString(),
                 IsBuffering = contract.IsBuffering.ToString(),
                 IsSyncing = contract.IsSyncing.ToString(),
+            };
+        }
+
+        internal static SourceTimelineObservationView CreateSourceTimelineObservation(
+            bool available,
+            SourceTimelineContractView contract)
+        {
+            if (!available)
+            {
+                return default(SourceTimelineObservationView);
+            }
+
+            return new SourceTimelineObservationView
+            {
+                Available = true,
+                Model = FormatSourceTimelineModel(contract.Model),
+                AnchorKind = FormatSourceTimelineAnchorKind(contract.AnchorKind),
+                HasCurrentSourceTimeUs = contract.HasCurrentSourceTimeUs,
+                CurrentSourceTimeUs = contract.CurrentSourceTimeUs,
+                HasTimelineOriginUs = contract.HasTimelineOriginUs,
+                TimelineOriginUs = contract.TimelineOriginUs,
+                HasAnchorValueUs = contract.HasAnchorValueUs,
+                AnchorValueUs = contract.AnchorValueUs,
+                HasAnchorMonoUs = contract.HasAnchorMonoUs,
+                AnchorMonoUs = contract.AnchorMonoUs,
+                IsRealtime = contract.IsRealtime,
+            };
+        }
+
+        internal static SourceTimelineAuditStringsView CreateSourceTimelineAuditStrings(
+            bool available,
+            SourceTimelineContractView contract)
+        {
+            var observation = CreateSourceTimelineObservation(available, contract);
+            if (!observation.Available)
+            {
+                return new SourceTimelineAuditStringsView
+                {
+                    Available = false,
+                    Model = "n/a",
+                    AnchorKind = "n/a",
+                    HasCurrentSourceTimeUs = "False",
+                    CurrentSourceTimeUs = "n/a",
+                    HasTimelineOriginUs = "False",
+                    TimelineOriginUs = "n/a",
+                    HasAnchorValueUs = "False",
+                    AnchorValueUs = "n/a",
+                    HasAnchorMonoUs = "False",
+                    AnchorMonoUs = "n/a",
+                    IsRealtime = "False",
+                };
+            }
+
+            return new SourceTimelineAuditStringsView
+            {
+                Available = true,
+                Model = observation.Model,
+                AnchorKind = observation.AnchorKind,
+                HasCurrentSourceTimeUs = observation.HasCurrentSourceTimeUs.ToString(),
+                CurrentSourceTimeUs = observation.CurrentSourceTimeUs.ToString(),
+                HasTimelineOriginUs = observation.HasTimelineOriginUs.ToString(),
+                TimelineOriginUs = observation.TimelineOriginUs.ToString(),
+                HasAnchorValueUs = observation.HasAnchorValueUs.ToString(),
+                AnchorValueUs = observation.AnchorValueUs.ToString(),
+                HasAnchorMonoUs = observation.HasAnchorMonoUs.ToString(),
+                AnchorMonoUs = observation.AnchorMonoUs.ToString(),
+                IsRealtime = observation.IsRealtime.ToString(),
             };
         }
 
@@ -4073,6 +4172,36 @@ namespace UnityAV
                     return "RebuildSyncAnchor";
                 default:
                     return "Unknown";
+            }
+        }
+
+        internal static string FormatSourceTimelineModel(int value)
+        {
+            switch (value)
+            {
+                case 1:
+                    return "FileMediaPtsUs";
+                case 2:
+                    return "RtspRtpNtpMono";
+                case 3:
+                    return "RtmpBaseMonoUs";
+                default:
+                    return "Unknown";
+            }
+        }
+
+        internal static string FormatSourceTimelineAnchorKind(int value)
+        {
+            switch (value)
+            {
+                case 1:
+                    return "TimelineOrigin";
+                case 2:
+                    return "RtspPlayRangeOffset";
+                case 3:
+                    return "RtmpTimestampOrigin";
+                default:
+                    return "None";
             }
         }
 
