@@ -1934,10 +1934,9 @@ namespace UnityAV
                             : string.Empty));
                 }
 
+                var warmupCommand = ResolveNativeVideoStartupWarmupCommand();
                 if (TraceNativeVideoCadence && StartupElapsedSeconds <= 0.200f)
                 {
-                    var contractWarmupAvailable = TryGetStartupWarmupCompleteFromContract(
-                        out var contractWarmupComplete);
                     var observedWarmupComplete = HasObservedNativeVideoStartupPresentation();
                     Debug.Log(
                         "[MediaPlayer] native_video_warmup_eval"
@@ -1948,8 +1947,9 @@ namespace UnityAV
                         + " presented_total=" + _nativeVideoFramePresentedCount
                         + " presented_lifetime_total=" + _nativeVideoFramePresentedLifetimeCount
                         + " warmup_completed=" + observedWarmupComplete
-                        + " contract_warmup_available=" + contractWarmupAvailable
-                        + " contract_warmup_complete=" + contractWarmupComplete
+                        + " contract_warmup_available=" + warmupCommand.ContractAvailable
+                        + " contract_warmup_complete=" + warmupCommand.ContractComplete
+                        + " source=" + warmupCommand.Source
                         + " has_last_frame=" + hasLastFrame
                         + " frame_index=" + frameInfo.FrameIndex
                         + " frame_index_delta=" + frameIndexDelta
@@ -1957,7 +1957,7 @@ namespace UnityAV
                         + " realtime_delta_ms=" + (realtimeDeltaSec * 1000.0).ToString("F1"));
                 }
 
-                if (ShouldHoldFileNativeVideoStartupPresentation())
+                if (warmupCommand.ShouldHold)
                 {
                     _nativeVideoStartupWarmupSuppressedFrameCount += 1;
                     if (TraceNativeVideoCadence)
@@ -1968,6 +1968,7 @@ namespace UnityAV
                             + " frame_index=" + frameInfo.FrameIndex
                             + " frame_time=" + frameInfo.TimeSec.ToString("F3")
                             + " suppressed_total=" + _nativeVideoStartupWarmupSuppressedFrameCount
+                            + " source=" + warmupCommand.Source
                             + " frame_index_delta=" + frameIndexDelta
                             + " frame_time_delta_ms=" + (frameTimeDeltaSec * 1000.0).ToString("F1")
                             + " realtime_delta_ms=" + (realtimeDeltaSec * 1000.0).ToString("F1"));
@@ -3909,11 +3910,11 @@ namespace UnityAV
             return _nativeVideoFramePresentedLifetimeCount > 0;
         }
 
-        private bool ShouldWarmupFileNativeVideoStartupPresentation()
+        private MediaNativeInteropCommon.NativeVideoStartupWarmupCommandView ResolveNativeVideoStartupWarmupCommand()
         {
             var contractWarmupAvailable = TryGetStartupWarmupCompleteFromContract(
                 out var contractWarmupComplete);
-            return MediaNativeInteropCommon.ResolveShouldWarmupFileNativeVideoStartupPresentation(
+            return MediaNativeInteropCommon.ResolveNativeVideoStartupWarmupCommand(
                 _isRealtimeSource,
                 _nativeVideoPathActive,
                 _nativeVideoInteropCaps.ExternalTextureTarget,
@@ -3923,8 +3924,7 @@ namespace UnityAV
 
         private void LogNativeVideoWarmupContractAuditOnce()
         {
-            var contractWarmupAvailable = TryGetStartupWarmupCompleteFromContract(
-                out var contractWarmupComplete);
+            var warmupCommand = ResolveNativeVideoStartupWarmupCommand();
             var observedWarmupComplete = HasObservedNativeVideoStartupPresentation();
             if (!_nativeVideoWarmupContractAuditLogged)
             {
@@ -3937,13 +3937,14 @@ namespace UnityAV
                     + " presented_total=" + _nativeVideoFramePresentedCount
                     + " presented_lifetime_total=" + _nativeVideoFramePresentedLifetimeCount
                     + " warmup_completed=" + observedWarmupComplete
-                    + " contract_warmup_available=" + contractWarmupAvailable
-                    + " contract_warmup_complete=" + contractWarmupComplete);
+                    + " contract_warmup_available=" + warmupCommand.ContractAvailable
+                    + " contract_warmup_complete=" + warmupCommand.ContractComplete
+                    + " source=" + warmupCommand.Source);
                 _nativeVideoWarmupContractAuditLogged = true;
             }
 
-            if (contractWarmupAvailable
-                && contractWarmupComplete
+            if (warmupCommand.ContractAvailable
+                && warmupCommand.ContractComplete
                 && !_nativeVideoWarmupContractCompletionLogged)
             {
                 Debug.Log(
@@ -3953,7 +3954,8 @@ namespace UnityAV
                     + " presented_lifetime_total=" + _nativeVideoFramePresentedLifetimeCount
                     + " warmup_completed=" + observedWarmupComplete
                     + " contract_warmup_available=True"
-                    + " contract_warmup_complete=True");
+                    + " contract_warmup_complete=True"
+                    + " source=" + warmupCommand.Source);
                 _nativeVideoWarmupContractCompletionLogged = true;
             }
         }
@@ -3969,17 +3971,6 @@ namespace UnityAV
 
             contractWarmupComplete = contract.StartupWarmupComplete;
             return true;
-        }
-
-        private bool ShouldHoldFileNativeVideoStartupPresentation()
-        {
-            var contractWarmupAvailable = TryGetStartupWarmupCompleteFromContract(
-                out var contractWarmupComplete);
-            var shouldHold = MediaNativeInteropCommon.ResolveShouldHoldFileNativeVideoStartupPresentation(
-                ShouldWarmupFileNativeVideoStartupPresentation(),
-                contractWarmupAvailable,
-                contractWarmupComplete);
-            return shouldHold;
         }
 
         private static double ElapsedMilliseconds(long startTicks)

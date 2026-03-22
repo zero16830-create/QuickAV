@@ -1247,6 +1247,15 @@ namespace UnityAV
             public bool AndroidFileRateBridgeActive;
         }
 
+        internal struct NativeVideoStartupWarmupCommandView
+        {
+            public bool WarmupEnabled;
+            public bool ShouldHold;
+            public bool ContractAvailable;
+            public bool ContractComplete;
+            public string Source;
+        }
+
         internal static bool TryReadRuntimeHealth(
             GetPlayerHealthSnapshotDelegate getPlayerHealthSnapshot,
             int playerId,
@@ -3465,31 +3474,77 @@ namespace UnityAV
             return delayMilliseconds;
         }
 
-        internal static bool ResolveShouldWarmupFileNativeVideoStartupPresentation(
+        internal static NativeVideoStartupWarmupCommandView ResolveNativeVideoStartupWarmupCommand(
             bool isRealtimeSource,
             bool nativeVideoPathActive,
             bool externalTextureTarget,
             bool contractWarmupAvailable,
             bool contractWarmupComplete)
         {
-            return !isRealtimeSource
-                && nativeVideoPathActive
-                && externalTextureTarget
-                && contractWarmupAvailable
-                && !contractWarmupComplete;
-        }
-
-        internal static bool ResolveShouldHoldFileNativeVideoStartupPresentation(
-            bool warmupEnabled,
-            bool contractWarmupAvailable,
-            bool contractWarmupComplete)
-        {
-            if (!warmupEnabled)
+            if (isRealtimeSource)
             {
-                return false;
+                return CreateNativeVideoStartupWarmupCommand(
+                    false,
+                    false,
+                    contractWarmupAvailable,
+                    contractWarmupComplete,
+                    "realtime");
             }
 
-            return contractWarmupAvailable && !contractWarmupComplete;
+            if (!nativeVideoPathActive)
+            {
+                return CreateNativeVideoStartupWarmupCommand(
+                    false,
+                    false,
+                    contractWarmupAvailable,
+                    contractWarmupComplete,
+                    "inactive_path");
+            }
+
+            if (!externalTextureTarget)
+            {
+                return CreateNativeVideoStartupWarmupCommand(
+                    false,
+                    false,
+                    contractWarmupAvailable,
+                    contractWarmupComplete,
+                    "non_external_texture_target");
+            }
+
+            if (!contractWarmupAvailable)
+            {
+                return CreateNativeVideoStartupWarmupCommand(
+                    false,
+                    false,
+                    false,
+                    false,
+                    "missing_contract");
+            }
+
+            var shouldHold = !contractWarmupComplete;
+            return CreateNativeVideoStartupWarmupCommand(
+                shouldHold,
+                shouldHold,
+                true,
+                contractWarmupComplete,
+                "contract");
+        }
+
+        internal static NativeVideoStartupWarmupCommandView CreateNativeVideoStartupWarmupCommand(
+            bool warmupEnabled,
+            bool shouldHold,
+            bool contractAvailable,
+            bool contractComplete,
+            string source)
+        {
+            return new NativeVideoStartupWarmupCommandView
+            {
+                WarmupEnabled = warmupEnabled,
+                ShouldHold = shouldHold,
+                ContractAvailable = contractAvailable,
+                ContractComplete = contractComplete,
+                Source = string.IsNullOrWhiteSpace(source) ? "unknown" : source,
+            };
         }
 
         internal static double ResolveBufferedAudioSecondsFromBytes(
