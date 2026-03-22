@@ -1515,6 +1515,33 @@ namespace UnityAV
             public double MaxObservedPlaybackTime;
         }
 
+        internal struct ValidationSummaryHeaderView
+        {
+            public bool Passed;
+            public string Reason;
+            public string Uri;
+            public string RequestedBackend;
+            public string ActualBackend;
+            public bool IncludeVideoRenderer;
+            public string RequestedVideoRenderer;
+            public string ActualVideoRenderer;
+            public bool IncludeRequireAudioOutput;
+            public bool RequireAudioOutput;
+            public double PlaybackAdvanceSeconds;
+        }
+
+        internal struct ValidationSummaryWindowView
+        {
+            public bool HasTexture;
+            public bool AudioPlaying;
+            public bool Started;
+            public bool ObservedTextureDuringWindow;
+            public bool ObservedAudioDuringWindow;
+            public bool ObservedStartedDuringWindow;
+            public bool IncludeValidationWindowStartReason;
+            public string ValidationWindowStartReason;
+        }
+
         internal struct AvSyncEnterpriseMetricsView
         {
             public uint SampleCount;
@@ -4912,6 +4939,45 @@ namespace UnityAV
                         ? playbackTimeSec
                         : maxObservedPlaybackTimeSec,
             };
+        }
+
+        internal static void AppendValidationSummaryHeader(
+            StringBuilder builder,
+            ValidationSummaryHeaderView summary)
+        {
+            builder.AppendLine("validation_result=" + (summary.Passed ? "passed" : "failed"));
+            builder.AppendLine("reason=" + summary.Reason);
+            builder.AppendLine("uri=" + summary.Uri);
+            builder.AppendLine("requested_backend=" + summary.RequestedBackend);
+            builder.AppendLine("actual_backend=" + summary.ActualBackend);
+            if (summary.IncludeVideoRenderer)
+            {
+                builder.AppendLine("requested_video_renderer=" + summary.RequestedVideoRenderer);
+                builder.AppendLine("actual_video_renderer=" + summary.ActualVideoRenderer);
+            }
+
+            if (summary.IncludeRequireAudioOutput)
+            {
+                builder.AppendLine("require_audio_output=" + summary.RequireAudioOutput);
+            }
+
+            builder.AppendLine("playback_advance_sec=" + summary.PlaybackAdvanceSeconds.ToString("F3"));
+        }
+
+        internal static void AppendValidationSummaryWindow(
+            StringBuilder builder,
+            ValidationSummaryWindowView summary)
+        {
+            builder.AppendLine("has_texture=" + summary.HasTexture);
+            builder.AppendLine("audio_playing=" + summary.AudioPlaying);
+            builder.AppendLine("started=" + summary.Started);
+            builder.AppendLine("observed_texture_during_window=" + summary.ObservedTextureDuringWindow);
+            builder.AppendLine("observed_audio_during_window=" + summary.ObservedAudioDuringWindow);
+            builder.AppendLine("observed_started_during_window=" + summary.ObservedStartedDuringWindow);
+            if (summary.IncludeValidationWindowStartReason)
+            {
+                builder.AppendLine("validation_window_start_reason=" + summary.ValidationWindowStartReason);
+            }
         }
 
         internal static PlaybackStartObservationView CreatePlaybackStartObservation(

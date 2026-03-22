@@ -731,19 +731,30 @@ namespace UnityAV
                         Player != null,
                         Player != null ? Player.PreferredBackend : default(MediaBackendKind),
                         Player != null ? Player.ActualBackendKind : default(MediaBackendKind));
-                builder.AppendLine("validation_result=" + (result.Passed ? "passed" : "failed"));
-                builder.AppendLine("reason=" + result.Reason);
-                builder.AppendLine("uri=" + (Player != null ? Player.Uri : string.Empty));
-                builder.AppendLine("requested_backend=" + backendRuntimeObservation.RequestedBackend);
-                builder.AppendLine("actual_backend=" + backendRuntimeObservation.ActualBackend);
-                builder.AppendLine("playback_advance_sec=" + result.PlaybackAdvanceSeconds.ToString("F3"));
-                builder.AppendLine("has_texture=" + finalSnapshot.HasTexture);
-                builder.AppendLine("audio_playing=" + finalSnapshot.AudioPlaying);
-                builder.AppendLine("started=" + finalSnapshot.Started);
-                builder.AppendLine("observed_texture_during_window=" + _observedTextureDuringWindow);
-                builder.AppendLine("observed_audio_during_window=" + _observedAudioDuringWindow);
-                builder.AppendLine("observed_started_during_window=" + _observedStartedDuringWindow);
-                builder.AppendLine("validation_window_start_reason=" + _validationWindowStartReason);
+                MediaNativeInteropCommon.AppendValidationSummaryHeader(
+                    builder,
+                    new MediaNativeInteropCommon.ValidationSummaryHeaderView
+                    {
+                        Passed = result.Passed,
+                        Reason = result.Reason,
+                        Uri = Player != null ? Player.Uri : string.Empty,
+                        RequestedBackend = backendRuntimeObservation.RequestedBackend,
+                        ActualBackend = backendRuntimeObservation.ActualBackend,
+                        PlaybackAdvanceSeconds = result.PlaybackAdvanceSeconds,
+                    });
+                MediaNativeInteropCommon.AppendValidationSummaryWindow(
+                    builder,
+                    new MediaNativeInteropCommon.ValidationSummaryWindowView
+                    {
+                        HasTexture = finalSnapshot.HasTexture,
+                        AudioPlaying = finalSnapshot.AudioPlaying,
+                        Started = finalSnapshot.Started,
+                        ObservedTextureDuringWindow = _observedTextureDuringWindow,
+                        ObservedAudioDuringWindow = _observedAudioDuringWindow,
+                        ObservedStartedDuringWindow = _observedStartedDuringWindow,
+                        IncludeValidationWindowStartReason = true,
+                        ValidationWindowStartReason = _validationWindowStartReason,
+                    });
                 builder.AppendLine("source_state=" + finalSnapshot.SourceState);
                 builder.AppendLine("source_packets=" + finalSnapshot.SourcePackets);
                 builder.AppendLine("source_timeouts=" + finalSnapshot.SourceTimeouts);

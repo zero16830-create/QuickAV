@@ -1023,21 +1023,33 @@ namespace UnityAV
                         Player != null ? Player.VideoRenderer : default(MediaPlayerPull.PullVideoRendererKind),
                         Player != null ? Player.ActualVideoRenderer : default(MediaPlayerPull.PullVideoRendererKind));
                 var builder = new StringBuilder();
-                builder.AppendLine("validation_result=" + (result.Passed ? "passed" : "failed"));
-                builder.AppendLine("reason=" + result.Reason);
-                builder.AppendLine("uri=" + (Player != null ? Player.Uri : string.Empty));
-                builder.AppendLine("requested_backend=" + backendRuntimeObservation.RequestedBackend);
-                builder.AppendLine("actual_backend=" + backendRuntimeObservation.ActualBackend);
-                builder.AppendLine("requested_video_renderer=" + backendRuntimeObservation.RequestedVideoRenderer);
-                builder.AppendLine("actual_video_renderer=" + backendRuntimeObservation.ActualVideoRenderer);
-                builder.AppendLine("require_audio_output=" + RequireAudioOutput);
-                builder.AppendLine("playback_advance_sec=" + result.PlaybackAdvanceSeconds.ToString("F3"));
-                builder.AppendLine("has_texture=" + finalSnapshot.HasTexture);
-                builder.AppendLine("audio_playing=" + finalSnapshot.AudioPlaying);
-                builder.AppendLine("started=" + finalSnapshot.Started);
-                builder.AppendLine("observed_texture_during_window=" + _observedTextureDuringWindow);
-                builder.AppendLine("observed_audio_during_window=" + _observedAudioDuringWindow);
-                builder.AppendLine("observed_started_during_window=" + _observedStartedDuringWindow);
+                MediaNativeInteropCommon.AppendValidationSummaryHeader(
+                    builder,
+                    new MediaNativeInteropCommon.ValidationSummaryHeaderView
+                    {
+                        Passed = result.Passed,
+                        Reason = result.Reason,
+                        Uri = Player != null ? Player.Uri : string.Empty,
+                        RequestedBackend = backendRuntimeObservation.RequestedBackend,
+                        ActualBackend = backendRuntimeObservation.ActualBackend,
+                        IncludeVideoRenderer = true,
+                        RequestedVideoRenderer = backendRuntimeObservation.RequestedVideoRenderer,
+                        ActualVideoRenderer = backendRuntimeObservation.ActualVideoRenderer,
+                        IncludeRequireAudioOutput = true,
+                        RequireAudioOutput = RequireAudioOutput,
+                        PlaybackAdvanceSeconds = result.PlaybackAdvanceSeconds,
+                    });
+                MediaNativeInteropCommon.AppendValidationSummaryWindow(
+                    builder,
+                    new MediaNativeInteropCommon.ValidationSummaryWindowView
+                    {
+                        HasTexture = finalSnapshot.HasTexture,
+                        AudioPlaying = finalSnapshot.AudioPlaying,
+                        Started = finalSnapshot.Started,
+                        ObservedTextureDuringWindow = _observedTextureDuringWindow,
+                        ObservedAudioDuringWindow = _observedAudioDuringWindow,
+                        ObservedStartedDuringWindow = _observedStartedDuringWindow,
+                    });
                 builder.AppendLine("runtime_health_available=" + finalSnapshot.HasRuntimeHealth);
                 builder.AppendLine("state=" + finalSnapshot.RuntimeStatePublic);
                 builder.AppendLine("runtime_state=" + finalSnapshot.RuntimeStateInternal);
