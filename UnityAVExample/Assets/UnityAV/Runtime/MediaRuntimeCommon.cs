@@ -1426,6 +1426,86 @@ namespace UnityAV
             }
         }
 
+        internal static void ResetAudioOutputPolicyState(
+            ref AudioOutputPolicyView policy,
+            ref bool hasPolicy,
+            ref bool missingLogged)
+        {
+            policy = default(AudioOutputPolicyView);
+            hasPolicy = false;
+            missingLogged = false;
+        }
+
+        internal static bool RefreshAudioOutputPolicyState(
+            GetAudioOutputPolicyDelegate getAudioOutputPolicy,
+            int playerId,
+            ref AudioOutputPolicyView policy,
+            ref bool hasPolicy,
+            ref bool missingLogged,
+            Action<AudioOutputPolicyView> onLoaded)
+        {
+            if (TryReadAudioOutputPolicy(getAudioOutputPolicy, playerId, out var loadedPolicy))
+            {
+                policy = loadedPolicy;
+                hasPolicy = true;
+                missingLogged = false;
+                onLoaded?.Invoke(loadedPolicy);
+                return true;
+            }
+
+            ResetAudioOutputPolicyState(
+                ref policy,
+                ref hasPolicy,
+                ref missingLogged);
+            return false;
+        }
+
+        internal static bool TryGetRequiredAudioOutputPolicy(
+            GetAudioOutputPolicyDelegate getAudioOutputPolicy,
+            string logPrefix,
+            string operation,
+            int playerId,
+            bool playerIdValid,
+            bool isRealtimeSource,
+            bool playRequested,
+            ref AudioOutputPolicyView cachedPolicy,
+            ref bool hasCachedPolicy,
+            ref bool missingLogged,
+            out AudioOutputPolicyView policy,
+            Action<AudioOutputPolicyView> onLoaded)
+        {
+            policy = default(AudioOutputPolicyView);
+            if (!hasCachedPolicy && playerIdValid)
+            {
+                RefreshAudioOutputPolicyState(
+                    getAudioOutputPolicy,
+                    playerId,
+                    ref cachedPolicy,
+                    ref hasCachedPolicy,
+                    ref missingLogged,
+                    onLoaded);
+            }
+
+            if (hasCachedPolicy)
+            {
+                policy = cachedPolicy;
+                return true;
+            }
+
+            if (!missingLogged)
+            {
+                Debug.LogWarning(
+                    "[" + logPrefix + "] audio_output_policy_missing"
+                    + " operation=" + operation
+                    + " player_id=" + playerId
+                    + " is_realtime=" + isRealtimeSource
+                    + " play_requested=" + playRequested);
+                missingLogged = true;
+            }
+
+            return false;
+        }
+
         internal static bool TryReadSourceTimelineContract(
             GetSourceTimelineContractDelegate getSourceTimelineContract,
             int playerId,

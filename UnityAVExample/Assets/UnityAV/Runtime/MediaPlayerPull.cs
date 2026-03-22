@@ -801,69 +801,49 @@ namespace UnityAV
                     out state);
         }
 
-        private void RefreshAudioOutputPolicy()
-        {
-            if (TryGetAudioOutputPolicy(out var policy))
-            {
-                _audioOutputPolicy = policy;
-                _hasAudioOutputPolicy = true;
-                _audioOutputPolicyMissingLogged = false;
-                Debug.Log(
-                    "[MediaPlayerPull] audio_output_policy_loaded file_start_ms="
-                    + policy.FileStartThresholdMilliseconds
-                    + " android_file_start_ms="
-                    + policy.AndroidFileStartThresholdMilliseconds
-                    + " file_ring_ms="
-                    + policy.FileRingCapacityMilliseconds
-                    + " android_file_ring_ms="
-                    + policy.AndroidFileRingCapacityMilliseconds
-                    + " realtime_start_ms="
-                    + policy.RealtimeStartThresholdMilliseconds
-                    + " realtime_ring_ms="
-                    + policy.RealtimeRingCapacityMilliseconds
-                    + " realtime_buffer_ms="
-                    + policy.RealtimeBufferedCeilingMilliseconds
-                    + " realtime_requires_video_frame="
-                    + policy.RealtimeStartRequiresVideoFrame
-                    + " android_file_rate_bridge="
-                    + policy.AllowAndroidFileOutputRateBridge
-                    + " realtime_backend_delay_ms="
-                    + policy.RealtimeBackendAdditionalSinkDelayMilliseconds);
-                return;
-            }
-
-            _hasAudioOutputPolicy = false;
-            _audioOutputPolicy = default(MediaNativeInteropCommon.AudioOutputPolicyView);
-        }
-
         private bool TryGetRequiredAudioOutputPolicy(
             string operation,
             out MediaNativeInteropCommon.AudioOutputPolicyView policy)
         {
-            policy = default(MediaNativeInteropCommon.AudioOutputPolicyView);
-            if (!_hasAudioOutputPolicy && ValidatePlayerId(_id))
-            {
-                RefreshAudioOutputPolicy();
-            }
+            return MediaNativeInteropCommon.TryGetRequiredAudioOutputPolicy(
+                GetAudioOutputPolicy,
+                nameof(MediaPlayerPull),
+                operation,
+                _id,
+                ValidatePlayerId(_id),
+                _isRealtimeSource,
+                _playRequested,
+                ref _audioOutputPolicy,
+                ref _hasAudioOutputPolicy,
+                ref _audioOutputPolicyMissingLogged,
+                out policy,
+                LogLoadedAudioOutputPolicy);
+        }
 
-            if (_hasAudioOutputPolicy)
-            {
-                policy = _audioOutputPolicy;
-                return true;
-            }
-
-            if (!_audioOutputPolicyMissingLogged)
-            {
-                Debug.LogWarning(
-                    "[MediaPlayerPull] audio_output_policy_missing"
-                    + " operation=" + operation
-                    + " player_id=" + _id
-                    + " is_realtime=" + _isRealtimeSource
-                    + " play_requested=" + _playRequested);
-                _audioOutputPolicyMissingLogged = true;
-            }
-
-            return false;
+        private void LogLoadedAudioOutputPolicy(
+            MediaNativeInteropCommon.AudioOutputPolicyView policy)
+        {
+            Debug.Log(
+                "[MediaPlayerPull] audio_output_policy_loaded file_start_ms="
+                + policy.FileStartThresholdMilliseconds
+                + " android_file_start_ms="
+                + policy.AndroidFileStartThresholdMilliseconds
+                + " file_ring_ms="
+                + policy.FileRingCapacityMilliseconds
+                + " android_file_ring_ms="
+                + policy.AndroidFileRingCapacityMilliseconds
+                + " realtime_start_ms="
+                + policy.RealtimeStartThresholdMilliseconds
+                + " realtime_ring_ms="
+                + policy.RealtimeRingCapacityMilliseconds
+                + " realtime_buffer_ms="
+                + policy.RealtimeBufferedCeilingMilliseconds
+                + " realtime_requires_video_frame="
+                + policy.RealtimeStartRequiresVideoFrame
+                + " android_file_rate_bridge="
+                + policy.AllowAndroidFileOutputRateBridge
+                + " realtime_backend_delay_ms="
+                + policy.RealtimeBackendAdditionalSinkDelayMilliseconds);
         }
 
         private int GetConfiguredRealtimeSteadyAdditionalAudioSinkDelayMilliseconds(
@@ -1068,7 +1048,13 @@ namespace UnityAV
                         + " diagnostic=" + diagnostic);
                 }
                 _actualBackendKind = ReadActualBackendKind();
-                RefreshAudioOutputPolicy();
+                MediaNativeInteropCommon.RefreshAudioOutputPolicyState(
+                    GetAudioOutputPolicy,
+                    _id,
+                    ref _audioOutputPolicy,
+                    ref _hasAudioOutputPolicy,
+                    ref _audioOutputPolicyMissingLogged,
+                    LogLoadedAudioOutputPolicy);
                 ResetStartupTelemetry();
                 Debug.Log(
                     "[MediaPlayerPull] player_created requested_backend=" + PreferredBackend
@@ -2385,9 +2371,10 @@ namespace UnityAV
             SetAudioSinkDelaySeconds(_id, 0.0);
             MediaNativeInteropCommon.ClosePlayerSessionSilently(_id);
             _id = InvalidPlayerId;
-            _hasAudioOutputPolicy = false;
-            _audioOutputPolicy = default(MediaNativeInteropCommon.AudioOutputPolicyView);
-            _audioOutputPolicyMissingLogged = false;
+            MediaNativeInteropCommon.ResetAudioOutputPolicyState(
+                ref _audioOutputPolicy,
+                ref _hasAudioOutputPolicy,
+                ref _audioOutputPolicyMissingLogged);
             _actualBackendKind = MediaBackendKind.Auto;
             _actualVideoRenderer = PullVideoRendererKind.Cpu;
             _playRequested = false;

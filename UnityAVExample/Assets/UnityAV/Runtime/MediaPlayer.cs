@@ -1741,7 +1741,13 @@ namespace UnityAV
                 {
                     NativeInitializer.RegisterPlayerRenderEvent(_id);
                     _actualBackendKind = ReadActualBackendKind();
-                    RefreshAudioOutputPolicy();
+                    MediaNativeInteropCommon.RefreshAudioOutputPolicyState(
+                        GetAudioOutputPolicy,
+                        _id,
+                        ref _audioOutputPolicy,
+                        ref _hasAudioOutputPolicy,
+                        ref _audioOutputPolicyMissingLogged,
+                        null);
                     Debug.Log(
                         "[MediaPlayer] player_created requested_backend=" + PreferredBackend
                         + " actual_backend=" + _actualBackendKind
@@ -2753,26 +2759,6 @@ namespace UnityAV
                 GetRealtimeSteadyAdditionalAudioSinkDelayMilliseconds());
         }
 
-        private void RefreshAudioOutputPolicy()
-        {
-            if (TryGetAudioOutputPolicy(out var policy))
-            {
-                _audioOutputPolicy = policy;
-                _hasAudioOutputPolicy = true;
-                _audioOutputPolicyMissingLogged = false;
-                return;
-            }
-
-            ResetAudioOutputPolicy();
-        }
-
-        private void ResetAudioOutputPolicy()
-        {
-            _audioOutputPolicy = default(MediaNativeInteropCommon.AudioOutputPolicyView);
-            _hasAudioOutputPolicy = false;
-            _audioOutputPolicyMissingLogged = false;
-        }
-
         private bool IsAndroidFilePlayback()
         {
             return !_isRealtimeSource && Application.platform == RuntimePlatform.Android;
@@ -2782,30 +2768,19 @@ namespace UnityAV
             string operation,
             out MediaNativeInteropCommon.AudioOutputPolicyView policy)
         {
-            policy = default(MediaNativeInteropCommon.AudioOutputPolicyView);
-            if (!_hasAudioOutputPolicy && ValidatePlayerId(_id))
-            {
-                RefreshAudioOutputPolicy();
-            }
-
-            if (_hasAudioOutputPolicy)
-            {
-                policy = _audioOutputPolicy;
-                return true;
-            }
-
-            if (!_audioOutputPolicyMissingLogged)
-            {
-                Debug.LogWarning(
-                    "[MediaPlayer] audio_output_policy_missing"
-                    + " operation=" + operation
-                    + " player_id=" + _id
-                    + " is_realtime=" + _isRealtimeSource
-                    + " play_requested=" + _playRequested);
-                _audioOutputPolicyMissingLogged = true;
-            }
-
-            return false;
+            return MediaNativeInteropCommon.TryGetRequiredAudioOutputPolicy(
+                GetAudioOutputPolicy,
+                nameof(MediaPlayer),
+                operation,
+                _id,
+                ValidatePlayerId(_id),
+                _isRealtimeSource,
+                _playRequested,
+                ref _audioOutputPolicy,
+                ref _hasAudioOutputPolicy,
+                ref _audioOutputPolicyMissingLogged,
+                out policy,
+                null);
         }
 
         private bool IsAndroidFileAudioOutputRateBridgeActive(
@@ -3998,7 +3973,10 @@ namespace UnityAV
             _playRequested = false;
             _resumeAfterPause = false;
             _actualBackendKind = MediaBackendKind.Auto;
-            ResetAudioOutputPolicy();
+            MediaNativeInteropCommon.ResetAudioOutputPolicyState(
+                ref _audioOutputPolicy,
+                ref _hasAudioOutputPolicy,
+                ref _audioOutputPolicyMissingLogged);
             _nativeVideoPathActive = false;
             _nativeVideoInteropCaps = default(MediaNativeInteropCommon.NativeVideoInteropCapsView);
             _isRealtimeSource = false;
@@ -4037,7 +4015,10 @@ namespace UnityAV
             _playRequested = false;
             _resumeAfterPause = false;
             _actualBackendKind = MediaBackendKind.Auto;
-            ResetAudioOutputPolicy();
+            MediaNativeInteropCommon.ResetAudioOutputPolicyState(
+                ref _audioOutputPolicy,
+                ref _hasAudioOutputPolicy,
+                ref _audioOutputPolicyMissingLogged);
             _nativeVideoPathActive = false;
             _nativeVideoInteropCaps = default(MediaNativeInteropCommon.NativeVideoInteropCapsView);
             _isRealtimeSource = false;
@@ -4457,7 +4438,13 @@ namespace UnityAV
             {
                 _nativeVideoPathActive = true;
                 _nativeVideoActivationDecision = NativeVideoActivationDecisionKind.Active;
-                RefreshAudioOutputPolicy();
+                MediaNativeInteropCommon.RefreshAudioOutputPolicyState(
+                    GetAudioOutputPolicy,
+                    _id,
+                    ref _audioOutputPolicy,
+                    ref _hasAudioOutputPolicy,
+                    ref _audioOutputPolicyMissingLogged,
+                    null);
                 Debug.Log(
                     "[MediaPlayer] native_video_create_result"
                     + " player_id=" + _id
