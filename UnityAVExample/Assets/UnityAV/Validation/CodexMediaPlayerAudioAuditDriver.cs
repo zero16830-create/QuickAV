@@ -499,7 +499,13 @@ namespace UnityAV
 
             MediaPlayer.PlayerRuntimeHealth health;
             var hasHealth = Player.TryGetRuntimeHealth(out health);
-            var started = hasHealth ? health.IsPlaying : playbackTime >= 0.0;
+            var runtimeHealthObservation =
+                MediaNativeInteropCommon.CreateRuntimeHealthObservation(
+                    hasHealth,
+                    health);
+            var started = runtimeHealthObservation.Available
+                ? runtimeHealthObservation.IsPlaying
+                : playbackTime >= 0.0;
             MediaNativeInteropCommon.PlayerSessionContractView playerSessionContract;
             var playerSessionAvailable = Player.TryGetPlayerSessionContract(out playerSessionContract);
             var playerSessionObservation =
@@ -535,10 +541,10 @@ namespace UnityAV
                 Started = started,
                 TextureWidth = texture != null ? texture.width : 0,
                 TextureHeight = texture != null ? texture.height : 0,
-                SourceState = hasHealth ? health.SourceConnectionState.ToString() : "Unavailable",
-                SourcePackets = hasHealth ? health.SourcePacketCount.ToString() : "-1",
-                SourceTimeouts = hasHealth ? health.SourceTimeoutCount.ToString() : "-1",
-                SourceReconnects = hasHealth ? health.SourceReconnectCount.ToString() : "-1",
+                SourceState = runtimeHealthObservation.SourceState,
+                SourcePackets = runtimeHealthObservation.SourcePackets,
+                SourceTimeouts = runtimeHealthObservation.SourceTimeouts,
+                SourceReconnects = runtimeHealthObservation.SourceReconnects,
                 NativeVideoActive = Player.IsNativeVideoPathActive,
                 NativeActivationDecision = Player.NativeVideoActivationDecision.ToString(),
                 HasPresentedNativeVideoFrame = Player.HasPresentedNativeVideoFrame,

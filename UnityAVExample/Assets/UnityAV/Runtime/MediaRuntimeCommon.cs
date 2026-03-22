@@ -907,6 +907,30 @@ namespace UnityAV
             public double AudioSinkDelaySec;
         }
 
+        internal struct RuntimeHealthObservationView
+        {
+            public bool Available;
+            public int State;
+            public int RuntimeState;
+            public int PlaybackIntent;
+            public int StopReason;
+            public string SourceState;
+            public bool IsConnected;
+            public bool IsPlaying;
+            public bool IsRealtime;
+            public bool CanSeek;
+            public bool IsLooping;
+            public int StreamCount;
+            public int VideoDecoderCount;
+            public bool HasAudioDecoder;
+            public string SourcePackets;
+            public string SourceTimeouts;
+            public string SourceReconnects;
+            public double DurationSec;
+            public double SourceLastActivityAgeSec;
+            public double CurrentTimeSec;
+        }
+
         internal struct NativeVideoInteropCapsView
         {
             public MediaBackendKind BackendKind;
@@ -1648,6 +1672,102 @@ namespace UnityAV
                 MemoryKind = contract.MemoryKind.ToString(),
                 DynamicRange = contract.Color.DynamicRange.ToString(),
                 NominalFps = contract.HasNominalFps ? contract.NominalFps : 0.0,
+            };
+        }
+
+        internal static RuntimeHealthObservationView CreateRuntimeHealthObservation(
+            bool available,
+            MediaPlayerPull.PlayerRuntimeHealth health)
+        {
+            if (!available)
+            {
+                return new RuntimeHealthObservationView
+                {
+                    Available = false,
+                    State = -1,
+                    RuntimeState = -1,
+                    PlaybackIntent = -1,
+                    StopReason = -1,
+                    SourceState = "Unavailable",
+                    SourcePackets = "-1",
+                    SourceTimeouts = "-1",
+                    SourceReconnects = "-1",
+                    DurationSec = -1.0,
+                    SourceLastActivityAgeSec = -1.0,
+                    CurrentTimeSec = -1.0,
+                };
+            }
+
+            return new RuntimeHealthObservationView
+            {
+                Available = true,
+                State = health.State,
+                RuntimeState = health.RuntimeState,
+                PlaybackIntent = health.PlaybackIntent,
+                StopReason = health.StopReason,
+                SourceState = health.SourceConnectionState.ToString(),
+                IsConnected = health.IsConnected,
+                IsPlaying = health.IsPlaying,
+                IsRealtime = health.IsRealtime,
+                CanSeek = health.CanSeek,
+                IsLooping = health.IsLooping,
+                StreamCount = health.StreamCount,
+                VideoDecoderCount = health.VideoDecoderCount,
+                HasAudioDecoder = health.HasAudioDecoder,
+                SourcePackets = health.SourcePacketCount.ToString(),
+                SourceTimeouts = health.SourceTimeoutCount.ToString(),
+                SourceReconnects = health.SourceReconnectCount.ToString(),
+                DurationSec = health.DurationSec,
+                SourceLastActivityAgeSec = health.SourceLastActivityAgeSec,
+                CurrentTimeSec = health.CurrentTimeSec,
+            };
+        }
+
+        internal static RuntimeHealthObservationView CreateRuntimeHealthObservation(
+            bool available,
+            MediaPlayer.PlayerRuntimeHealth health)
+        {
+            if (!available)
+            {
+                return new RuntimeHealthObservationView
+                {
+                    Available = false,
+                    State = -1,
+                    RuntimeState = -1,
+                    PlaybackIntent = -1,
+                    StopReason = -1,
+                    SourceState = "Unavailable",
+                    SourcePackets = "-1",
+                    SourceTimeouts = "-1",
+                    SourceReconnects = "-1",
+                    DurationSec = -1.0,
+                    SourceLastActivityAgeSec = -1.0,
+                    CurrentTimeSec = -1.0,
+                };
+            }
+
+            return new RuntimeHealthObservationView
+            {
+                Available = true,
+                State = -1,
+                RuntimeState = -1,
+                PlaybackIntent = -1,
+                StopReason = -1,
+                SourceState = health.SourceConnectionState.ToString(),
+                IsConnected = health.IsConnected,
+                IsPlaying = health.IsPlaying,
+                IsRealtime = health.IsRealtime,
+                CanSeek = false,
+                IsLooping = false,
+                StreamCount = -1,
+                VideoDecoderCount = -1,
+                HasAudioDecoder = false,
+                SourcePackets = health.SourcePacketCount.ToString(),
+                SourceTimeouts = health.SourceTimeoutCount.ToString(),
+                SourceReconnects = health.SourceReconnectCount.ToString(),
+                DurationSec = -1.0,
+                SourceLastActivityAgeSec = health.SourceLastActivityAgeSec,
+                CurrentTimeSec = health.CurrentTimeSec,
             };
         }
 

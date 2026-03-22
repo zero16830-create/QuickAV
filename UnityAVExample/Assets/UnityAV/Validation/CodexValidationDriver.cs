@@ -579,6 +579,10 @@ namespace UnityAV
             var avSyncDeltaMilliseconds = hasAvSyncSample
                 ? (audioPresentedTimeSec - referencePlaybackTime) * 1000.0
                 : 0.0;
+            var runtimeHealthObservation =
+                MediaNativeInteropCommon.CreateRuntimeHealthObservation(
+                    hasHealth,
+                    health);
             MediaNativeInteropCommon.VideoFrameContractView frameContract;
             var hasFrameContract = Player.TryGetLatestVideoFrameContract(out frameContract);
             var frameContractObservation =
@@ -692,18 +696,18 @@ namespace UnityAV
                 Started = Player.HasStartedPlayback,
                 TextureWidth = textureWidth,
                 TextureHeight = textureHeight,
-                HasRuntimeHealth = hasHealth,
-                RuntimeStatePublic = hasHealth ? health.State : -1,
-                RuntimeStateInternal = hasHealth ? health.RuntimeState : -1,
-                PlaybackIntent = hasHealth ? health.PlaybackIntent : -1,
-                StreamCount = hasHealth ? health.StreamCount : -1,
-                VideoDecoderCount = hasHealth ? health.VideoDecoderCount : -1,
-                HasAudioDecoder = hasHealth && health.HasAudioDecoder,
-                SourceState = hasHealth ? health.SourceConnectionState.ToString() : "Unavailable",
-                SourcePackets = hasHealth ? health.SourcePacketCount.ToString() : "-1",
-                SourceTimeouts = hasHealth ? health.SourceTimeoutCount.ToString() : "-1",
-                SourceReconnects = hasHealth ? health.SourceReconnectCount.ToString() : "-1",
-                SourceLastActivityAgeSec = hasHealth ? health.SourceLastActivityAgeSec : -1.0,
+                HasRuntimeHealth = runtimeHealthObservation.Available,
+                RuntimeStatePublic = runtimeHealthObservation.State,
+                RuntimeStateInternal = runtimeHealthObservation.RuntimeState,
+                PlaybackIntent = runtimeHealthObservation.PlaybackIntent,
+                StreamCount = runtimeHealthObservation.StreamCount,
+                VideoDecoderCount = runtimeHealthObservation.VideoDecoderCount,
+                HasAudioDecoder = runtimeHealthObservation.HasAudioDecoder,
+                SourceState = runtimeHealthObservation.SourceState,
+                SourcePackets = runtimeHealthObservation.SourcePackets,
+                SourceTimeouts = runtimeHealthObservation.SourceTimeouts,
+                SourceReconnects = runtimeHealthObservation.SourceReconnects,
+                SourceLastActivityAgeSec = runtimeHealthObservation.SourceLastActivityAgeSec,
                 HasAvSyncSample = hasAvSyncSample,
                 AudioPresentedTimeSec = audioPresentedTimeSec,
                 AudioPipelineDelaySec = audioPipelineDelaySec,
