@@ -114,6 +114,43 @@ namespace UnityAV
         private string _observedPassiveAvSyncAudioResampleActive = "False";
         private string _observedPassiveAvSyncShouldRebuildAnchor = "False";
 
+        private void ApplyObservedAudioOutputPolicy(
+            MediaNativeInteropCommon.AudioOutputPolicyAuditStringsView observation)
+        {
+            _observedAudioOutputPolicyAvailable = observation.Available;
+            _observedAudioOutputPolicyFileStartMs = observation.FileStartThresholdMilliseconds;
+            _observedAudioOutputPolicyAndroidFileStartMs =
+                observation.AndroidFileStartThresholdMilliseconds;
+            _observedAudioOutputPolicyRealtimeStartMs =
+                observation.RealtimeStartThresholdMilliseconds;
+            _observedAudioOutputPolicyRealtimeStartupGraceMs =
+                observation.RealtimeStartupGraceMilliseconds;
+            _observedAudioOutputPolicyRealtimeStartupMinimumThresholdMs =
+                observation.RealtimeStartupMinimumThresholdMilliseconds;
+            _observedAudioOutputPolicyFileRingCapacityMs =
+                observation.FileRingCapacityMilliseconds;
+            _observedAudioOutputPolicyAndroidFileRingCapacityMs =
+                observation.AndroidFileRingCapacityMilliseconds;
+            _observedAudioOutputPolicyRealtimeRingCapacityMs =
+                observation.RealtimeRingCapacityMilliseconds;
+            _observedAudioOutputPolicyFileBufferedCeilingMs =
+                observation.FileBufferedCeilingMilliseconds;
+            _observedAudioOutputPolicyAndroidFileBufferedCeilingMs =
+                observation.AndroidFileBufferedCeilingMilliseconds;
+            _observedAudioOutputPolicyRealtimeBufferedCeilingMs =
+                observation.RealtimeBufferedCeilingMilliseconds;
+            _observedAudioOutputPolicyRealtimeStartupAdditionalSinkDelayMs =
+                observation.RealtimeStartupAdditionalSinkDelayMilliseconds;
+            _observedAudioOutputPolicyRealtimeSteadyAdditionalSinkDelayMs =
+                observation.RealtimeSteadyAdditionalSinkDelayMilliseconds;
+            _observedAudioOutputPolicyRealtimeBackendAdditionalSinkDelayMs =
+                observation.RealtimeBackendAdditionalSinkDelayMilliseconds;
+            _observedAudioOutputPolicyRealtimeStartRequiresVideoFrame =
+                observation.RealtimeStartRequiresVideoFrame;
+            _observedAudioOutputPolicyAllowAndroidFileOutputRateBridge =
+                observation.AllowAndroidFileOutputRateBridge;
+        }
+
         private void Awake()
         {
             if (Player == null)
@@ -406,42 +443,10 @@ namespace UnityAV
             }
 
             MediaNativeInteropCommon.AudioOutputPolicyView audioOutputPolicy;
-            if (Player.TryGetAudioOutputPolicy(out audioOutputPolicy))
-            {
-                _observedAudioOutputPolicyAvailable = true;
-                _observedAudioOutputPolicyFileStartMs =
-                    audioOutputPolicy.FileStartThresholdMilliseconds.ToString();
-                _observedAudioOutputPolicyAndroidFileStartMs =
-                    audioOutputPolicy.AndroidFileStartThresholdMilliseconds.ToString();
-                _observedAudioOutputPolicyRealtimeStartMs =
-                    audioOutputPolicy.RealtimeStartThresholdMilliseconds.ToString();
-                _observedAudioOutputPolicyRealtimeStartupGraceMs =
-                    audioOutputPolicy.RealtimeStartupGraceMilliseconds.ToString();
-                _observedAudioOutputPolicyRealtimeStartupMinimumThresholdMs =
-                    audioOutputPolicy.RealtimeStartupMinimumThresholdMilliseconds.ToString();
-                _observedAudioOutputPolicyFileRingCapacityMs =
-                    audioOutputPolicy.FileRingCapacityMilliseconds.ToString();
-                _observedAudioOutputPolicyAndroidFileRingCapacityMs =
-                    audioOutputPolicy.AndroidFileRingCapacityMilliseconds.ToString();
-                _observedAudioOutputPolicyRealtimeRingCapacityMs =
-                    audioOutputPolicy.RealtimeRingCapacityMilliseconds.ToString();
-                _observedAudioOutputPolicyFileBufferedCeilingMs =
-                    audioOutputPolicy.FileBufferedCeilingMilliseconds.ToString();
-                _observedAudioOutputPolicyAndroidFileBufferedCeilingMs =
-                    audioOutputPolicy.AndroidFileBufferedCeilingMilliseconds.ToString();
-                _observedAudioOutputPolicyRealtimeBufferedCeilingMs =
-                    audioOutputPolicy.RealtimeBufferedCeilingMilliseconds.ToString();
-                _observedAudioOutputPolicyRealtimeStartupAdditionalSinkDelayMs =
-                    audioOutputPolicy.RealtimeStartupAdditionalSinkDelayMilliseconds.ToString();
-                _observedAudioOutputPolicyRealtimeSteadyAdditionalSinkDelayMs =
-                    audioOutputPolicy.RealtimeSteadyAdditionalSinkDelayMilliseconds.ToString();
-                _observedAudioOutputPolicyRealtimeBackendAdditionalSinkDelayMs =
-                    audioOutputPolicy.RealtimeBackendAdditionalSinkDelayMilliseconds.ToString();
-                _observedAudioOutputPolicyRealtimeStartRequiresVideoFrame =
-                    audioOutputPolicy.RealtimeStartRequiresVideoFrame.ToString();
-                _observedAudioOutputPolicyAllowAndroidFileOutputRateBridge =
-                    audioOutputPolicy.AllowAndroidFileOutputRateBridge.ToString();
-            }
+            ApplyObservedAudioOutputPolicy(
+                MediaNativeInteropCommon.CreateAudioOutputPolicyAuditStrings(
+                    Player.TryGetAudioOutputPolicy(out audioOutputPolicy),
+                    audioOutputPolicy));
 
             MediaNativeInteropCommon.AvSyncEnterpriseMetricsView enterpriseMetrics;
             if (Player.TryGetAvSyncEnterpriseMetrics(out enterpriseMetrics))

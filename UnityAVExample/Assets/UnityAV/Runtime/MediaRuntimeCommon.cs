@@ -1151,6 +1151,48 @@ namespace UnityAV
             public bool AllowAndroidFileOutputRateBridge;
         }
 
+        internal struct AudioOutputPolicyObservationView
+        {
+            public bool Available;
+            public int FileStartThresholdMilliseconds;
+            public int AndroidFileStartThresholdMilliseconds;
+            public int RealtimeStartThresholdMilliseconds;
+            public int RealtimeStartupGraceMilliseconds;
+            public int RealtimeStartupMinimumThresholdMilliseconds;
+            public int FileRingCapacityMilliseconds;
+            public int AndroidFileRingCapacityMilliseconds;
+            public int RealtimeRingCapacityMilliseconds;
+            public int FileBufferedCeilingMilliseconds;
+            public int AndroidFileBufferedCeilingMilliseconds;
+            public int RealtimeBufferedCeilingMilliseconds;
+            public int RealtimeStartupAdditionalSinkDelayMilliseconds;
+            public int RealtimeSteadyAdditionalSinkDelayMilliseconds;
+            public int RealtimeBackendAdditionalSinkDelayMilliseconds;
+            public bool RealtimeStartRequiresVideoFrame;
+            public bool AllowAndroidFileOutputRateBridge;
+        }
+
+        internal struct AudioOutputPolicyAuditStringsView
+        {
+            public bool Available;
+            public string FileStartThresholdMilliseconds;
+            public string AndroidFileStartThresholdMilliseconds;
+            public string RealtimeStartThresholdMilliseconds;
+            public string RealtimeStartupGraceMilliseconds;
+            public string RealtimeStartupMinimumThresholdMilliseconds;
+            public string FileRingCapacityMilliseconds;
+            public string AndroidFileRingCapacityMilliseconds;
+            public string RealtimeRingCapacityMilliseconds;
+            public string FileBufferedCeilingMilliseconds;
+            public string AndroidFileBufferedCeilingMilliseconds;
+            public string RealtimeBufferedCeilingMilliseconds;
+            public string RealtimeStartupAdditionalSinkDelayMilliseconds;
+            public string RealtimeSteadyAdditionalSinkDelayMilliseconds;
+            public string RealtimeBackendAdditionalSinkDelayMilliseconds;
+            public string RealtimeStartRequiresVideoFrame;
+            public string AllowAndroidFileOutputRateBridge;
+        }
+
         internal struct SourceTimelineContractView
         {
             public int Model;
@@ -1434,6 +1476,100 @@ namespace UnityAV
             policy = default(AudioOutputPolicyView);
             hasPolicy = false;
             missingLogged = false;
+        }
+
+        internal static AudioOutputPolicyObservationView CreateAudioOutputPolicyObservation(
+            bool available,
+            AudioOutputPolicyView policy)
+        {
+            if (!available)
+            {
+                return default(AudioOutputPolicyObservationView);
+            }
+
+            return new AudioOutputPolicyObservationView
+            {
+                Available = true,
+                FileStartThresholdMilliseconds = policy.FileStartThresholdMilliseconds,
+                AndroidFileStartThresholdMilliseconds = policy.AndroidFileStartThresholdMilliseconds,
+                RealtimeStartThresholdMilliseconds = policy.RealtimeStartThresholdMilliseconds,
+                RealtimeStartupGraceMilliseconds = policy.RealtimeStartupGraceMilliseconds,
+                RealtimeStartupMinimumThresholdMilliseconds =
+                    policy.RealtimeStartupMinimumThresholdMilliseconds,
+                FileRingCapacityMilliseconds = policy.FileRingCapacityMilliseconds,
+                AndroidFileRingCapacityMilliseconds = policy.AndroidFileRingCapacityMilliseconds,
+                RealtimeRingCapacityMilliseconds = policy.RealtimeRingCapacityMilliseconds,
+                FileBufferedCeilingMilliseconds = policy.FileBufferedCeilingMilliseconds,
+                AndroidFileBufferedCeilingMilliseconds =
+                    policy.AndroidFileBufferedCeilingMilliseconds,
+                RealtimeBufferedCeilingMilliseconds =
+                    policy.RealtimeBufferedCeilingMilliseconds,
+                RealtimeStartupAdditionalSinkDelayMilliseconds =
+                    policy.RealtimeStartupAdditionalSinkDelayMilliseconds,
+                RealtimeSteadyAdditionalSinkDelayMilliseconds =
+                    policy.RealtimeSteadyAdditionalSinkDelayMilliseconds,
+                RealtimeBackendAdditionalSinkDelayMilliseconds =
+                    policy.RealtimeBackendAdditionalSinkDelayMilliseconds,
+                RealtimeStartRequiresVideoFrame = policy.RealtimeStartRequiresVideoFrame,
+                AllowAndroidFileOutputRateBridge = policy.AllowAndroidFileOutputRateBridge,
+            };
+        }
+
+        internal static AudioOutputPolicyAuditStringsView CreateAudioOutputPolicyAuditStrings(
+            bool available,
+            AudioOutputPolicyView policy)
+        {
+            var observation = CreateAudioOutputPolicyObservation(available, policy);
+            return new AudioOutputPolicyAuditStringsView
+            {
+                Available = observation.Available,
+                FileStartThresholdMilliseconds = observation.Available
+                    ? observation.FileStartThresholdMilliseconds.ToString()
+                    : "n/a",
+                AndroidFileStartThresholdMilliseconds = observation.Available
+                    ? observation.AndroidFileStartThresholdMilliseconds.ToString()
+                    : "n/a",
+                RealtimeStartThresholdMilliseconds = observation.Available
+                    ? observation.RealtimeStartThresholdMilliseconds.ToString()
+                    : "n/a",
+                RealtimeStartupGraceMilliseconds = observation.Available
+                    ? observation.RealtimeStartupGraceMilliseconds.ToString()
+                    : "n/a",
+                RealtimeStartupMinimumThresholdMilliseconds = observation.Available
+                    ? observation.RealtimeStartupMinimumThresholdMilliseconds.ToString()
+                    : "n/a",
+                FileRingCapacityMilliseconds = observation.Available
+                    ? observation.FileRingCapacityMilliseconds.ToString()
+                    : "n/a",
+                AndroidFileRingCapacityMilliseconds = observation.Available
+                    ? observation.AndroidFileRingCapacityMilliseconds.ToString()
+                    : "n/a",
+                RealtimeRingCapacityMilliseconds = observation.Available
+                    ? observation.RealtimeRingCapacityMilliseconds.ToString()
+                    : "n/a",
+                FileBufferedCeilingMilliseconds = observation.Available
+                    ? observation.FileBufferedCeilingMilliseconds.ToString()
+                    : "n/a",
+                AndroidFileBufferedCeilingMilliseconds = observation.Available
+                    ? observation.AndroidFileBufferedCeilingMilliseconds.ToString()
+                    : "n/a",
+                RealtimeBufferedCeilingMilliseconds = observation.Available
+                    ? observation.RealtimeBufferedCeilingMilliseconds.ToString()
+                    : "n/a",
+                RealtimeStartupAdditionalSinkDelayMilliseconds = observation.Available
+                    ? observation.RealtimeStartupAdditionalSinkDelayMilliseconds.ToString()
+                    : "n/a",
+                RealtimeSteadyAdditionalSinkDelayMilliseconds = observation.Available
+                    ? observation.RealtimeSteadyAdditionalSinkDelayMilliseconds.ToString()
+                    : "n/a",
+                RealtimeBackendAdditionalSinkDelayMilliseconds = observation.Available
+                    ? observation.RealtimeBackendAdditionalSinkDelayMilliseconds.ToString()
+                    : "n/a",
+                RealtimeStartRequiresVideoFrame =
+                    observation.RealtimeStartRequiresVideoFrame.ToString(),
+                AllowAndroidFileOutputRateBridge =
+                    observation.AllowAndroidFileOutputRateBridge.ToString(),
+            };
         }
 
         internal static bool RefreshAudioOutputPolicyState(

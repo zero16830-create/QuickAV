@@ -594,6 +594,10 @@ namespace UnityAV
                 out playerSessionContract);
             MediaNativeInteropCommon.AudioOutputPolicyView audioOutputPolicy;
             var hasAudioOutputPolicy = Player.TryGetAudioOutputPolicy(out audioOutputPolicy);
+            var audioOutputPolicyObservation =
+                MediaNativeInteropCommon.CreateAudioOutputPolicyObservation(
+                    hasAudioOutputPolicy,
+                    audioOutputPolicy);
             MediaNativeInteropCommon.AvSyncEnterpriseMetricsView avSyncEnterpriseMetrics;
             var hasAvSyncEnterpriseMetrics = Player.TryGetAvSyncEnterpriseMetrics(
                 out avSyncEnterpriseMetrics);
@@ -799,39 +803,39 @@ namespace UnityAV
                     hasPlayerSessionContract && playerSessionContract.HasPresentedVideoFrame,
                 PlayerSessionAndroidFileRateBridgeActive =
                     hasPlayerSessionContract && playerSessionContract.AndroidFileRateBridgeActive,
-                HasAudioOutputPolicy = hasAudioOutputPolicy,
+                HasAudioOutputPolicy = audioOutputPolicyObservation.Available,
                 AudioOutputPolicyFileStartThresholdMs =
-                    hasAudioOutputPolicy ? audioOutputPolicy.FileStartThresholdMilliseconds : 0,
+                    audioOutputPolicyObservation.FileStartThresholdMilliseconds,
                 AudioOutputPolicyAndroidFileStartThresholdMs =
-                    hasAudioOutputPolicy ? audioOutputPolicy.AndroidFileStartThresholdMilliseconds : 0,
+                    audioOutputPolicyObservation.AndroidFileStartThresholdMilliseconds,
                 AudioOutputPolicyRealtimeStartThresholdMs =
-                    hasAudioOutputPolicy ? audioOutputPolicy.RealtimeStartThresholdMilliseconds : 0,
+                    audioOutputPolicyObservation.RealtimeStartThresholdMilliseconds,
                 AudioOutputPolicyRealtimeStartupGraceMs =
-                    hasAudioOutputPolicy ? audioOutputPolicy.RealtimeStartupGraceMilliseconds : 0,
+                    audioOutputPolicyObservation.RealtimeStartupGraceMilliseconds,
                 AudioOutputPolicyRealtimeStartupMinimumThresholdMs =
-                    hasAudioOutputPolicy ? audioOutputPolicy.RealtimeStartupMinimumThresholdMilliseconds : 0,
+                    audioOutputPolicyObservation.RealtimeStartupMinimumThresholdMilliseconds,
                 AudioOutputPolicyFileRingCapacityMs =
-                    hasAudioOutputPolicy ? audioOutputPolicy.FileRingCapacityMilliseconds : 0,
+                    audioOutputPolicyObservation.FileRingCapacityMilliseconds,
                 AudioOutputPolicyAndroidFileRingCapacityMs =
-                    hasAudioOutputPolicy ? audioOutputPolicy.AndroidFileRingCapacityMilliseconds : 0,
+                    audioOutputPolicyObservation.AndroidFileRingCapacityMilliseconds,
                 AudioOutputPolicyRealtimeRingCapacityMs =
-                    hasAudioOutputPolicy ? audioOutputPolicy.RealtimeRingCapacityMilliseconds : 0,
+                    audioOutputPolicyObservation.RealtimeRingCapacityMilliseconds,
                 AudioOutputPolicyFileBufferedCeilingMs =
-                    hasAudioOutputPolicy ? audioOutputPolicy.FileBufferedCeilingMilliseconds : 0,
+                    audioOutputPolicyObservation.FileBufferedCeilingMilliseconds,
                 AudioOutputPolicyAndroidFileBufferedCeilingMs =
-                    hasAudioOutputPolicy ? audioOutputPolicy.AndroidFileBufferedCeilingMilliseconds : 0,
+                    audioOutputPolicyObservation.AndroidFileBufferedCeilingMilliseconds,
                 AudioOutputPolicyRealtimeBufferedCeilingMs =
-                    hasAudioOutputPolicy ? audioOutputPolicy.RealtimeBufferedCeilingMilliseconds : 0,
+                    audioOutputPolicyObservation.RealtimeBufferedCeilingMilliseconds,
                 AudioOutputPolicyRealtimeStartupAdditionalSinkDelayMs =
-                    hasAudioOutputPolicy ? audioOutputPolicy.RealtimeStartupAdditionalSinkDelayMilliseconds : 0,
+                    audioOutputPolicyObservation.RealtimeStartupAdditionalSinkDelayMilliseconds,
                 AudioOutputPolicyRealtimeSteadyAdditionalSinkDelayMs =
-                    hasAudioOutputPolicy ? audioOutputPolicy.RealtimeSteadyAdditionalSinkDelayMilliseconds : 0,
+                    audioOutputPolicyObservation.RealtimeSteadyAdditionalSinkDelayMilliseconds,
                 AudioOutputPolicyRealtimeBackendAdditionalSinkDelayMs =
-                    hasAudioOutputPolicy ? audioOutputPolicy.RealtimeBackendAdditionalSinkDelayMilliseconds : 0,
+                    audioOutputPolicyObservation.RealtimeBackendAdditionalSinkDelayMilliseconds,
                 AudioOutputPolicyRealtimeStartRequiresVideoFrame =
-                    hasAudioOutputPolicy && audioOutputPolicy.RealtimeStartRequiresVideoFrame,
+                    audioOutputPolicyObservation.RealtimeStartRequiresVideoFrame,
                 AudioOutputPolicyAllowAndroidFileOutputRateBridge =
-                    hasAudioOutputPolicy && audioOutputPolicy.AllowAndroidFileOutputRateBridge,
+                    audioOutputPolicyObservation.AllowAndroidFileOutputRateBridge,
                 HasAvSyncEnterpriseMetrics = hasAvSyncEnterpriseMetrics,
                 AvSyncEnterpriseSampleCount =
                     hasAvSyncEnterpriseMetrics ? avSyncEnterpriseMetrics.SampleCount : 0U,
