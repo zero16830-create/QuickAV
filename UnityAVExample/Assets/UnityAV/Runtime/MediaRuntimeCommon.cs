@@ -1542,6 +1542,21 @@ namespace UnityAV
             public string ValidationWindowStartReason;
         }
 
+        internal struct ValidationSummaryPlayerSessionView
+        {
+            public bool Available;
+            public string LifecycleState;
+            public string PublicState;
+            public string RuntimeState;
+            public string PlaybackIntent;
+            public string StopReason;
+            public string SourceState;
+            public string CanSeek;
+            public string IsRealtime;
+            public string IsBuffering;
+            public string IsSyncing;
+        }
+
         internal struct AvSyncEnterpriseMetricsView
         {
             public uint SampleCount;
@@ -4978,6 +4993,44 @@ namespace UnityAV
             {
                 builder.AppendLine("validation_window_start_reason=" + summary.ValidationWindowStartReason);
             }
+        }
+
+        internal static ValidationSummaryPlayerSessionView CreateValidationSummaryPlayerSession(
+            bool observedAvailable,
+            PlayerSessionAuditStringsView resolved,
+            PlayerSessionAuditStringsView fallback)
+        {
+            return new ValidationSummaryPlayerSessionView
+            {
+                Available = observedAvailable,
+                LifecycleState = resolved.LifecycleState,
+                PublicState = resolved.PublicState,
+                RuntimeState = resolved.RuntimeState,
+                PlaybackIntent = resolved.PlaybackIntent,
+                StopReason = resolved.StopReason,
+                SourceState = resolved.SourceState,
+                CanSeek = observedAvailable ? resolved.CanSeek : fallback.CanSeek,
+                IsRealtime = observedAvailable ? resolved.IsRealtime : fallback.IsRealtime,
+                IsBuffering = observedAvailable ? resolved.IsBuffering : fallback.IsBuffering,
+                IsSyncing = observedAvailable ? resolved.IsSyncing : fallback.IsSyncing,
+            };
+        }
+
+        internal static void AppendValidationSummaryPlayerSession(
+            StringBuilder builder,
+            ValidationSummaryPlayerSessionView summary)
+        {
+            builder.AppendLine("player_session_available=" + summary.Available);
+            builder.AppendLine("player_session_lifecycle_state=" + summary.LifecycleState);
+            builder.AppendLine("player_session_public_state=" + summary.PublicState);
+            builder.AppendLine("player_session_runtime_state=" + summary.RuntimeState);
+            builder.AppendLine("player_session_playback_intent=" + summary.PlaybackIntent);
+            builder.AppendLine("player_session_stop_reason=" + summary.StopReason);
+            builder.AppendLine("player_session_source_state=" + summary.SourceState);
+            builder.AppendLine("player_session_can_seek=" + summary.CanSeek);
+            builder.AppendLine("player_session_is_realtime=" + summary.IsRealtime);
+            builder.AppendLine("player_session_is_buffering=" + summary.IsBuffering);
+            builder.AppendLine("player_session_is_syncing=" + summary.IsSyncing);
         }
 
         internal static PlaybackStartObservationView CreatePlaybackStartObservation(
