@@ -13,7 +13,6 @@ namespace UnityAV
     [DefaultExecutionOrder(-1000)]
     public class CodexMediaPlayerAudioAuditDriver : MonoBehaviour
     {
-        private const float MinimumPlaybackAdvanceSeconds = 1.0f;
         private const string ValidationLogPrefix = "CodexValidation";
 
         public MediaPlayer Player;
@@ -355,7 +354,9 @@ namespace UnityAV
                 MediaNativeInteropCommon.CreateMediaPlayerValidationVideoTextureObservation(
                     Player.TargetMaterial != null ? Player.TargetMaterial.mainTexture : null);
             var audioSource = Player.GetComponent<AudioSource>();
-            var audioPlaying = audioSource != null && audioSource.isPlaying;
+            var audioPlaybackObservation =
+                MediaNativeInteropCommon.CreateValidationAudioPlaybackObservation(
+                    audioSource);
 
             MediaPlayer.PlayerRuntimeHealth health;
             var hasHealth = Player.TryGetRuntimeHealth(out health);
@@ -410,8 +411,8 @@ namespace UnityAV
             {
                 PlaybackTime = playbackTime,
                 HasTexture = textureObservation.HasTexture,
-                AudioPlaying = audioPlaying,
-                AudioSourcePresent = audioSource != null,
+                AudioPlaying = audioPlaybackObservation.Playing,
+                AudioSourcePresent = audioPlaybackObservation.SourcePresent,
                 HasAudioListener = _hasAudioListener,
                 Started = playbackStartObservation.Started,
                 TextureWidth = textureObservation.TextureWidth,
@@ -518,7 +519,7 @@ namespace UnityAV
                 MediaNativeInteropCommon.CreateMediaPlayerValidationResultObservation(
                     _validationWindowStartReason,
                     CreateValidationEvidenceObservation(),
-                    MinimumPlaybackAdvanceSeconds,
+                    MediaNativeInteropCommon.MinimumValidationPlaybackAdvanceSeconds,
                     _validationWindowInitialPlaybackTime);
             var playbackAdvance = resultObservation.PlaybackAdvanceSeconds;
 
@@ -608,26 +609,24 @@ namespace UnityAV
                         ObservedTextureDuringWindow = _observedTextureDuringWindow,
                         ObservedAudioDuringWindow = _observedAudioDuringWindow,
                         ObservedStartedDuringWindow = _observedStartedDuringWindow,
+                        IncludeObservedNativeFrameDuringWindow = true,
+                        ObservedNativeFrameDuringWindow = _observedNativeFrameDuringWindow,
                         IncludeValidationWindowStartReason = true,
                         ValidationWindowStartReason = _validationWindowStartReason,
                     });
                 MediaNativeInteropCommon.AppendValidationSummarySourceRuntime(
                     builder,
-                    new MediaNativeInteropCommon.ValidationSummarySourceRuntimeView
-                    {
-                        State = finalSnapshot.SourceState,
-                        Packets = finalSnapshot.SourcePackets,
-                        Timeouts = finalSnapshot.SourceTimeouts,
-                        Reconnects = finalSnapshot.SourceReconnects,
-                    });
+                    MediaNativeInteropCommon.CreateValidationSummarySourceRuntime(
+                        finalSnapshot.SourceState,
+                        finalSnapshot.SourcePackets,
+                        finalSnapshot.SourceTimeouts,
+                        finalSnapshot.SourceReconnects));
                 MediaNativeInteropCommon.AppendValidationSummaryNativeVideoRuntime(
                     builder,
-                    new MediaNativeInteropCommon.ValidationSummaryNativeVideoRuntimeView
-                    {
-                        Active = finalSnapshot.NativeVideoActive,
-                        ActivationDecision = finalSnapshot.NativeActivationDecision,
-                        HasPresentedFrame = finalSnapshot.HasPresentedNativeVideoFrame,
-                    });
+                    MediaNativeInteropCommon.CreateValidationSummaryNativeVideoRuntime(
+                        finalSnapshot.NativeVideoActive,
+                        finalSnapshot.NativeActivationDecision,
+                        finalSnapshot.HasPresentedNativeVideoFrame));
                 MediaNativeInteropCommon.AppendValidationSummaryPlayerSession(
                     builder,
                     summaryPlayerSession);

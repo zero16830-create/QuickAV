@@ -159,6 +159,7 @@ namespace UnityAV
         internal const uint RustAVWgpuRenderDescriptorVersion = 1u;
         internal const uint RustAVWgpuRenderStateViewVersion = 1u;
         internal const int BackendDiagnosticBufferLength = 512;
+        internal const float MinimumValidationPlaybackAdvanceSeconds = 1.0f;
         internal const uint NativeVideoTargetFlagNone = 0u;
         internal const uint NativeVideoTargetFlagExternalTexture = 1u << 0;
         internal const uint NativeVideoTargetFlagUnityOwnedTexture = 1u << 1;
@@ -1525,6 +1526,18 @@ namespace UnityAV
             public double PlaybackTimeSec;
         }
 
+        internal struct PullValidationAudioGatePolicyView
+        {
+            public bool RequireAudioOutput;
+            public bool AudioEnabled;
+        }
+
+        internal struct ValidationAudioPlaybackObservationView
+        {
+            public bool SourcePresent;
+            public bool Playing;
+        }
+
         internal struct MediaPlayerValidationGateInputsView
         {
             public bool HasTexture;
@@ -1557,6 +1570,8 @@ namespace UnityAV
             public bool ObservedTextureDuringWindow;
             public bool ObservedAudioDuringWindow;
             public bool ObservedStartedDuringWindow;
+            public bool IncludeObservedNativeFrameDuringWindow;
+            public bool ObservedNativeFrameDuringWindow;
             public bool IncludeValidationWindowStartReason;
             public string ValidationWindowStartReason;
         }
@@ -4847,6 +4862,27 @@ namespace UnityAV
                 startupTimeoutSeconds);
         }
 
+        internal static PullValidationAudioGatePolicyView CreatePullValidationAudioGatePolicy(
+            bool requireAudioOutput,
+            MediaPlayerPull player)
+        {
+            return new PullValidationAudioGatePolicyView
+            {
+                RequireAudioOutput = requireAudioOutput,
+                AudioEnabled = player != null && player.EnableAudio,
+            };
+        }
+
+        internal static ValidationAudioPlaybackObservationView CreateValidationAudioPlaybackObservation(
+            AudioSource audioSource)
+        {
+            return new ValidationAudioPlaybackObservationView
+            {
+                SourcePresent = audioSource != null,
+                Playing = audioSource != null && audioSource.isPlaying,
+            };
+        }
+
         internal static ValidationWindowStartObservationView
             CreatePullValidationWindowStartObservation(
                 bool hasTexture,
@@ -6082,6 +6118,10 @@ namespace UnityAV
             builder.AppendLine("observed_texture_during_window=" + summary.ObservedTextureDuringWindow);
             builder.AppendLine("observed_audio_during_window=" + summary.ObservedAudioDuringWindow);
             builder.AppendLine("observed_started_during_window=" + summary.ObservedStartedDuringWindow);
+            if (summary.IncludeObservedNativeFrameDuringWindow)
+            {
+                builder.AppendLine("observed_native_frame_during_window=" + summary.ObservedNativeFrameDuringWindow);
+            }
             if (summary.IncludeValidationWindowStartReason)
             {
                 builder.AppendLine("validation_window_start_reason=" + summary.ValidationWindowStartReason);
@@ -6629,6 +6669,49 @@ namespace UnityAV
             };
         }
 
+        internal static ValidationSummaryPlayerSessionExtendedView CreateValidationSummaryPlayerSessionExtended(
+            bool available,
+            string lifecycleState,
+            int publicState,
+            int runtimeState,
+            int playbackIntent,
+            int stopReason,
+            string sourceState,
+            bool canSeek,
+            bool isRealtime,
+            bool isBuffering,
+            bool isSyncing,
+            bool audioStartStateReported,
+            bool shouldStartAudio,
+            int audioStartBlockReason,
+            int requiredBufferedSamples,
+            int reportedBufferedSamples,
+            bool requiresPresentedVideoFrame,
+            bool hasPresentedVideoFrame,
+            bool androidFileRateBridgeActive)
+        {
+            return CreateValidationSummaryPlayerSessionExtended(
+                available,
+                lifecycleState,
+                publicState.ToString(),
+                runtimeState.ToString(),
+                playbackIntent.ToString(),
+                stopReason.ToString(),
+                sourceState,
+                canSeek.ToString(),
+                isRealtime.ToString(),
+                isBuffering.ToString(),
+                isSyncing.ToString(),
+                audioStartStateReported.ToString(),
+                shouldStartAudio.ToString(),
+                audioStartBlockReason.ToString(),
+                requiredBufferedSamples.ToString(),
+                reportedBufferedSamples.ToString(),
+                requiresPresentedVideoFrame.ToString(),
+                hasPresentedVideoFrame.ToString(),
+                androidFileRateBridgeActive.ToString());
+        }
+
         internal static void AppendValidationSummaryPlayerSessionExtended(
             StringBuilder builder,
             ValidationSummaryPlayerSessionExtendedView summary)
@@ -6654,6 +6737,41 @@ namespace UnityAV
             builder.AppendLine("player_session_android_file_rate_bridge_active=" + summary.AndroidFileRateBridgeActive);
         }
 
+        internal static ValidationSummarySourceRuntimeView CreateValidationSummarySourceRuntime(
+            string state,
+            string packets,
+            string timeouts,
+            string reconnects)
+        {
+            return new ValidationSummarySourceRuntimeView
+            {
+                State = state,
+                Packets = packets,
+                Timeouts = timeouts,
+                Reconnects = reconnects,
+                IncludeLastActivityAgeSeconds = false,
+                LastActivityAgeSeconds = string.Empty,
+            };
+        }
+
+        internal static ValidationSummarySourceRuntimeView CreateValidationSummarySourceRuntime(
+            string state,
+            string packets,
+            string timeouts,
+            string reconnects,
+            double lastActivityAgeSeconds)
+        {
+            return new ValidationSummarySourceRuntimeView
+            {
+                State = state,
+                Packets = packets,
+                Timeouts = timeouts,
+                Reconnects = reconnects,
+                IncludeLastActivityAgeSeconds = true,
+                LastActivityAgeSeconds = lastActivityAgeSeconds.ToString("F3"),
+            };
+        }
+
         internal static void AppendValidationSummarySourceRuntime(
             StringBuilder builder,
             ValidationSummarySourceRuntimeView summary)
@@ -6668,6 +6786,19 @@ namespace UnityAV
             }
         }
 
+        internal static ValidationSummaryNativeVideoRuntimeView CreateValidationSummaryNativeVideoRuntime(
+            bool active,
+            string activationDecision,
+            bool hasPresentedFrame)
+        {
+            return new ValidationSummaryNativeVideoRuntimeView
+            {
+                Active = active,
+                ActivationDecision = activationDecision,
+                HasPresentedFrame = hasPresentedFrame,
+            };
+        }
+
         internal static void AppendValidationSummaryNativeVideoRuntime(
             StringBuilder builder,
             ValidationSummaryNativeVideoRuntimeView summary)
@@ -6675,6 +6806,27 @@ namespace UnityAV
             builder.AppendLine("native_video_active=" + summary.Active);
             builder.AppendLine("native_activation_decision=" + summary.ActivationDecision);
             builder.AppendLine("has_presented_native_video_frame=" + summary.HasPresentedFrame);
+        }
+
+        internal static ValidationSummaryRuntimeHealthView CreateValidationSummaryRuntimeHealth(
+            bool available,
+            int state,
+            int runtimeState,
+            int playbackIntent,
+            int streamCount,
+            int videoDecoderCount,
+            bool hasAudioDecoder)
+        {
+            return new ValidationSummaryRuntimeHealthView
+            {
+                Available = available,
+                State = state.ToString(),
+                RuntimeState = runtimeState.ToString(),
+                PlaybackIntent = playbackIntent.ToString(),
+                StreamCount = streamCount.ToString(),
+                VideoDecoderCount = videoDecoderCount.ToString(),
+                HasAudioDecoder = hasAudioDecoder.ToString(),
+            };
         }
 
         internal static void AppendValidationSummaryRuntimeHealth(
@@ -6833,6 +6985,19 @@ namespace UnityAV
             };
         }
 
+        internal static ValidationSummaryFrameContractView CreateValidationSummaryFrameContract(
+            bool available,
+            string memoryKind,
+            string dynamicRange,
+            double nominalFps)
+        {
+            return CreateValidationSummaryFrameContract(
+                available,
+                memoryKind,
+                dynamicRange,
+                nominalFps.ToString("F2"));
+        }
+
         internal static void AppendValidationSummaryFrameContract(
             StringBuilder builder,
             ValidationSummaryFrameContractView summary)
@@ -6895,6 +7060,23 @@ namespace UnityAV
                 DropTotal = dropTotal,
                 DuplicateTotal = duplicateTotal,
             };
+        }
+
+        internal static ValidationSummaryAvSyncContractView CreateValidationSummaryAvSyncContract(
+            bool available,
+            string masterClock,
+            double driftMs,
+            double clockDeltaMs,
+            ulong dropTotal,
+            ulong duplicateTotal)
+        {
+            return CreateValidationSummaryAvSyncContract(
+                available,
+                masterClock,
+                driftMs.ToString("F1"),
+                clockDeltaMs.ToString("F1"),
+                dropTotal.ToString(),
+                duplicateTotal.ToString());
         }
 
         internal static void AppendValidationSummaryAvSyncContract(
