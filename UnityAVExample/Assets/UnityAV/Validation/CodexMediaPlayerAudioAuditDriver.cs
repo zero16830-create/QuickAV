@@ -733,6 +733,16 @@ namespace UnityAV
                         _observedPlayerSessionAvailable,
                         resolvedPlayerSessionAudit,
                         fallbackPlayerSessionAudit);
+                var summaryPlaybackContract =
+                    new MediaNativeInteropCommon.PlaybackTimingAuditStringsView
+                    {
+                        Available = _observedPlaybackContractAvailable,
+                        MasterTimeSec = _observedPlaybackContractMasterTimeSec,
+                        MasterTimeUs = _observedPlaybackContractMasterTimeUs,
+                        ExternalTimeSec = _observedPlaybackContractExternalTimeSec,
+                        ExternalTimeUs = _observedPlaybackContractExternalTimeUs,
+                        HasMicrosecondMirror = _observedPlaybackContractHasUsMirror,
+                    };
                 var backendRuntimeObservation =
                     MediaNativeInteropCommon.CreateMediaPlayerBackendRuntimeObservation(
                         Player != null,
@@ -784,12 +794,9 @@ namespace UnityAV
                 builder.AppendLine("source_timeline_anchor_value_us=" + _observedSourceTimelineAnchorValueUs);
                 builder.AppendLine("source_timeline_has_anchor_mono_us=" + _observedSourceTimelineHasAnchorMonoUs);
                 builder.AppendLine("source_timeline_anchor_mono_us=" + _observedSourceTimelineAnchorMonoUs);
-                builder.AppendLine("playback_contract_available=" + _observedPlaybackContractAvailable);
-                builder.AppendLine("playback_contract_master_sec=" + _observedPlaybackContractMasterTimeSec);
-                builder.AppendLine("playback_contract_master_us=" + _observedPlaybackContractMasterTimeUs);
-                builder.AppendLine("playback_contract_external_sec=" + _observedPlaybackContractExternalTimeSec);
-                builder.AppendLine("playback_contract_external_us=" + _observedPlaybackContractExternalTimeUs);
-                builder.AppendLine("playback_contract_has_us_mirror=" + _observedPlaybackContractHasUsMirror);
+                MediaNativeInteropCommon.AppendValidationSummaryPlaybackContract(
+                    builder,
+                    summaryPlaybackContract);
                 builder.AppendLine("audio_output_policy_available=" + _observedAudioOutputPolicyAvailable);
                 builder.AppendLine("audio_output_policy_file_start_ms=" + _observedAudioOutputPolicyFileStartMs);
                 builder.AppendLine("audio_output_policy_android_file_start_ms=" + _observedAudioOutputPolicyAndroidFileStartMs);

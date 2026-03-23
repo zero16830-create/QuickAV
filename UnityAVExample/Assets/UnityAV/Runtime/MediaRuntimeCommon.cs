@@ -5033,6 +5033,18 @@ namespace UnityAV
             builder.AppendLine("player_session_is_syncing=" + summary.IsSyncing);
         }
 
+        internal static void AppendValidationSummaryPlaybackContract(
+            StringBuilder builder,
+            PlaybackTimingAuditStringsView summary)
+        {
+            builder.AppendLine("playback_contract_available=" + summary.Available);
+            builder.AppendLine("playback_contract_master_sec=" + summary.MasterTimeSec);
+            builder.AppendLine("playback_contract_master_us=" + summary.MasterTimeUs);
+            builder.AppendLine("playback_contract_external_sec=" + summary.ExternalTimeSec);
+            builder.AppendLine("playback_contract_external_us=" + summary.ExternalTimeUs);
+            builder.AppendLine("playback_contract_has_us_mirror=" + summary.HasMicrosecondMirror);
+        }
+
         internal static PlaybackStartObservationView CreatePlaybackStartObservation(
             bool hasReportedStarted,
             bool reportedStarted,
