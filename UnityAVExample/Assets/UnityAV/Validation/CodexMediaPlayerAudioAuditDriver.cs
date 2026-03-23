@@ -715,8 +715,9 @@ namespace UnityAV
                         IsBuffering = finalSnapshot.PlayerSessionIsBuffering,
                         IsSyncing = finalSnapshot.PlayerSessionIsSyncing,
                     };
-                var resolvedPlayerSessionAudit =
-                    MediaNativeInteropCommon.CreateResolvedPlayerSessionAuditStrings(
+                var summaryPlayerSession =
+                    MediaNativeInteropCommon.CreateValidationSummaryPlayerSession(
+                        _observedPlayerSessionAvailable,
                         _observedPlayerSessionLifecycleState,
                         _observedPlayerSessionPublicState,
                         _observedPlayerSessionRuntimeState,
@@ -728,79 +729,64 @@ namespace UnityAV
                         _observedPlayerSessionIsBuffering,
                         _observedPlayerSessionIsSyncing,
                         fallbackPlayerSessionAudit);
-                var summaryPlayerSession =
-                    MediaNativeInteropCommon.CreateValidationSummaryPlayerSession(
-                        _observedPlayerSessionAvailable,
-                        resolvedPlayerSessionAudit,
-                        fallbackPlayerSessionAudit);
                 var summaryPlaybackContract =
-                    new MediaNativeInteropCommon.PlaybackTimingAuditStringsView
-                    {
-                        Available = _observedPlaybackContractAvailable,
-                        MasterTimeSec = _observedPlaybackContractMasterTimeSec,
-                        MasterTimeUs = _observedPlaybackContractMasterTimeUs,
-                        ExternalTimeSec = _observedPlaybackContractExternalTimeSec,
-                        ExternalTimeUs = _observedPlaybackContractExternalTimeUs,
-                        HasMicrosecondMirror = _observedPlaybackContractHasUsMirror,
-                    };
+                    MediaNativeInteropCommon.CreateObservedPlaybackTimingAuditStrings(
+                        _observedPlaybackContractAvailable,
+                        _observedPlaybackContractMasterTimeSec,
+                        _observedPlaybackContractMasterTimeUs,
+                        _observedPlaybackContractExternalTimeSec,
+                        _observedPlaybackContractExternalTimeUs,
+                        _observedPlaybackContractHasUsMirror);
                 var summarySourceTimeline =
-                    new MediaNativeInteropCommon.SourceTimelineAuditStringsView
-                    {
-                        Available = _observedSourceTimelineAvailable,
-                        Model = _observedSourceTimelineModel,
-                        AnchorKind = _observedSourceTimelineAnchorKind,
-                        HasCurrentSourceTimeUs = _observedSourceTimelineHasCurrentSourceTimeUs,
-                        CurrentSourceTimeUs = _observedSourceTimelineCurrentSourceTimeUs,
-                        HasTimelineOriginUs = _observedSourceTimelineHasTimelineOriginUs,
-                        TimelineOriginUs = _observedSourceTimelineTimelineOriginUs,
-                        HasAnchorValueUs = _observedSourceTimelineHasAnchorValueUs,
-                        AnchorValueUs = _observedSourceTimelineAnchorValueUs,
-                        HasAnchorMonoUs = _observedSourceTimelineHasAnchorMonoUs,
-                        AnchorMonoUs = _observedSourceTimelineAnchorMonoUs,
-                        IsRealtime = _observedSourceTimelineIsRealtime,
-                    };
+                    MediaNativeInteropCommon.CreateObservedSourceTimelineAuditStrings(
+                        _observedSourceTimelineAvailable,
+                        _observedSourceTimelineModel,
+                        _observedSourceTimelineAnchorKind,
+                        _observedSourceTimelineHasCurrentSourceTimeUs,
+                        _observedSourceTimelineCurrentSourceTimeUs,
+                        _observedSourceTimelineHasTimelineOriginUs,
+                        _observedSourceTimelineTimelineOriginUs,
+                        _observedSourceTimelineHasAnchorValueUs,
+                        _observedSourceTimelineAnchorValueUs,
+                        _observedSourceTimelineHasAnchorMonoUs,
+                        _observedSourceTimelineAnchorMonoUs,
+                        _observedSourceTimelineIsRealtime);
                 var summaryPassiveAvSync =
-                    new MediaNativeInteropCommon.PassiveAvSyncAuditStringsView
-                    {
-                        Available = _observedPassiveAvSyncAvailable,
-                        RawOffsetUs = _observedPassiveAvSyncRawOffsetUs,
-                        SmoothOffsetUs = _observedPassiveAvSyncSmoothOffsetUs,
-                        DriftPpm = _observedPassiveAvSyncDriftPpm,
-                        DriftInterceptUs = _observedPassiveAvSyncDriftInterceptUs,
-                        DriftSampleCount = _observedPassiveAvSyncDriftSampleCount,
-                        VideoSchedule = _observedPassiveAvSyncVideoSchedule,
-                        AudioResampleRatio = _observedPassiveAvSyncAudioResampleRatio,
-                        AudioResampleActive = _observedPassiveAvSyncAudioResampleActive,
-                        ShouldRebuildAnchor = _observedPassiveAvSyncShouldRebuildAnchor,
-                    };
+                    MediaNativeInteropCommon.CreateObservedPassiveAvSyncAuditStrings(
+                        _observedPassiveAvSyncAvailable,
+                        _observedPassiveAvSyncRawOffsetUs,
+                        _observedPassiveAvSyncSmoothOffsetUs,
+                        _observedPassiveAvSyncDriftPpm,
+                        _observedPassiveAvSyncDriftInterceptUs,
+                        _observedPassiveAvSyncDriftSampleCount,
+                        _observedPassiveAvSyncVideoSchedule,
+                        _observedPassiveAvSyncAudioResampleRatio,
+                        _observedPassiveAvSyncAudioResampleActive,
+                        _observedPassiveAvSyncShouldRebuildAnchor);
                 var summaryAvSyncEnterprise =
-                    new MediaNativeInteropCommon.AvSyncEnterpriseAuditStringsView
-                    {
-                        Available = _observedAvSyncEnterpriseAvailable,
-                        SampleCount = _observedAvSyncEnterpriseSampleCount,
-                        DriftProjected2hMs = _observedAvSyncEnterpriseDriftProjected2hMs,
-                    };
+                    MediaNativeInteropCommon.CreateObservedAvSyncEnterpriseAuditStrings(
+                        _observedAvSyncEnterpriseAvailable,
+                        _observedAvSyncEnterpriseSampleCount,
+                        _observedAvSyncEnterpriseDriftProjected2hMs);
                 var summaryAudioOutputPolicy =
-                    new MediaNativeInteropCommon.AudioOutputPolicyAuditStringsView
-                    {
-                        Available = _observedAudioOutputPolicyAvailable,
-                        FileStartThresholdMilliseconds = _observedAudioOutputPolicyFileStartMs,
-                        AndroidFileStartThresholdMilliseconds = _observedAudioOutputPolicyAndroidFileStartMs,
-                        RealtimeStartThresholdMilliseconds = _observedAudioOutputPolicyRealtimeStartMs,
-                        RealtimeStartupGraceMilliseconds = _observedAudioOutputPolicyRealtimeStartupGraceMs,
-                        RealtimeStartupMinimumThresholdMilliseconds = _observedAudioOutputPolicyRealtimeStartupMinimumThresholdMs,
-                        FileRingCapacityMilliseconds = _observedAudioOutputPolicyFileRingCapacityMs,
-                        AndroidFileRingCapacityMilliseconds = _observedAudioOutputPolicyAndroidFileRingCapacityMs,
-                        RealtimeRingCapacityMilliseconds = _observedAudioOutputPolicyRealtimeRingCapacityMs,
-                        FileBufferedCeilingMilliseconds = _observedAudioOutputPolicyFileBufferedCeilingMs,
-                        AndroidFileBufferedCeilingMilliseconds = _observedAudioOutputPolicyAndroidFileBufferedCeilingMs,
-                        RealtimeBufferedCeilingMilliseconds = _observedAudioOutputPolicyRealtimeBufferedCeilingMs,
-                        RealtimeStartupAdditionalSinkDelayMilliseconds = _observedAudioOutputPolicyRealtimeStartupAdditionalSinkDelayMs,
-                        RealtimeSteadyAdditionalSinkDelayMilliseconds = _observedAudioOutputPolicyRealtimeSteadyAdditionalSinkDelayMs,
-                        RealtimeBackendAdditionalSinkDelayMilliseconds = _observedAudioOutputPolicyRealtimeBackendAdditionalSinkDelayMs,
-                        RealtimeStartRequiresVideoFrame = _observedAudioOutputPolicyRealtimeStartRequiresVideoFrame,
-                        AllowAndroidFileOutputRateBridge = _observedAudioOutputPolicyAllowAndroidFileOutputRateBridge,
-                    };
+                    MediaNativeInteropCommon.CreateObservedAudioOutputPolicyAuditStrings(
+                        _observedAudioOutputPolicyAvailable,
+                        _observedAudioOutputPolicyFileStartMs,
+                        _observedAudioOutputPolicyAndroidFileStartMs,
+                        _observedAudioOutputPolicyRealtimeStartMs,
+                        _observedAudioOutputPolicyRealtimeStartupGraceMs,
+                        _observedAudioOutputPolicyRealtimeStartupMinimumThresholdMs,
+                        _observedAudioOutputPolicyFileRingCapacityMs,
+                        _observedAudioOutputPolicyAndroidFileRingCapacityMs,
+                        _observedAudioOutputPolicyRealtimeRingCapacityMs,
+                        _observedAudioOutputPolicyFileBufferedCeilingMs,
+                        _observedAudioOutputPolicyAndroidFileBufferedCeilingMs,
+                        _observedAudioOutputPolicyRealtimeBufferedCeilingMs,
+                        _observedAudioOutputPolicyRealtimeStartupAdditionalSinkDelayMs,
+                        _observedAudioOutputPolicyRealtimeSteadyAdditionalSinkDelayMs,
+                        _observedAudioOutputPolicyRealtimeBackendAdditionalSinkDelayMs,
+                        _observedAudioOutputPolicyRealtimeStartRequiresVideoFrame,
+                        _observedAudioOutputPolicyAllowAndroidFileOutputRateBridge);
                 var backendRuntimeObservation =
                     MediaNativeInteropCommon.CreateMediaPlayerBackendRuntimeObservation(
                         Player != null,
@@ -830,13 +816,23 @@ namespace UnityAV
                         IncludeValidationWindowStartReason = true,
                         ValidationWindowStartReason = _validationWindowStartReason,
                     });
-                builder.AppendLine("source_state=" + finalSnapshot.SourceState);
-                builder.AppendLine("source_packets=" + finalSnapshot.SourcePackets);
-                builder.AppendLine("source_timeouts=" + finalSnapshot.SourceTimeouts);
-                builder.AppendLine("source_reconnects=" + finalSnapshot.SourceReconnects);
-                builder.AppendLine("native_video_active=" + finalSnapshot.NativeVideoActive);
-                builder.AppendLine("native_activation_decision=" + finalSnapshot.NativeActivationDecision);
-                builder.AppendLine("has_presented_native_video_frame=" + finalSnapshot.HasPresentedNativeVideoFrame);
+                MediaNativeInteropCommon.AppendValidationSummarySourceRuntime(
+                    builder,
+                    new MediaNativeInteropCommon.ValidationSummarySourceRuntimeView
+                    {
+                        State = finalSnapshot.SourceState,
+                        Packets = finalSnapshot.SourcePackets,
+                        Timeouts = finalSnapshot.SourceTimeouts,
+                        Reconnects = finalSnapshot.SourceReconnects,
+                    });
+                MediaNativeInteropCommon.AppendValidationSummaryNativeVideoRuntime(
+                    builder,
+                    new MediaNativeInteropCommon.ValidationSummaryNativeVideoRuntimeView
+                    {
+                        Active = finalSnapshot.NativeVideoActive,
+                        ActivationDecision = finalSnapshot.NativeActivationDecision,
+                        HasPresentedFrame = finalSnapshot.HasPresentedNativeVideoFrame,
+                    });
                 MediaNativeInteropCommon.AppendValidationSummaryPlayerSession(
                     builder,
                     summaryPlayerSession);

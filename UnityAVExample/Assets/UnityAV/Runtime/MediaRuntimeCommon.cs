@@ -1557,6 +1557,23 @@ namespace UnityAV
             public string IsSyncing;
         }
 
+        internal struct ValidationSummarySourceRuntimeView
+        {
+            public string State;
+            public string Packets;
+            public string Timeouts;
+            public string Reconnects;
+            public bool IncludeLastActivityAgeSeconds;
+            public string LastActivityAgeSeconds;
+        }
+
+        internal struct ValidationSummaryNativeVideoRuntimeView
+        {
+            public bool Active;
+            public string ActivationDecision;
+            public bool HasPresentedFrame;
+        }
+
         internal struct AvSyncEnterpriseMetricsView
         {
             public uint SampleCount;
@@ -5016,6 +5033,166 @@ namespace UnityAV
             };
         }
 
+        internal static ValidationSummaryPlayerSessionView CreateValidationSummaryPlayerSession(
+            bool observedAvailable,
+            string observedLifecycleState,
+            string observedPublicState,
+            string observedRuntimeState,
+            string observedPlaybackIntent,
+            string observedStopReason,
+            string observedSourceState,
+            string observedCanSeek,
+            string observedIsRealtime,
+            string observedIsBuffering,
+            string observedIsSyncing,
+            PlayerSessionAuditStringsView fallback)
+        {
+            var resolved = CreateResolvedPlayerSessionAuditStrings(
+                observedLifecycleState,
+                observedPublicState,
+                observedRuntimeState,
+                observedPlaybackIntent,
+                observedStopReason,
+                observedSourceState,
+                observedCanSeek,
+                observedIsRealtime,
+                observedIsBuffering,
+                observedIsSyncing,
+                fallback);
+            return CreateValidationSummaryPlayerSession(observedAvailable, resolved, fallback);
+        }
+
+        internal static PlaybackTimingAuditStringsView CreateObservedPlaybackTimingAuditStrings(
+            bool available,
+            string masterTimeSec,
+            string masterTimeUs,
+            string externalTimeSec,
+            string externalTimeUs,
+            string hasMicrosecondMirror)
+        {
+            return new PlaybackTimingAuditStringsView
+            {
+                Available = available,
+                MasterTimeSec = masterTimeSec,
+                MasterTimeUs = masterTimeUs,
+                ExternalTimeSec = externalTimeSec,
+                ExternalTimeUs = externalTimeUs,
+                HasMicrosecondMirror = hasMicrosecondMirror,
+            };
+        }
+
+        internal static SourceTimelineAuditStringsView CreateObservedSourceTimelineAuditStrings(
+            bool available,
+            string model,
+            string anchorKind,
+            string hasCurrentSourceTimeUs,
+            string currentSourceTimeUs,
+            string hasTimelineOriginUs,
+            string timelineOriginUs,
+            string hasAnchorValueUs,
+            string anchorValueUs,
+            string hasAnchorMonoUs,
+            string anchorMonoUs,
+            string isRealtime)
+        {
+            return new SourceTimelineAuditStringsView
+            {
+                Available = available,
+                Model = model,
+                AnchorKind = anchorKind,
+                HasCurrentSourceTimeUs = hasCurrentSourceTimeUs,
+                CurrentSourceTimeUs = currentSourceTimeUs,
+                HasTimelineOriginUs = hasTimelineOriginUs,
+                TimelineOriginUs = timelineOriginUs,
+                HasAnchorValueUs = hasAnchorValueUs,
+                AnchorValueUs = anchorValueUs,
+                HasAnchorMonoUs = hasAnchorMonoUs,
+                AnchorMonoUs = anchorMonoUs,
+                IsRealtime = isRealtime,
+            };
+        }
+
+        internal static PassiveAvSyncAuditStringsView CreateObservedPassiveAvSyncAuditStrings(
+            bool available,
+            string rawOffsetUs,
+            string smoothOffsetUs,
+            string driftPpm,
+            string driftInterceptUs,
+            string driftSampleCount,
+            string videoSchedule,
+            string audioResampleRatio,
+            string audioResampleActive,
+            string shouldRebuildAnchor)
+        {
+            return new PassiveAvSyncAuditStringsView
+            {
+                Available = available,
+                RawOffsetUs = rawOffsetUs,
+                SmoothOffsetUs = smoothOffsetUs,
+                DriftPpm = driftPpm,
+                DriftInterceptUs = driftInterceptUs,
+                DriftSampleCount = driftSampleCount,
+                VideoSchedule = videoSchedule,
+                AudioResampleRatio = audioResampleRatio,
+                AudioResampleActive = audioResampleActive,
+                ShouldRebuildAnchor = shouldRebuildAnchor,
+            };
+        }
+
+        internal static AvSyncEnterpriseAuditStringsView CreateObservedAvSyncEnterpriseAuditStrings(
+            bool available,
+            string sampleCount,
+            string driftProjected2hMs)
+        {
+            return new AvSyncEnterpriseAuditStringsView
+            {
+                Available = available,
+                SampleCount = sampleCount,
+                DriftProjected2hMs = driftProjected2hMs,
+            };
+        }
+
+        internal static AudioOutputPolicyAuditStringsView CreateObservedAudioOutputPolicyAuditStrings(
+            bool available,
+            string fileStartThresholdMilliseconds,
+            string androidFileStartThresholdMilliseconds,
+            string realtimeStartThresholdMilliseconds,
+            string realtimeStartupGraceMilliseconds,
+            string realtimeStartupMinimumThresholdMilliseconds,
+            string fileRingCapacityMilliseconds,
+            string androidFileRingCapacityMilliseconds,
+            string realtimeRingCapacityMilliseconds,
+            string fileBufferedCeilingMilliseconds,
+            string androidFileBufferedCeilingMilliseconds,
+            string realtimeBufferedCeilingMilliseconds,
+            string realtimeStartupAdditionalSinkDelayMilliseconds,
+            string realtimeSteadyAdditionalSinkDelayMilliseconds,
+            string realtimeBackendAdditionalSinkDelayMilliseconds,
+            string realtimeStartRequiresVideoFrame,
+            string allowAndroidFileOutputRateBridge)
+        {
+            return new AudioOutputPolicyAuditStringsView
+            {
+                Available = available,
+                FileStartThresholdMilliseconds = fileStartThresholdMilliseconds,
+                AndroidFileStartThresholdMilliseconds = androidFileStartThresholdMilliseconds,
+                RealtimeStartThresholdMilliseconds = realtimeStartThresholdMilliseconds,
+                RealtimeStartupGraceMilliseconds = realtimeStartupGraceMilliseconds,
+                RealtimeStartupMinimumThresholdMilliseconds = realtimeStartupMinimumThresholdMilliseconds,
+                FileRingCapacityMilliseconds = fileRingCapacityMilliseconds,
+                AndroidFileRingCapacityMilliseconds = androidFileRingCapacityMilliseconds,
+                RealtimeRingCapacityMilliseconds = realtimeRingCapacityMilliseconds,
+                FileBufferedCeilingMilliseconds = fileBufferedCeilingMilliseconds,
+                AndroidFileBufferedCeilingMilliseconds = androidFileBufferedCeilingMilliseconds,
+                RealtimeBufferedCeilingMilliseconds = realtimeBufferedCeilingMilliseconds,
+                RealtimeStartupAdditionalSinkDelayMilliseconds = realtimeStartupAdditionalSinkDelayMilliseconds,
+                RealtimeSteadyAdditionalSinkDelayMilliseconds = realtimeSteadyAdditionalSinkDelayMilliseconds,
+                RealtimeBackendAdditionalSinkDelayMilliseconds = realtimeBackendAdditionalSinkDelayMilliseconds,
+                RealtimeStartRequiresVideoFrame = realtimeStartRequiresVideoFrame,
+                AllowAndroidFileOutputRateBridge = allowAndroidFileOutputRateBridge,
+            };
+        }
+
         internal static void AppendValidationSummaryPlayerSession(
             StringBuilder builder,
             ValidationSummaryPlayerSessionView summary)
@@ -5031,6 +5208,29 @@ namespace UnityAV
             builder.AppendLine("player_session_is_realtime=" + summary.IsRealtime);
             builder.AppendLine("player_session_is_buffering=" + summary.IsBuffering);
             builder.AppendLine("player_session_is_syncing=" + summary.IsSyncing);
+        }
+
+        internal static void AppendValidationSummarySourceRuntime(
+            StringBuilder builder,
+            ValidationSummarySourceRuntimeView summary)
+        {
+            builder.AppendLine("source_state=" + summary.State);
+            builder.AppendLine("source_packets=" + summary.Packets);
+            builder.AppendLine("source_timeouts=" + summary.Timeouts);
+            builder.AppendLine("source_reconnects=" + summary.Reconnects);
+            if (summary.IncludeLastActivityAgeSeconds)
+            {
+                builder.AppendLine("source_last_activity_age_sec=" + summary.LastActivityAgeSeconds);
+            }
+        }
+
+        internal static void AppendValidationSummaryNativeVideoRuntime(
+            StringBuilder builder,
+            ValidationSummaryNativeVideoRuntimeView summary)
+        {
+            builder.AppendLine("native_video_active=" + summary.Active);
+            builder.AppendLine("native_activation_decision=" + summary.ActivationDecision);
+            builder.AppendLine("has_presented_native_video_frame=" + summary.HasPresentedFrame);
         }
 
         internal static void AppendValidationSummaryPlaybackContract(

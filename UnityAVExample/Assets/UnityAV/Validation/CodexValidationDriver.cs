@@ -1057,11 +1057,17 @@ namespace UnityAV
                 builder.AppendLine("stream_count=" + finalSnapshot.StreamCount);
                 builder.AppendLine("video_decoder_count=" + finalSnapshot.VideoDecoderCount);
                 builder.AppendLine("has_audio_decoder=" + finalSnapshot.HasAudioDecoder);
-                builder.AppendLine("source_state=" + finalSnapshot.SourceState);
-                builder.AppendLine("source_packets=" + finalSnapshot.SourcePackets);
-                builder.AppendLine("source_timeouts=" + finalSnapshot.SourceTimeouts);
-                builder.AppendLine("source_reconnects=" + finalSnapshot.SourceReconnects);
-                builder.AppendLine("source_last_activity_age_sec=" + finalSnapshot.SourceLastActivityAgeSec.ToString("F3"));
+                MediaNativeInteropCommon.AppendValidationSummarySourceRuntime(
+                    builder,
+                    new MediaNativeInteropCommon.ValidationSummarySourceRuntimeView
+                    {
+                        State = finalSnapshot.SourceState,
+                        Packets = finalSnapshot.SourcePackets,
+                        Timeouts = finalSnapshot.SourceTimeouts,
+                        Reconnects = finalSnapshot.SourceReconnects,
+                        IncludeLastActivityAgeSeconds = true,
+                        LastActivityAgeSeconds = finalSnapshot.SourceLastActivityAgeSec.ToString("F3"),
+                    });
                 builder.AppendLine("path_selection_available=" + finalSnapshot.HasPathSelection);
                 builder.AppendLine("path_selection_kind=" + finalSnapshot.PathSelectionKind);
                 builder.AppendLine("frame_contract_available=" + finalSnapshot.HasFrameContract);
