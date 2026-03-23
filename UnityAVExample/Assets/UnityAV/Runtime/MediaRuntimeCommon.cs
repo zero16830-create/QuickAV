@@ -5366,6 +5366,45 @@ namespace UnityAV
 
         internal static PlaybackTimingAuditStringsView CreateObservedPlaybackTimingAuditStringsExtended(
             bool available,
+            double masterTimeSec,
+            long masterTimeUs,
+            double externalTimeSec,
+            long externalTimeUs,
+            bool hasAudioTimeSec,
+            double audioTimeSec,
+            bool hasAudioTimeUs,
+            long audioTimeUs,
+            bool hasAudioPresentedTimeSec,
+            double audioPresentedTimeSec,
+            bool hasAudioPresentedTimeUs,
+            long audioPresentedTimeUs,
+            double audioSinkDelaySec,
+            long audioSinkDelayUs,
+            bool hasMicrosecondMirror,
+            bool hasAudioClock)
+        {
+            return CreateObservedPlaybackTimingAuditStringsExtended(
+                available,
+                masterTimeSec.ToString("F3"),
+                masterTimeUs.ToString(),
+                externalTimeSec.ToString("F3"),
+                externalTimeUs.ToString(),
+                hasAudioTimeSec.ToString(),
+                audioTimeSec.ToString("F3"),
+                hasAudioTimeUs.ToString(),
+                audioTimeUs.ToString(),
+                hasAudioPresentedTimeSec.ToString(),
+                audioPresentedTimeSec.ToString("F3"),
+                hasAudioPresentedTimeUs.ToString(),
+                audioPresentedTimeUs.ToString(),
+                (audioSinkDelaySec * 1000.0).ToString("F1"),
+                audioSinkDelayUs.ToString(),
+                hasMicrosecondMirror.ToString(),
+                hasAudioClock.ToString());
+        }
+
+        internal static PlaybackTimingAuditStringsView CreateObservedPlaybackTimingAuditStringsExtended(
+            bool available,
             string masterTimeSec,
             string masterTimeUs,
             string externalTimeSec,
@@ -5409,6 +5448,35 @@ namespace UnityAV
             bool available,
             string model,
             string anchorKind,
+            bool hasCurrentSourceTimeUs,
+            long currentSourceTimeUs,
+            bool hasTimelineOriginUs,
+            long timelineOriginUs,
+            bool hasAnchorValueUs,
+            long anchorValueUs,
+            bool hasAnchorMonoUs,
+            long anchorMonoUs,
+            bool isRealtime)
+        {
+            return CreateObservedSourceTimelineAuditStrings(
+                available,
+                model,
+                anchorKind,
+                hasCurrentSourceTimeUs.ToString(),
+                currentSourceTimeUs.ToString(),
+                hasTimelineOriginUs.ToString(),
+                timelineOriginUs.ToString(),
+                hasAnchorValueUs.ToString(),
+                anchorValueUs.ToString(),
+                hasAnchorMonoUs.ToString(),
+                anchorMonoUs.ToString(),
+                isRealtime.ToString());
+        }
+
+        internal static SourceTimelineAuditStringsView CreateObservedSourceTimelineAuditStrings(
+            bool available,
+            string model,
+            string anchorKind,
             string hasCurrentSourceTimeUs,
             string currentSourceTimeUs,
             string hasTimelineOriginUs,
@@ -5434,6 +5502,31 @@ namespace UnityAV
                 AnchorMonoUs = anchorMonoUs,
                 IsRealtime = isRealtime,
             };
+        }
+
+        internal static PassiveAvSyncAuditStringsView CreateObservedPassiveAvSyncAuditStrings(
+            bool available,
+            long rawOffsetUs,
+            long smoothOffsetUs,
+            double driftPpm,
+            long driftInterceptUs,
+            uint driftSampleCount,
+            string videoSchedule,
+            double audioResampleRatio,
+            bool audioResampleActive,
+            bool shouldRebuildAnchor)
+        {
+            return CreateObservedPassiveAvSyncAuditStrings(
+                available,
+                rawOffsetUs.ToString(),
+                smoothOffsetUs.ToString("F3"),
+                driftPpm.ToString("F3"),
+                driftInterceptUs.ToString(),
+                driftSampleCount.ToString(),
+                videoSchedule,
+                audioResampleRatio.ToString("F6"),
+                audioResampleActive.ToString(),
+                shouldRebuildAnchor.ToString());
         }
 
         internal static PassiveAvSyncAuditStringsView CreateObservedPassiveAvSyncAuditStrings(
@@ -5478,6 +5571,31 @@ namespace UnityAV
 
         internal static AvSyncEnterpriseAuditStringsView CreateObservedAvSyncEnterpriseAuditStringsExtended(
             bool available,
+            uint sampleCount,
+            long windowSpanUs,
+            long latestRawOffsetUs,
+            long latestSmoothOffsetUs,
+            double driftSlopePpm,
+            double driftProjected2hMs,
+            long offsetAbsP95Us,
+            long offsetAbsP99Us,
+            long offsetAbsMaxUs)
+        {
+            return CreateObservedAvSyncEnterpriseAuditStringsExtended(
+                available,
+                sampleCount.ToString(),
+                windowSpanUs.ToString(),
+                latestRawOffsetUs.ToString(),
+                latestSmoothOffsetUs.ToString(),
+                driftSlopePpm.ToString("F3"),
+                driftProjected2hMs.ToString("F3"),
+                offsetAbsP95Us.ToString(),
+                offsetAbsP99Us.ToString(),
+                offsetAbsMaxUs.ToString());
+        }
+
+        internal static AvSyncEnterpriseAuditStringsView CreateObservedAvSyncEnterpriseAuditStringsExtended(
+            bool available,
             string sampleCount,
             string windowSpanUs,
             string latestRawOffsetUs,
@@ -5501,6 +5619,45 @@ namespace UnityAV
                 OffsetAbsP99Us = offsetAbsP99Us,
                 OffsetAbsMaxUs = offsetAbsMaxUs,
             };
+        }
+
+        internal static AudioOutputPolicyAuditStringsView CreateObservedAudioOutputPolicyAuditStrings(
+            bool available,
+            int fileStartThresholdMilliseconds,
+            int androidFileStartThresholdMilliseconds,
+            int realtimeStartThresholdMilliseconds,
+            int realtimeStartupGraceMilliseconds,
+            int realtimeStartupMinimumThresholdMilliseconds,
+            int fileRingCapacityMilliseconds,
+            int androidFileRingCapacityMilliseconds,
+            int realtimeRingCapacityMilliseconds,
+            int fileBufferedCeilingMilliseconds,
+            int androidFileBufferedCeilingMilliseconds,
+            int realtimeBufferedCeilingMilliseconds,
+            int realtimeStartupAdditionalSinkDelayMilliseconds,
+            int realtimeSteadyAdditionalSinkDelayMilliseconds,
+            int realtimeBackendAdditionalSinkDelayMilliseconds,
+            bool realtimeStartRequiresVideoFrame,
+            bool allowAndroidFileOutputRateBridge)
+        {
+            return CreateObservedAudioOutputPolicyAuditStrings(
+                available,
+                fileStartThresholdMilliseconds.ToString(),
+                androidFileStartThresholdMilliseconds.ToString(),
+                realtimeStartThresholdMilliseconds.ToString(),
+                realtimeStartupGraceMilliseconds.ToString(),
+                realtimeStartupMinimumThresholdMilliseconds.ToString(),
+                fileRingCapacityMilliseconds.ToString(),
+                androidFileRingCapacityMilliseconds.ToString(),
+                realtimeRingCapacityMilliseconds.ToString(),
+                fileBufferedCeilingMilliseconds.ToString(),
+                androidFileBufferedCeilingMilliseconds.ToString(),
+                realtimeBufferedCeilingMilliseconds.ToString(),
+                realtimeStartupAdditionalSinkDelayMilliseconds.ToString(),
+                realtimeSteadyAdditionalSinkDelayMilliseconds.ToString(),
+                realtimeBackendAdditionalSinkDelayMilliseconds.ToString(),
+                realtimeStartRequiresVideoFrame.ToString(),
+                allowAndroidFileOutputRateBridge.ToString());
         }
 
         internal static AudioOutputPolicyAuditStringsView CreateObservedAudioOutputPolicyAuditStrings(
