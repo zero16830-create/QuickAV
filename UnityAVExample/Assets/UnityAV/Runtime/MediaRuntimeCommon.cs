@@ -2543,6 +2543,22 @@ namespace UnityAV
             };
         }
 
+        internal static PlayerSessionAuditStringsView CreateDefaultPlayerSessionAuditStrings()
+        {
+            return CreatePlayerSessionAuditStringsFallback(
+                false,
+                "n/a",
+                "n/a",
+                "n/a",
+                "n/a",
+                "n/a",
+                "n/a",
+                "False",
+                "False",
+                "False",
+                "False");
+        }
+
         internal static PlayerSessionAuditStringsView CreateResolvedPlayerSessionAuditStrings(
             string observedLifecycleState,
             string observedPublicState,
@@ -5364,6 +5380,17 @@ namespace UnityAV
             };
         }
 
+        internal static PlaybackTimingAuditStringsView CreateDefaultObservedPlaybackTimingAuditStrings()
+        {
+            return CreateObservedPlaybackTimingAuditStrings(
+                false,
+                "n/a",
+                "n/a",
+                "n/a",
+                "n/a",
+                "False");
+        }
+
         internal static PlaybackTimingAuditStringsView CreateObservedPlaybackTimingAuditStringsExtended(
             bool available,
             double masterTimeSec,
@@ -5504,6 +5531,23 @@ namespace UnityAV
             };
         }
 
+        internal static SourceTimelineAuditStringsView CreateDefaultObservedSourceTimelineAuditStrings()
+        {
+            return CreateObservedSourceTimelineAuditStrings(
+                false,
+                "n/a",
+                "n/a",
+                "False",
+                "n/a",
+                "False",
+                "n/a",
+                "False",
+                "n/a",
+                "False",
+                "n/a",
+                "False");
+        }
+
         internal static PassiveAvSyncAuditStringsView CreateObservedPassiveAvSyncAuditStrings(
             bool available,
             long rawOffsetUs,
@@ -5556,6 +5600,21 @@ namespace UnityAV
             };
         }
 
+        internal static PassiveAvSyncAuditStringsView CreateDefaultObservedPassiveAvSyncAuditStrings()
+        {
+            return CreateObservedPassiveAvSyncAuditStrings(
+                false,
+                "n/a",
+                "n/a",
+                "n/a",
+                "n/a",
+                "n/a",
+                "n/a",
+                "n/a",
+                "False",
+                "False");
+        }
+
         internal static AvSyncEnterpriseAuditStringsView CreateObservedAvSyncEnterpriseAuditStrings(
             bool available,
             string sampleCount,
@@ -5567,6 +5626,14 @@ namespace UnityAV
                 SampleCount = sampleCount,
                 DriftProjected2hMs = driftProjected2hMs,
             };
+        }
+
+        internal static AvSyncEnterpriseAuditStringsView CreateDefaultObservedAvSyncEnterpriseAuditStrings()
+        {
+            return CreateObservedAvSyncEnterpriseAuditStrings(
+                false,
+                "n/a",
+                "n/a");
         }
 
         internal static AvSyncEnterpriseAuditStringsView CreateObservedAvSyncEnterpriseAuditStringsExtended(
@@ -5699,6 +5766,28 @@ namespace UnityAV
                 RealtimeStartRequiresVideoFrame = realtimeStartRequiresVideoFrame,
                 AllowAndroidFileOutputRateBridge = allowAndroidFileOutputRateBridge,
             };
+        }
+
+        internal static AudioOutputPolicyAuditStringsView CreateDefaultObservedAudioOutputPolicyAuditStrings()
+        {
+            return CreateObservedAudioOutputPolicyAuditStrings(
+                false,
+                "n/a",
+                "n/a",
+                "n/a",
+                "n/a",
+                "n/a",
+                "n/a",
+                "n/a",
+                "n/a",
+                "n/a",
+                "n/a",
+                "n/a",
+                "n/a",
+                "n/a",
+                "n/a",
+                "False",
+                "False");
         }
 
         internal static void AppendValidationSummaryPlayerSession(
