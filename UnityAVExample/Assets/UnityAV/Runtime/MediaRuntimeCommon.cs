@@ -1651,6 +1651,29 @@ namespace UnityAV
             public string Kind;
         }
 
+        internal struct ValidationSummaryEnterpriseMetricsView
+        {
+            public string SessionId;
+            public string SourceType;
+            public string AudioClockUs;
+            public string VideoPtsUs;
+            public string OffsetUs;
+            public string OffsetSmoothUs;
+            public string DriftPpm;
+            public string AudioBufferMs;
+            public string VideoQueueDepth;
+            public string DropFrames;
+            public string DuplicateFrames;
+            public string RebufferCount;
+            public string SyncRebuildCount;
+            public string AudioResampleRatio;
+            public string Platform;
+            public string DeviceModel;
+            public string AvOffsetMeanMs;
+            public string AvOffsetP95Ms;
+            public string AvOffsetP99Ms;
+        }
+
         internal struct AvSyncEnterpriseMetricsView
         {
             public uint SampleCount;
@@ -6675,6 +6698,126 @@ namespace UnityAV
             builder.AppendLine("path_selection_kind=" + summary.Kind);
         }
 
+        internal static ValidationSummaryEnterpriseMetricsView
+            CreateValidationSummaryEnterpriseMetrics(
+                int sessionId,
+                string sourceTimelineModel,
+                string uri,
+                bool hasAvSyncContract,
+                bool hasAvSyncAudioClockSec,
+                double avSyncAudioClockSec,
+                bool hasAvSyncVideoClockSec,
+                double avSyncVideoClockSec,
+                ulong avSyncDropTotal,
+                ulong avSyncDuplicateTotal,
+                bool hasPlaybackTimingContract,
+                bool hasPlaybackAudioPresentedTimeUs,
+                long playbackAudioPresentedTimeUs,
+                bool hasPlaybackAudioTimeUs,
+                long playbackAudioTimeUs,
+                bool hasPresentedVideoTime,
+                double presentedVideoTimeSec,
+                bool hasPassiveAvSyncSnapshot,
+                long passiveRawOffsetUs,
+                long passiveSmoothOffsetUs,
+                double passiveDriftPpm,
+                double passiveAudioResampleRatio,
+                bool hasAvSyncEnterpriseMetrics,
+                double avSyncEnterpriseDriftSlopePpm,
+                long avSyncEnterpriseOffsetAbsP95Us,
+                long avSyncEnterpriseOffsetAbsP99Us,
+                int reportedBufferedSamples,
+                int audioSampleRate,
+                int audioChannels,
+                RuntimePlatform platform,
+                string deviceModel)
+        {
+            return new ValidationSummaryEnterpriseMetricsView
+            {
+                SessionId = sessionId >= 0 ? sessionId.ToString() : "n/a",
+                SourceType = ResolveValidationSummarySourceType(sourceTimelineModel, uri),
+                AudioClockUs = ResolveValidationSummaryAudioClockUs(
+                    hasAvSyncContract,
+                    hasAvSyncAudioClockSec,
+                    avSyncAudioClockSec,
+                    hasPlaybackTimingContract,
+                    hasPlaybackAudioPresentedTimeUs,
+                    playbackAudioPresentedTimeUs,
+                    hasPlaybackAudioTimeUs,
+                    playbackAudioTimeUs),
+                VideoPtsUs = ResolveValidationSummaryVideoPtsUs(
+                    hasAvSyncContract,
+                    hasAvSyncVideoClockSec,
+                    avSyncVideoClockSec,
+                    hasPresentedVideoTime,
+                    presentedVideoTimeSec),
+                OffsetUs = ResolveValidationSummaryOffsetUs(
+                    hasAvSyncContract,
+                    hasAvSyncAudioClockSec,
+                    avSyncAudioClockSec,
+                    hasAvSyncVideoClockSec,
+                    avSyncVideoClockSec,
+                    hasPassiveAvSyncSnapshot,
+                    passiveRawOffsetUs),
+                OffsetSmoothUs = hasPassiveAvSyncSnapshot
+                    ? passiveSmoothOffsetUs.ToString()
+                    : "n/a",
+                DriftPpm = ResolveValidationSummaryDriftPpm(
+                    hasPassiveAvSyncSnapshot,
+                    passiveDriftPpm,
+                    hasAvSyncEnterpriseMetrics,
+                    avSyncEnterpriseDriftSlopePpm),
+                AudioBufferMs = ResolveValidationSummaryBufferedMilliseconds(
+                    reportedBufferedSamples,
+                    audioSampleRate,
+                    audioChannels),
+                VideoQueueDepth = "n/a",
+                DropFrames = hasAvSyncContract ? avSyncDropTotal.ToString() : "n/a",
+                DuplicateFrames = hasAvSyncContract ? avSyncDuplicateTotal.ToString() : "n/a",
+                RebufferCount = "n/a",
+                SyncRebuildCount = "n/a",
+                AudioResampleRatio = hasPassiveAvSyncSnapshot
+                    ? passiveAudioResampleRatio.ToString("F6")
+                    : "n/a",
+                Platform = platform.ToString(),
+                DeviceModel = ResolveValidationSummaryDeviceModel(deviceModel),
+                AvOffsetMeanMs = "n/a",
+                AvOffsetP95Ms = hasAvSyncEnterpriseMetrics
+                    ? FormatValidationSummaryMillisecondsFromMicroseconds(
+                        avSyncEnterpriseOffsetAbsP95Us)
+                    : "n/a",
+                AvOffsetP99Ms = hasAvSyncEnterpriseMetrics
+                    ? FormatValidationSummaryMillisecondsFromMicroseconds(
+                        avSyncEnterpriseOffsetAbsP99Us)
+                    : "n/a",
+            };
+        }
+
+        internal static void AppendValidationSummaryEnterpriseMetrics(
+            StringBuilder builder,
+            ValidationSummaryEnterpriseMetricsView summary)
+        {
+            builder.AppendLine("session_id=" + summary.SessionId);
+            builder.AppendLine("source_type=" + summary.SourceType);
+            builder.AppendLine("audio_clock_us=" + summary.AudioClockUs);
+            builder.AppendLine("video_pts_us=" + summary.VideoPtsUs);
+            builder.AppendLine("offset_us=" + summary.OffsetUs);
+            builder.AppendLine("offset_smooth_us=" + summary.OffsetSmoothUs);
+            builder.AppendLine("drift_ppm=" + summary.DriftPpm);
+            builder.AppendLine("audio_buffer_ms=" + summary.AudioBufferMs);
+            builder.AppendLine("video_queue_depth=" + summary.VideoQueueDepth);
+            builder.AppendLine("drop_frames=" + summary.DropFrames);
+            builder.AppendLine("duplicate_frames=" + summary.DuplicateFrames);
+            builder.AppendLine("rebuffer_count=" + summary.RebufferCount);
+            builder.AppendLine("sync_rebuild_count=" + summary.SyncRebuildCount);
+            builder.AppendLine("audio_resample_ratio=" + summary.AudioResampleRatio);
+            builder.AppendLine("platform=" + summary.Platform);
+            builder.AppendLine("device_model=" + summary.DeviceModel);
+            builder.AppendLine("av_offset_mean_ms=" + summary.AvOffsetMeanMs);
+            builder.AppendLine("av_offset_p95_ms=" + summary.AvOffsetP95Ms);
+            builder.AppendLine("av_offset_p99_ms=" + summary.AvOffsetP99Ms);
+        }
+
         internal static ValidationSummaryFrameContractView CreateValidationSummaryFrameContract(
             bool available,
             string memoryKind,
@@ -6888,6 +7031,174 @@ namespace UnityAV
                 Started = playbackTimeSec >= 0.0,
                 Source = "playback_time",
             };
+        }
+
+        private static string ResolveValidationSummarySourceType(
+            string sourceTimelineModel,
+            string uri)
+        {
+            switch (sourceTimelineModel)
+            {
+                case "FileMediaPtsUs":
+                    return "file";
+                case "RtspRtpNtpMono":
+                    return "rtsp";
+                case "RtmpBaseMonoUs":
+                    return "rtmp";
+            }
+
+            if (string.IsNullOrWhiteSpace(uri))
+            {
+                return "unknown";
+            }
+
+            Uri parsedUri;
+            if (Uri.TryCreate(uri, UriKind.Absolute, out parsedUri))
+            {
+                if (parsedUri.IsFile)
+                {
+                    return "file";
+                }
+
+                if (string.Equals(parsedUri.Scheme, "rtsp", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "rtsp";
+                }
+
+                if (string.Equals(parsedUri.Scheme, "rtmp", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(parsedUri.Scheme, "rtmps", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "rtmp";
+                }
+            }
+
+            return "unknown";
+        }
+
+        private static string ResolveValidationSummaryAudioClockUs(
+            bool hasAvSyncContract,
+            bool hasAvSyncAudioClockSec,
+            double avSyncAudioClockSec,
+            bool hasPlaybackTimingContract,
+            bool hasPlaybackAudioPresentedTimeUs,
+            long playbackAudioPresentedTimeUs,
+            bool hasPlaybackAudioTimeUs,
+            long playbackAudioTimeUs)
+        {
+            if (hasAvSyncContract && hasAvSyncAudioClockSec)
+            {
+                return FormatValidationSummaryMicrosecondsFromSeconds(avSyncAudioClockSec);
+            }
+
+            if (hasPlaybackTimingContract && hasPlaybackAudioPresentedTimeUs)
+            {
+                return playbackAudioPresentedTimeUs.ToString();
+            }
+
+            if (hasPlaybackTimingContract && hasPlaybackAudioTimeUs)
+            {
+                return playbackAudioTimeUs.ToString();
+            }
+
+            return "n/a";
+        }
+
+        private static string ResolveValidationSummaryVideoPtsUs(
+            bool hasAvSyncContract,
+            bool hasAvSyncVideoClockSec,
+            double avSyncVideoClockSec,
+            bool hasPresentedVideoTime,
+            double presentedVideoTimeSec)
+        {
+            if (hasAvSyncContract && hasAvSyncVideoClockSec)
+            {
+                return FormatValidationSummaryMicrosecondsFromSeconds(avSyncVideoClockSec);
+            }
+
+            if (hasPresentedVideoTime)
+            {
+                return FormatValidationSummaryMicrosecondsFromSeconds(presentedVideoTimeSec);
+            }
+
+            return "n/a";
+        }
+
+        private static string ResolveValidationSummaryOffsetUs(
+            bool hasAvSyncContract,
+            bool hasAvSyncAudioClockSec,
+            double avSyncAudioClockSec,
+            bool hasAvSyncVideoClockSec,
+            double avSyncVideoClockSec,
+            bool hasPassiveAvSyncSnapshot,
+            long passiveRawOffsetUs)
+        {
+            if (hasAvSyncContract && hasAvSyncAudioClockSec && hasAvSyncVideoClockSec)
+            {
+                return Math.Round(
+                    (avSyncAudioClockSec - avSyncVideoClockSec) * 1000000.0).ToString();
+            }
+
+            if (hasPassiveAvSyncSnapshot)
+            {
+                return passiveRawOffsetUs.ToString();
+            }
+
+            return "n/a";
+        }
+
+        private static string ResolveValidationSummaryDriftPpm(
+            bool hasPassiveAvSyncSnapshot,
+            double passiveDriftPpm,
+            bool hasAvSyncEnterpriseMetrics,
+            double avSyncEnterpriseDriftSlopePpm)
+        {
+            if (hasPassiveAvSyncSnapshot)
+            {
+                return passiveDriftPpm.ToString("F3");
+            }
+
+            if (hasAvSyncEnterpriseMetrics)
+            {
+                return avSyncEnterpriseDriftSlopePpm.ToString("F3");
+            }
+
+            return "n/a";
+        }
+
+        private static string ResolveValidationSummaryBufferedMilliseconds(
+            int bufferedSamples,
+            int audioSampleRate,
+            int audioChannels)
+        {
+            if (bufferedSamples <= 0 || audioSampleRate <= 0 || audioChannels <= 0)
+            {
+                return "n/a";
+            }
+
+            return ((double)bufferedSamples * 1000.0 / (audioSampleRate * audioChannels))
+                .ToString("F3");
+        }
+
+        private static string ResolveValidationSummaryDeviceModel(string deviceModel)
+        {
+            return string.IsNullOrWhiteSpace(deviceModel)
+                ? "unknown"
+                : deviceModel.Trim();
+        }
+
+        private static string FormatValidationSummaryMicrosecondsFromSeconds(double valueSec)
+        {
+            if (double.IsNaN(valueSec) || double.IsInfinity(valueSec))
+            {
+                return "n/a";
+            }
+
+            return Math.Round(valueSec * 1000000.0).ToString();
+        }
+
+        private static string FormatValidationSummaryMillisecondsFromMicroseconds(long valueUs)
+        {
+            return (valueUs / 1000.0).ToString("F3");
         }
 
         internal static AudioStartRuntimeCommandView ResolveAudioStartRuntimeCommand(

@@ -1262,6 +1262,40 @@ namespace UnityAV
                 MediaNativeInteropCommon.AppendValidationSummaryPassiveAvSync(
                     builder,
                     summaryPassiveAvSync);
+                MediaNativeInteropCommon.AppendValidationSummaryEnterpriseMetrics(
+                    builder,
+                    MediaNativeInteropCommon.CreateValidationSummaryEnterpriseMetrics(
+                        sessionId: Player != null ? Player.SessionId : -1,
+                        sourceTimelineModel: finalSnapshot.SourceTimelineModel,
+                        uri: Player != null ? Player.Uri : string.Empty,
+                        hasAvSyncContract: finalSnapshot.HasAvSyncContract,
+                        hasAvSyncAudioClockSec: finalSnapshot.AvSyncContractHasAudioClockSec,
+                        avSyncAudioClockSec: finalSnapshot.AvSyncContractAudioClockSec,
+                        hasAvSyncVideoClockSec: finalSnapshot.AvSyncContractHasVideoClockSec,
+                        avSyncVideoClockSec: finalSnapshot.AvSyncContractVideoClockSec,
+                        avSyncDropTotal: finalSnapshot.AvSyncContractDropTotal,
+                        avSyncDuplicateTotal: finalSnapshot.AvSyncContractDuplicateTotal,
+                        hasPlaybackTimingContract: finalSnapshot.HasPlaybackTimingContract,
+                        hasPlaybackAudioPresentedTimeUs: finalSnapshot.PlaybackContractHasAudioPresentedTimeUs,
+                        playbackAudioPresentedTimeUs: finalSnapshot.PlaybackContractAudioPresentedTimeUs,
+                        hasPlaybackAudioTimeUs: finalSnapshot.PlaybackContractHasAudioTimeUs,
+                        playbackAudioTimeUs: finalSnapshot.PlaybackContractAudioTimeUs,
+                        hasPresentedVideoTime: finalSnapshot.HasPresentedVideoTime,
+                        presentedVideoTimeSec: finalSnapshot.PresentedVideoTimeSec,
+                        hasPassiveAvSyncSnapshot: finalSnapshot.HasPassiveAvSyncSnapshot,
+                        passiveRawOffsetUs: finalSnapshot.PassiveAvSyncRawOffsetUs,
+                        passiveSmoothOffsetUs: finalSnapshot.PassiveAvSyncSmoothOffsetUs,
+                        passiveDriftPpm: finalSnapshot.PassiveAvSyncDriftPpm,
+                        passiveAudioResampleRatio: finalSnapshot.PassiveAvSyncAudioResampleRatio,
+                        hasAvSyncEnterpriseMetrics: finalSnapshot.HasAvSyncEnterpriseMetrics,
+                        avSyncEnterpriseDriftSlopePpm: finalSnapshot.AvSyncEnterpriseDriftSlopePpm,
+                        avSyncEnterpriseOffsetAbsP95Us: finalSnapshot.AvSyncEnterpriseOffsetAbsP95Us,
+                        avSyncEnterpriseOffsetAbsP99Us: finalSnapshot.AvSyncEnterpriseOffsetAbsP99Us,
+                        reportedBufferedSamples: finalSnapshot.PlayerSessionReportedBufferedSamples,
+                        audioSampleRate: Player != null ? Player.AudioSampleRate : 0,
+                        audioChannels: Player != null ? Player.AudioChannels : 0,
+                        platform: Application.platform,
+                        deviceModel: SystemInfo.deviceModel));
                 builder.AppendLine("summary_path=" + summaryPath);
                 File.WriteAllText(summaryPath, builder.ToString(), Encoding.UTF8);
                 Debug.Log(

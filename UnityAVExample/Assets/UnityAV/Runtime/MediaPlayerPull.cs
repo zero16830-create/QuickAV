@@ -420,6 +420,21 @@ namespace UnityAV
             get { return _actualVideoRenderer; }
         }
 
+        internal int SessionId
+        {
+            get { return _id; }
+        }
+
+        internal int AudioSampleRate
+        {
+            get { return _audioSampleRate; }
+        }
+
+        internal int AudioChannels
+        {
+            get { return _audioChannels; }
+        }
+
         public bool HasPresentedVideoFrame
         {
             get { return _lastFrameIndex >= 0; }
