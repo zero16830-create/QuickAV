@@ -409,7 +409,7 @@ namespace UnityAV
                     Screen.fullScreen,
                     Screen.fullScreenMode,
                     backendRuntimeObservation.ActualBackend,
-                    "NativeVideoPreferred",
+                    backendRuntimeObservation.RequestedVideoRenderer,
                     nativeVideoRuntimeObservation.ActualRenderer,
                     _observedPlaybackContractAvailable,
                     _observedPlaybackContractMasterTimeSec,
