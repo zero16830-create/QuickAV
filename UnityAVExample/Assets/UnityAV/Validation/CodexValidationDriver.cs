@@ -218,12 +218,10 @@ namespace UnityAV
                 if (!_validationWindowStarted)
                 {
                     var startupElapsed = now - startTime;
+                    var validationGateInputs = CreateValidationGateInputs(snapshot);
                     var validationWindowStartObservation =
                         MediaNativeInteropCommon.CreatePullValidationWindowStartObservation(
-                            snapshot.HasTexture,
-                            RequireAudioOutput,
-                            Player.EnableAudio,
-                            snapshot.AudioPlaying,
+                            validationGateInputs,
                             startupElapsed,
                             StartupTimeoutSeconds);
                     if (validationWindowStartObservation.ShouldStart)
@@ -934,20 +932,40 @@ namespace UnityAV
                     startupElapsed));
         }
 
+        private MediaNativeInteropCommon.PullValidationGateInputsView
+            CreateValidationGateInputs(ValidationSnapshot snapshot)
+        {
+            return new MediaNativeInteropCommon.PullValidationGateInputsView
+            {
+                HasTexture = snapshot.HasTexture,
+                RequireAudioOutput = RequireAudioOutput,
+                AudioEnabled = Player != null && Player.EnableAudio,
+                AudioPlaying = snapshot.AudioPlaying,
+                Started = snapshot.Started,
+                PlaybackTimeSec = snapshot.PlaybackTime,
+            };
+        }
+
+        private MediaNativeInteropCommon.ValidationWindowEvidenceObservationView
+            CreateValidationEvidenceObservation()
+        {
+            return new MediaNativeInteropCommon.ValidationWindowEvidenceObservationView
+            {
+                ObservedTextureDuringWindow = _observedTextureDuringWindow,
+                ObservedAudioDuringWindow = _observedAudioDuringWindow,
+                ObservedStartedDuringWindow = _observedStartedDuringWindow,
+                ObservedNativeFrameDuringWindow = false,
+                MaxObservedPlaybackTime = _maxObservedPlaybackTime,
+            };
+        }
+
         private void RecordValidationObservation(ValidationSnapshot snapshot)
         {
+            var validationGateInputs = CreateValidationGateInputs(snapshot);
             var evidenceObservation =
-                MediaNativeInteropCommon.AccumulateValidationWindowEvidenceObservation(
-                    _observedTextureDuringWindow,
-                    _observedAudioDuringWindow,
-                    _observedStartedDuringWindow,
-                    false,
-                    _maxObservedPlaybackTime,
-                    snapshot.HasTexture,
-                    snapshot.AudioPlaying,
-                    snapshot.Started,
-                    false,
-                    snapshot.PlaybackTime);
+                MediaNativeInteropCommon.AccumulatePullValidationWindowEvidenceObservation(
+                    CreateValidationEvidenceObservation(),
+                    validationGateInputs);
             _observedTextureDuringWindow =
                 evidenceObservation.ObservedTextureDuringWindow;
             _observedAudioDuringWindow =
@@ -962,17 +980,15 @@ namespace UnityAV
         {
             RecordValidationObservation(finalSnapshot);
 
+            var validationGateInputs = CreateValidationGateInputs(finalSnapshot);
             var resultObservation =
                 MediaNativeInteropCommon.CreatePullValidationResultObservation(
                     _validationWindowStartReason,
-                    _observedStartedDuringWindow,
-                    _observedTextureDuringWindow,
-                    _observedAudioDuringWindow,
-                    RequireAudioOutput,
-                    Player.EnableAudio,
+                    CreateValidationEvidenceObservation(),
+                    validationGateInputs.RequireAudioOutput,
+                    validationGateInputs.AudioEnabled,
                     MinimumPlaybackAdvanceSeconds,
-                    _validationWindowInitialPlaybackTime,
-                    _maxObservedPlaybackTime);
+                    _validationWindowInitialPlaybackTime);
             var playbackAdvance = resultObservation.PlaybackAdvanceSeconds;
 
             if (!resultObservation.Passed)

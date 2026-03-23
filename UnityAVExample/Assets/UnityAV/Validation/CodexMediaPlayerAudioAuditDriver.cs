@@ -327,11 +327,10 @@ namespace UnityAV
                 if (!_validationWindowStarted)
                 {
                     var startupElapsed = now - startTime;
+                    var validationGateInputs = CreateValidationGateInputs(snapshot);
                     var validationWindowStartObservation =
                         MediaNativeInteropCommon.CreateMediaPlayerValidationWindowStartObservation(
-                            snapshot.Started,
-                            snapshot.PlaybackTime,
-                            snapshot.HasPresentedNativeVideoFrame,
+                            validationGateInputs,
                             startupElapsed,
                             StartupTimeoutSeconds);
                     if (validationWindowStartObservation.ShouldStart)
@@ -615,20 +614,39 @@ namespace UnityAV
                     startupElapsed));
         }
 
+        private MediaNativeInteropCommon.MediaPlayerValidationGateInputsView
+            CreateValidationGateInputs(ValidationSnapshot snapshot)
+        {
+            return new MediaNativeInteropCommon.MediaPlayerValidationGateInputsView
+            {
+                HasTexture = snapshot.HasTexture,
+                AudioPlaying = snapshot.AudioPlaying,
+                Started = snapshot.Started,
+                HasPresentedNativeVideoFrame = snapshot.HasPresentedNativeVideoFrame,
+                PlaybackTimeSec = snapshot.PlaybackTime,
+            };
+        }
+
+        private MediaNativeInteropCommon.ValidationWindowEvidenceObservationView
+            CreateValidationEvidenceObservation()
+        {
+            return new MediaNativeInteropCommon.ValidationWindowEvidenceObservationView
+            {
+                ObservedTextureDuringWindow = _observedTextureDuringWindow,
+                ObservedAudioDuringWindow = _observedAudioDuringWindow,
+                ObservedStartedDuringWindow = _observedStartedDuringWindow,
+                ObservedNativeFrameDuringWindow = _observedNativeFrameDuringWindow,
+                MaxObservedPlaybackTime = _maxObservedPlaybackTime,
+            };
+        }
+
         private void RecordValidationObservation(ValidationSnapshot snapshot)
         {
+            var validationGateInputs = CreateValidationGateInputs(snapshot);
             var evidenceObservation =
-                MediaNativeInteropCommon.AccumulateValidationWindowEvidenceObservation(
-                    _observedTextureDuringWindow,
-                    _observedAudioDuringWindow,
-                    _observedStartedDuringWindow,
-                    _observedNativeFrameDuringWindow,
-                    _maxObservedPlaybackTime,
-                    snapshot.HasTexture,
-                    snapshot.AudioPlaying,
-                    snapshot.Started,
-                    snapshot.HasPresentedNativeVideoFrame,
-                    snapshot.PlaybackTime);
+                MediaNativeInteropCommon.AccumulateMediaPlayerValidationWindowEvidenceObservation(
+                    CreateValidationEvidenceObservation(),
+                    validationGateInputs);
             _observedTextureDuringWindow =
                 evidenceObservation.ObservedTextureDuringWindow;
             _observedAudioDuringWindow =
@@ -648,13 +666,9 @@ namespace UnityAV
             var resultObservation =
                 MediaNativeInteropCommon.CreateMediaPlayerValidationResultObservation(
                     _validationWindowStartReason,
-                    _observedStartedDuringWindow,
-                    _observedTextureDuringWindow,
-                    _observedNativeFrameDuringWindow,
-                    _observedAudioDuringWindow,
+                    CreateValidationEvidenceObservation(),
                     MinimumPlaybackAdvanceSeconds,
-                    _validationWindowInitialPlaybackTime,
-                    _maxObservedPlaybackTime);
+                    _validationWindowInitialPlaybackTime);
             var playbackAdvance = resultObservation.PlaybackAdvanceSeconds;
 
             if (!resultObservation.Passed)

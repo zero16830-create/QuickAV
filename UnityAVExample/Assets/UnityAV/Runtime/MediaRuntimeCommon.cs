@@ -1515,6 +1515,25 @@ namespace UnityAV
             public double MaxObservedPlaybackTime;
         }
 
+        internal struct PullValidationGateInputsView
+        {
+            public bool HasTexture;
+            public bool RequireAudioOutput;
+            public bool AudioEnabled;
+            public bool AudioPlaying;
+            public bool Started;
+            public double PlaybackTimeSec;
+        }
+
+        internal struct MediaPlayerValidationGateInputsView
+        {
+            public bool HasTexture;
+            public bool AudioPlaying;
+            public bool Started;
+            public bool HasPresentedNativeVideoFrame;
+            public double PlaybackTimeSec;
+        }
+
         internal struct ValidationSummaryHeaderView
         {
             public bool Passed;
@@ -4747,6 +4766,21 @@ namespace UnityAV
 
         internal static ValidationWindowStartObservationView
             CreatePullValidationWindowStartObservation(
+                PullValidationGateInputsView inputs,
+                float startupElapsedSeconds,
+                float startupTimeoutSeconds)
+        {
+            return CreatePullValidationWindowStartObservation(
+                inputs.HasTexture,
+                inputs.RequireAudioOutput,
+                inputs.AudioEnabled,
+                inputs.AudioPlaying,
+                startupElapsedSeconds,
+                startupTimeoutSeconds);
+        }
+
+        internal static ValidationWindowStartObservationView
+            CreatePullValidationWindowStartObservation(
                 bool hasTexture,
                 bool requireAudioOutput,
                 bool audioEnabled,
@@ -4779,6 +4813,20 @@ namespace UnityAV
                 ShouldStart = false,
                 Reason = string.Empty,
             };
+        }
+
+        internal static ValidationWindowStartObservationView
+            CreateMediaPlayerValidationWindowStartObservation(
+                MediaPlayerValidationGateInputsView inputs,
+                float startupElapsedSeconds,
+                float startupTimeoutSeconds)
+        {
+            return CreateMediaPlayerValidationWindowStartObservation(
+                inputs.Started,
+                inputs.PlaybackTimeSec,
+                inputs.HasPresentedNativeVideoFrame,
+                startupElapsedSeconds,
+                startupTimeoutSeconds);
         }
 
         internal static ValidationWindowStartObservationView
@@ -4828,6 +4876,27 @@ namespace UnityAV
             }
 
             return 0.0;
+        }
+
+        internal static ValidationResultObservationView
+            CreatePullValidationResultObservation(
+                string validationWindowStartReason,
+                ValidationWindowEvidenceObservationView evidenceObservation,
+                bool requireAudioOutput,
+                bool audioEnabled,
+                double minimumPlaybackAdvanceSeconds,
+                double validationWindowInitialPlaybackTimeSec)
+        {
+            return CreatePullValidationResultObservation(
+                validationWindowStartReason,
+                evidenceObservation.ObservedStartedDuringWindow,
+                evidenceObservation.ObservedTextureDuringWindow,
+                evidenceObservation.ObservedAudioDuringWindow,
+                requireAudioOutput,
+                audioEnabled,
+                minimumPlaybackAdvanceSeconds,
+                validationWindowInitialPlaybackTimeSec,
+                evidenceObservation.MaxObservedPlaybackTime);
         }
 
         internal static ValidationResultObservationView
@@ -4905,6 +4974,24 @@ namespace UnityAV
                 Reason = "steady-playback",
                 PlaybackAdvanceSeconds = playbackAdvanceSeconds,
             };
+        }
+
+        internal static ValidationResultObservationView
+            CreateMediaPlayerValidationResultObservation(
+                string validationWindowStartReason,
+                ValidationWindowEvidenceObservationView evidenceObservation,
+                double minimumPlaybackAdvanceSeconds,
+                double validationWindowInitialPlaybackTimeSec)
+        {
+            return CreateMediaPlayerValidationResultObservation(
+                validationWindowStartReason,
+                evidenceObservation.ObservedStartedDuringWindow,
+                evidenceObservation.ObservedTextureDuringWindow,
+                evidenceObservation.ObservedNativeFrameDuringWindow,
+                evidenceObservation.ObservedAudioDuringWindow,
+                minimumPlaybackAdvanceSeconds,
+                validationWindowInitialPlaybackTimeSec,
+                evidenceObservation.MaxObservedPlaybackTime);
         }
 
         internal static ValidationResultObservationView
@@ -5072,6 +5159,42 @@ namespace UnityAV
                 TextureWidth = hasTexture ? texture.width : 0,
                 TextureHeight = hasTexture ? texture.height : 0,
             };
+        }
+
+        internal static ValidationWindowEvidenceObservationView
+            AccumulatePullValidationWindowEvidenceObservation(
+                ValidationWindowEvidenceObservationView currentObservation,
+                PullValidationGateInputsView inputs)
+        {
+            return AccumulateValidationWindowEvidenceObservation(
+                currentObservation.ObservedTextureDuringWindow,
+                currentObservation.ObservedAudioDuringWindow,
+                currentObservation.ObservedStartedDuringWindow,
+                currentObservation.ObservedNativeFrameDuringWindow,
+                currentObservation.MaxObservedPlaybackTime,
+                inputs.HasTexture,
+                inputs.AudioPlaying,
+                inputs.Started,
+                false,
+                inputs.PlaybackTimeSec);
+        }
+
+        internal static ValidationWindowEvidenceObservationView
+            AccumulateMediaPlayerValidationWindowEvidenceObservation(
+                ValidationWindowEvidenceObservationView currentObservation,
+                MediaPlayerValidationGateInputsView inputs)
+        {
+            return AccumulateValidationWindowEvidenceObservation(
+                currentObservation.ObservedTextureDuringWindow,
+                currentObservation.ObservedAudioDuringWindow,
+                currentObservation.ObservedStartedDuringWindow,
+                currentObservation.ObservedNativeFrameDuringWindow,
+                currentObservation.MaxObservedPlaybackTime,
+                inputs.HasTexture,
+                inputs.AudioPlaying,
+                inputs.Started,
+                inputs.HasPresentedNativeVideoFrame,
+                inputs.PlaybackTimeSec);
         }
 
         internal static ValidationWindowEvidenceObservationView
