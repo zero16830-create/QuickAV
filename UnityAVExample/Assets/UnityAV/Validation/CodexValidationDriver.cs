@@ -1125,27 +1125,64 @@ namespace UnityAV
                         finalSnapshot.PassiveAvSyncAudioResampleRatio.ToString("F6"),
                         finalSnapshot.PassiveAvSyncAudioResampleActive.ToString(),
                         finalSnapshot.PassiveAvSyncShouldRebuildAnchor.ToString());
+                var summaryPlaybackContract =
+                    MediaNativeInteropCommon.CreateObservedPlaybackTimingAuditStringsExtended(
+                        finalSnapshot.HasPlaybackTimingContract,
+                        finalSnapshot.PlaybackContractMasterTimeSec.ToString("F3"),
+                        finalSnapshot.PlaybackContractMasterTimeUs.ToString(),
+                        finalSnapshot.PlaybackContractExternalTimeSec.ToString("F3"),
+                        finalSnapshot.PlaybackContractExternalTimeUs.ToString(),
+                        finalSnapshot.PlaybackContractHasAudioTimeSec.ToString(),
+                        finalSnapshot.PlaybackContractAudioTimeSec.ToString("F3"),
+                        finalSnapshot.PlaybackContractHasAudioTimeUs.ToString(),
+                        finalSnapshot.PlaybackContractAudioTimeUs.ToString(),
+                        finalSnapshot.PlaybackContractHasAudioPresentedTimeSec.ToString(),
+                        finalSnapshot.PlaybackContractAudioPresentedTimeSec.ToString("F3"),
+                        finalSnapshot.PlaybackContractHasAudioPresentedTimeUs.ToString(),
+                        finalSnapshot.PlaybackContractAudioPresentedTimeUs.ToString(),
+                        (finalSnapshot.PlaybackContractAudioSinkDelaySec * 1000.0).ToString("F1"),
+                        finalSnapshot.PlaybackContractAudioSinkDelayUs.ToString(),
+                        finalSnapshot.PlaybackContractHasMicrosecondMirror.ToString(),
+                        finalSnapshot.PlaybackContractHasAudioClock.ToString());
+                var summaryPlayerSession =
+                    MediaNativeInteropCommon.CreateValidationSummaryPlayerSessionExtended(
+                        finalSnapshot.PlayerSessionLifecycleState.ToString(),
+                        finalSnapshot.PlayerSessionPublicState.ToString(),
+                        finalSnapshot.PlayerSessionRuntimeState.ToString(),
+                        finalSnapshot.PlayerSessionPlaybackIntent.ToString(),
+                        finalSnapshot.PlayerSessionStopReason.ToString(),
+                        finalSnapshot.PlayerSessionSourceState.ToString(),
+                        finalSnapshot.PlayerSessionCanSeek.ToString(),
+                        finalSnapshot.PlayerSessionIsRealtime.ToString(),
+                        finalSnapshot.PlayerSessionIsBuffering.ToString(),
+                        finalSnapshot.PlayerSessionIsSyncing.ToString(),
+                        finalSnapshot.PlayerSessionAudioStartStateReported.ToString(),
+                        finalSnapshot.PlayerSessionShouldStartAudio.ToString(),
+                        finalSnapshot.PlayerSessionAudioStartBlockReason.ToString(),
+                        finalSnapshot.PlayerSessionRequiredBufferedSamples.ToString(),
+                        finalSnapshot.PlayerSessionReportedBufferedSamples.ToString(),
+                        finalSnapshot.PlayerSessionRequiresPresentedVideoFrame.ToString(),
+                        finalSnapshot.PlayerSessionHasPresentedVideoFrame.ToString(),
+                        finalSnapshot.PlayerSessionAndroidFileRateBridgeActive.ToString());
+                var summaryAvSyncEnterprise =
+                    MediaNativeInteropCommon.CreateObservedAvSyncEnterpriseAuditStringsExtended(
+                        finalSnapshot.HasAvSyncEnterpriseMetrics,
+                        finalSnapshot.AvSyncEnterpriseSampleCount.ToString(),
+                        finalSnapshot.AvSyncEnterpriseWindowSpanUs.ToString(),
+                        finalSnapshot.AvSyncEnterpriseLatestRawOffsetUs.ToString(),
+                        finalSnapshot.AvSyncEnterpriseLatestSmoothOffsetUs.ToString(),
+                        finalSnapshot.AvSyncEnterpriseDriftSlopePpm.ToString("F3"),
+                        finalSnapshot.AvSyncEnterpriseDriftProjected2hMs.ToString("F3"),
+                        finalSnapshot.AvSyncEnterpriseOffsetAbsP95Us.ToString(),
+                        finalSnapshot.AvSyncEnterpriseOffsetAbsP99Us.ToString(),
+                        finalSnapshot.AvSyncEnterpriseOffsetAbsMaxUs.ToString());
                 builder.AppendLine("frame_contract_available=" + finalSnapshot.HasFrameContract);
                 builder.AppendLine("frame_contract_memory=" + finalSnapshot.FrameContractMemoryKind);
                 builder.AppendLine("frame_contract_dynamic_range=" + finalSnapshot.FrameContractDynamicRange);
                 builder.AppendLine("frame_contract_nominal_fps=" + finalSnapshot.FrameContractNominalFps.ToString("F2"));
-                builder.AppendLine("playback_contract_available=" + finalSnapshot.HasPlaybackTimingContract);
-                builder.AppendLine("playback_contract_master_sec=" + finalSnapshot.PlaybackContractMasterTimeSec.ToString("F3"));
-                builder.AppendLine("playback_contract_master_us=" + finalSnapshot.PlaybackContractMasterTimeUs);
-                builder.AppendLine("playback_contract_external_sec=" + finalSnapshot.PlaybackContractExternalTimeSec.ToString("F3"));
-                builder.AppendLine("playback_contract_external_us=" + finalSnapshot.PlaybackContractExternalTimeUs);
-                builder.AppendLine("playback_contract_has_audio_time_sec=" + finalSnapshot.PlaybackContractHasAudioTimeSec);
-                builder.AppendLine("playback_contract_audio_time_sec=" + finalSnapshot.PlaybackContractAudioTimeSec.ToString("F3"));
-                builder.AppendLine("playback_contract_has_audio_time_us=" + finalSnapshot.PlaybackContractHasAudioTimeUs);
-                builder.AppendLine("playback_contract_audio_time_us=" + finalSnapshot.PlaybackContractAudioTimeUs);
-                builder.AppendLine("playback_contract_has_audio_presented_time_sec=" + finalSnapshot.PlaybackContractHasAudioPresentedTimeSec);
-                builder.AppendLine("playback_contract_audio_presented_time_sec=" + finalSnapshot.PlaybackContractAudioPresentedTimeSec.ToString("F3"));
-                builder.AppendLine("playback_contract_has_audio_presented_time_us=" + finalSnapshot.PlaybackContractHasAudioPresentedTimeUs);
-                builder.AppendLine("playback_contract_audio_presented_time_us=" + finalSnapshot.PlaybackContractAudioPresentedTimeUs);
-                builder.AppendLine("playback_contract_audio_sink_delay_ms=" + (finalSnapshot.PlaybackContractAudioSinkDelaySec * 1000.0).ToString("F1"));
-                builder.AppendLine("playback_contract_audio_sink_delay_us=" + finalSnapshot.PlaybackContractAudioSinkDelayUs);
-                builder.AppendLine("playback_contract_has_us_mirror=" + finalSnapshot.PlaybackContractHasMicrosecondMirror);
-                builder.AppendLine("playback_contract_has_audio_clock=" + finalSnapshot.PlaybackContractHasAudioClock);
+                MediaNativeInteropCommon.AppendValidationSummaryPlaybackContractExtended(
+                    builder,
+                    summaryPlaybackContract);
                 builder.AppendLine("av_sync_contract_available=" + finalSnapshot.HasAvSyncContract);
                 builder.AppendLine("av_sync_contract_master_clock=" + finalSnapshot.AvSyncContractMasterClock);
                 builder.AppendLine("av_sync_contract_drift_ms=" + finalSnapshot.AvSyncContractDriftMs.ToString("F1"));
@@ -1155,38 +1192,15 @@ namespace UnityAV
                 MediaNativeInteropCommon.AppendValidationSummarySourceTimeline(
                     builder,
                     summarySourceTimeline);
-                builder.AppendLine("player_session_available=" + finalSnapshot.HasPlayerSessionContract);
-                builder.AppendLine("player_session_lifecycle_state=" + finalSnapshot.PlayerSessionLifecycleState);
-                builder.AppendLine("player_session_public_state=" + finalSnapshot.PlayerSessionPublicState);
-                builder.AppendLine("player_session_runtime_state=" + finalSnapshot.PlayerSessionRuntimeState);
-                builder.AppendLine("player_session_playback_intent=" + finalSnapshot.PlayerSessionPlaybackIntent);
-                builder.AppendLine("player_session_stop_reason=" + finalSnapshot.PlayerSessionStopReason);
-                builder.AppendLine("player_session_source_state=" + finalSnapshot.PlayerSessionSourceState);
-                builder.AppendLine("player_session_can_seek=" + finalSnapshot.PlayerSessionCanSeek);
-                builder.AppendLine("player_session_is_realtime=" + finalSnapshot.PlayerSessionIsRealtime);
-                builder.AppendLine("player_session_is_buffering=" + finalSnapshot.PlayerSessionIsBuffering);
-                builder.AppendLine("player_session_is_syncing=" + finalSnapshot.PlayerSessionIsSyncing);
-                builder.AppendLine("player_session_audio_start_state_reported=" + finalSnapshot.PlayerSessionAudioStartStateReported);
-                builder.AppendLine("player_session_should_start_audio=" + finalSnapshot.PlayerSessionShouldStartAudio);
-                builder.AppendLine("player_session_audio_start_block_reason=" + finalSnapshot.PlayerSessionAudioStartBlockReason);
-                builder.AppendLine("player_session_required_buffered_samples=" + finalSnapshot.PlayerSessionRequiredBufferedSamples);
-                builder.AppendLine("player_session_reported_buffered_samples=" + finalSnapshot.PlayerSessionReportedBufferedSamples);
-                builder.AppendLine("player_session_requires_presented_video_frame=" + finalSnapshot.PlayerSessionRequiresPresentedVideoFrame);
-                builder.AppendLine("player_session_has_presented_video_frame=" + finalSnapshot.PlayerSessionHasPresentedVideoFrame);
-                builder.AppendLine("player_session_android_file_rate_bridge_active=" + finalSnapshot.PlayerSessionAndroidFileRateBridgeActive);
+                MediaNativeInteropCommon.AppendValidationSummaryPlayerSessionExtended(
+                    builder,
+                    summaryPlayerSession);
                 MediaNativeInteropCommon.AppendValidationSummaryAudioOutputPolicy(
                     builder,
                     summaryAudioOutputPolicy);
-                builder.AppendLine("av_sync_enterprise_available=" + finalSnapshot.HasAvSyncEnterpriseMetrics);
-                builder.AppendLine("av_sync_enterprise_sample_count=" + finalSnapshot.AvSyncEnterpriseSampleCount);
-                builder.AppendLine("av_sync_enterprise_window_span_us=" + finalSnapshot.AvSyncEnterpriseWindowSpanUs);
-                builder.AppendLine("av_sync_enterprise_latest_raw_offset_us=" + finalSnapshot.AvSyncEnterpriseLatestRawOffsetUs);
-                builder.AppendLine("av_sync_enterprise_latest_smooth_offset_us=" + finalSnapshot.AvSyncEnterpriseLatestSmoothOffsetUs);
-                builder.AppendLine("av_sync_enterprise_drift_slope_ppm=" + finalSnapshot.AvSyncEnterpriseDriftSlopePpm.ToString("F3"));
-                builder.AppendLine("av_sync_enterprise_drift_projected_2h_ms=" + finalSnapshot.AvSyncEnterpriseDriftProjected2hMs.ToString("F3"));
-                builder.AppendLine("av_sync_enterprise_offset_abs_p95_us=" + finalSnapshot.AvSyncEnterpriseOffsetAbsP95Us);
-                builder.AppendLine("av_sync_enterprise_offset_abs_p99_us=" + finalSnapshot.AvSyncEnterpriseOffsetAbsP99Us);
-                builder.AppendLine("av_sync_enterprise_offset_abs_max_us=" + finalSnapshot.AvSyncEnterpriseOffsetAbsMaxUs);
+                MediaNativeInteropCommon.AppendValidationSummaryAvSyncEnterpriseExtended(
+                    builder,
+                    summaryAvSyncEnterprise);
                 MediaNativeInteropCommon.AppendValidationSummaryPassiveAvSync(
                     builder,
                     summaryPassiveAvSync);

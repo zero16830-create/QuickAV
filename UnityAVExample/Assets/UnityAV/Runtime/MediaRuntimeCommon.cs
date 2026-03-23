@@ -1557,6 +1557,29 @@ namespace UnityAV
             public string IsSyncing;
         }
 
+        internal struct ValidationSummaryPlayerSessionExtendedView
+        {
+            public bool Available;
+            public string LifecycleState;
+            public string PublicState;
+            public string RuntimeState;
+            public string PlaybackIntent;
+            public string StopReason;
+            public string SourceState;
+            public string CanSeek;
+            public string IsRealtime;
+            public string IsBuffering;
+            public string IsSyncing;
+            public string AudioStartStateReported;
+            public string ShouldStartAudio;
+            public string AudioStartBlockReason;
+            public string RequiredBufferedSamples;
+            public string ReportedBufferedSamples;
+            public string RequiresPresentedVideoFrame;
+            public string HasPresentedVideoFrame;
+            public string AndroidFileRateBridgeActive;
+        }
+
         internal struct ValidationSummarySourceRuntimeView
         {
             public string State;
@@ -5098,6 +5121,47 @@ namespace UnityAV
             };
         }
 
+        internal static PlaybackTimingAuditStringsView CreateObservedPlaybackTimingAuditStringsExtended(
+            bool available,
+            string masterTimeSec,
+            string masterTimeUs,
+            string externalTimeSec,
+            string externalTimeUs,
+            string hasAudioTimeSec,
+            string audioTimeSec,
+            string hasAudioTimeUs,
+            string audioTimeUs,
+            string hasAudioPresentedTimeSec,
+            string audioPresentedTimeSec,
+            string hasAudioPresentedTimeUs,
+            string audioPresentedTimeUs,
+            string audioSinkDelaySec,
+            string audioSinkDelayUs,
+            string hasMicrosecondMirror,
+            string hasAudioClock)
+        {
+            return new PlaybackTimingAuditStringsView
+            {
+                Available = available,
+                MasterTimeSec = masterTimeSec,
+                MasterTimeUs = masterTimeUs,
+                ExternalTimeSec = externalTimeSec,
+                ExternalTimeUs = externalTimeUs,
+                HasAudioTimeSec = hasAudioTimeSec,
+                AudioTimeSec = audioTimeSec,
+                HasAudioTimeUs = hasAudioTimeUs,
+                AudioTimeUs = audioTimeUs,
+                HasAudioPresentedTimeSec = hasAudioPresentedTimeSec,
+                AudioPresentedTimeSec = audioPresentedTimeSec,
+                HasAudioPresentedTimeUs = hasAudioPresentedTimeUs,
+                AudioPresentedTimeUs = audioPresentedTimeUs,
+                AudioSinkDelaySec = audioSinkDelaySec,
+                AudioSinkDelayUs = audioSinkDelayUs,
+                HasMicrosecondMirror = hasMicrosecondMirror,
+                HasAudioClock = hasAudioClock,
+            };
+        }
+
         internal static SourceTimelineAuditStringsView CreateObservedSourceTimelineAuditStrings(
             bool available,
             string model,
@@ -5169,6 +5233,33 @@ namespace UnityAV
             };
         }
 
+        internal static AvSyncEnterpriseAuditStringsView CreateObservedAvSyncEnterpriseAuditStringsExtended(
+            bool available,
+            string sampleCount,
+            string windowSpanUs,
+            string latestRawOffsetUs,
+            string latestSmoothOffsetUs,
+            string driftSlopePpm,
+            string driftProjected2hMs,
+            string offsetAbsP95Us,
+            string offsetAbsP99Us,
+            string offsetAbsMaxUs)
+        {
+            return new AvSyncEnterpriseAuditStringsView
+            {
+                Available = available,
+                SampleCount = sampleCount,
+                WindowSpanUs = windowSpanUs,
+                LatestRawOffsetUs = latestRawOffsetUs,
+                LatestSmoothOffsetUs = latestSmoothOffsetUs,
+                DriftSlopePpm = driftSlopePpm,
+                DriftProjected2hMs = driftProjected2hMs,
+                OffsetAbsP95Us = offsetAbsP95Us,
+                OffsetAbsP99Us = offsetAbsP99Us,
+                OffsetAbsMaxUs = offsetAbsMaxUs,
+            };
+        }
+
         internal static AudioOutputPolicyAuditStringsView CreateObservedAudioOutputPolicyAuditStrings(
             bool available,
             string fileStartThresholdMilliseconds,
@@ -5227,6 +5318,75 @@ namespace UnityAV
             builder.AppendLine("player_session_is_syncing=" + summary.IsSyncing);
         }
 
+        internal static ValidationSummaryPlayerSessionExtendedView CreateValidationSummaryPlayerSessionExtended(
+            string lifecycleState,
+            string publicState,
+            string runtimeState,
+            string playbackIntent,
+            string stopReason,
+            string sourceState,
+            string canSeek,
+            string isRealtime,
+            string isBuffering,
+            string isSyncing,
+            string audioStartStateReported,
+            string shouldStartAudio,
+            string audioStartBlockReason,
+            string requiredBufferedSamples,
+            string reportedBufferedSamples,
+            string requiresPresentedVideoFrame,
+            string hasPresentedVideoFrame,
+            string androidFileRateBridgeActive)
+        {
+            return new ValidationSummaryPlayerSessionExtendedView
+            {
+                Available = !string.Equals(lifecycleState, "n/a", StringComparison.OrdinalIgnoreCase),
+                LifecycleState = lifecycleState,
+                PublicState = publicState,
+                RuntimeState = runtimeState,
+                PlaybackIntent = playbackIntent,
+                StopReason = stopReason,
+                SourceState = sourceState,
+                CanSeek = canSeek,
+                IsRealtime = isRealtime,
+                IsBuffering = isBuffering,
+                IsSyncing = isSyncing,
+                AudioStartStateReported = audioStartStateReported,
+                ShouldStartAudio = shouldStartAudio,
+                AudioStartBlockReason = audioStartBlockReason,
+                RequiredBufferedSamples = requiredBufferedSamples,
+                ReportedBufferedSamples = reportedBufferedSamples,
+                RequiresPresentedVideoFrame = requiresPresentedVideoFrame,
+                HasPresentedVideoFrame = hasPresentedVideoFrame,
+                AndroidFileRateBridgeActive = androidFileRateBridgeActive,
+            };
+        }
+
+        internal static void AppendValidationSummaryPlayerSessionExtended(
+            StringBuilder builder,
+            ValidationSummaryPlayerSessionExtendedView summary)
+        {
+            builder.AppendLine("player_session_available=" + summary.Available);
+            builder.AppendLine("player_session_lifecycle_state=" + summary.LifecycleState);
+            builder.AppendLine("player_session_public_state=" + summary.PublicState);
+            builder.AppendLine("player_session_runtime_state=" + summary.RuntimeState);
+            builder.AppendLine("player_session_playback_intent=" + summary.PlaybackIntent);
+            builder.AppendLine("player_session_stop_reason=" + summary.StopReason);
+            builder.AppendLine("player_session_source_state=" + summary.SourceState);
+            builder.AppendLine("player_session_can_seek=" + summary.CanSeek);
+            builder.AppendLine("player_session_is_realtime=" + summary.IsRealtime);
+            builder.AppendLine("player_session_is_buffering=" + summary.IsBuffering);
+            builder.AppendLine("player_session_is_syncing=" + summary.IsSyncing);
+            builder.AppendLine("player_session_audio_start_state_reported=" + summary.AudioStartStateReported);
+            builder.AppendLine("player_session_should_start_audio=" + summary.ShouldStartAudio);
+            builder.AppendLine("player_session_audio_start_block_reason=" + summary.AudioStartBlockReason);
+            builder.AppendLine("player_session_required_buffered_samples=" + summary.RequiredBufferedSamples);
+            builder.AppendLine("player_session_reported_buffered_samples=" + summary.ReportedBufferedSamples);
+            builder.AppendLine("player_session_requires_presented_video_frame=" + summary.RequiresPresentedVideoFrame);
+            builder.AppendLine("player_session_has_presented_video_frame=" + summary.HasPresentedVideoFrame);
+            builder.AppendLine("player_session_android_file_rate_bridge_active=" + summary.AndroidFileRateBridgeActive);
+        }
+
         internal static void AppendValidationSummarySourceRuntime(
             StringBuilder builder,
             ValidationSummarySourceRuntimeView summary)
@@ -5283,6 +5443,29 @@ namespace UnityAV
             builder.AppendLine("playback_contract_has_us_mirror=" + summary.HasMicrosecondMirror);
         }
 
+        internal static void AppendValidationSummaryPlaybackContractExtended(
+            StringBuilder builder,
+            PlaybackTimingAuditStringsView summary)
+        {
+            builder.AppendLine("playback_contract_available=" + summary.Available);
+            builder.AppendLine("playback_contract_master_sec=" + summary.MasterTimeSec);
+            builder.AppendLine("playback_contract_master_us=" + summary.MasterTimeUs);
+            builder.AppendLine("playback_contract_external_sec=" + summary.ExternalTimeSec);
+            builder.AppendLine("playback_contract_external_us=" + summary.ExternalTimeUs);
+            builder.AppendLine("playback_contract_has_audio_time_sec=" + summary.HasAudioTimeSec);
+            builder.AppendLine("playback_contract_audio_time_sec=" + summary.AudioTimeSec);
+            builder.AppendLine("playback_contract_has_audio_time_us=" + summary.HasAudioTimeUs);
+            builder.AppendLine("playback_contract_audio_time_us=" + summary.AudioTimeUs);
+            builder.AppendLine("playback_contract_has_audio_presented_time_sec=" + summary.HasAudioPresentedTimeSec);
+            builder.AppendLine("playback_contract_audio_presented_time_sec=" + summary.AudioPresentedTimeSec);
+            builder.AppendLine("playback_contract_has_audio_presented_time_us=" + summary.HasAudioPresentedTimeUs);
+            builder.AppendLine("playback_contract_audio_presented_time_us=" + summary.AudioPresentedTimeUs);
+            builder.AppendLine("playback_contract_audio_sink_delay_ms=" + summary.AudioSinkDelaySec);
+            builder.AppendLine("playback_contract_audio_sink_delay_us=" + summary.AudioSinkDelayUs);
+            builder.AppendLine("playback_contract_has_us_mirror=" + summary.HasMicrosecondMirror);
+            builder.AppendLine("playback_contract_has_audio_clock=" + summary.HasAudioClock);
+        }
+
         internal static void AppendValidationSummarySourceTimeline(
             StringBuilder builder,
             SourceTimelineAuditStringsView summary)
@@ -5324,6 +5507,22 @@ namespace UnityAV
             builder.AppendLine("av_sync_enterprise_available=" + summary.Available);
             builder.AppendLine("av_sync_enterprise_sample_count=" + summary.SampleCount);
             builder.AppendLine("av_sync_enterprise_drift_projected_2h_ms=" + summary.DriftProjected2hMs);
+        }
+
+        internal static void AppendValidationSummaryAvSyncEnterpriseExtended(
+            StringBuilder builder,
+            AvSyncEnterpriseAuditStringsView summary)
+        {
+            builder.AppendLine("av_sync_enterprise_available=" + summary.Available);
+            builder.AppendLine("av_sync_enterprise_sample_count=" + summary.SampleCount);
+            builder.AppendLine("av_sync_enterprise_window_span_us=" + summary.WindowSpanUs);
+            builder.AppendLine("av_sync_enterprise_latest_raw_offset_us=" + summary.LatestRawOffsetUs);
+            builder.AppendLine("av_sync_enterprise_latest_smooth_offset_us=" + summary.LatestSmoothOffsetUs);
+            builder.AppendLine("av_sync_enterprise_drift_slope_ppm=" + summary.DriftSlopePpm);
+            builder.AppendLine("av_sync_enterprise_drift_projected_2h_ms=" + summary.DriftProjected2hMs);
+            builder.AppendLine("av_sync_enterprise_offset_abs_p95_us=" + summary.OffsetAbsP95Us);
+            builder.AppendLine("av_sync_enterprise_offset_abs_p99_us=" + summary.OffsetAbsP99Us);
+            builder.AppendLine("av_sync_enterprise_offset_abs_max_us=" + summary.OffsetAbsMaxUs);
         }
 
         internal static void AppendValidationSummaryAudioOutputPolicy(
