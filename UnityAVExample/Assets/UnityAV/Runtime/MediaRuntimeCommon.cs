@@ -5185,6 +5185,31 @@ namespace UnityAV
             return string.Format("[{0}] override uri={1}", logPrefix, overrideUri);
         }
 
+        internal static string CreateValidationStartEnterLogLine(string logPrefix)
+        {
+            return string.Format("[{0}] start_enter", logPrefix);
+        }
+
+        internal static string CreateValidationStartLogLine(
+            string logPrefix,
+            float validationSeconds,
+            int requestedWidth,
+            int requestedHeight,
+            bool explicitWindow,
+            string videoRenderer,
+            bool requireAudioOutput)
+        {
+            return string.Format(
+                "[{0}] start validation seconds={1:F1} requestedWindow={2}x{3} explicitWindow={4} video_renderer={5} require_audio_output={6}",
+                logPrefix,
+                validationSeconds,
+                requestedWidth,
+                requestedHeight,
+                explicitWindow,
+                videoRenderer,
+                requireAudioOutput);
+        }
+
         internal static string CreateOverrideBackendLogLine(
             string logPrefix,
             string backend,
@@ -5268,6 +5293,517 @@ namespace UnityAV
             string rawValue)
         {
             return string.Format("[{0}] ignore unknown video_renderer={1}", logPrefix, rawValue);
+        }
+
+        internal static string CreateAndroidStopAfterSummaryFailedLogLine(
+            string logPrefix,
+            string errorMessage)
+        {
+            return string.Format(
+                "[{0}] android_stop_after_summary_failed {1}",
+                logPrefix,
+                errorMessage);
+        }
+
+        internal static string CreateAndroidMoveTaskToBackSkippedLogLine(
+            string logPrefix,
+            string reason)
+        {
+            return string.Format(
+                "[{0}] android_move_task_to_back skipped {1}",
+                logPrefix,
+                reason);
+        }
+
+        internal static string CreateAndroidMoveTaskToBackLogLine(
+            string logPrefix,
+            bool moved)
+        {
+            return string.Format("[{0}] android_move_task_to_back={1}", logPrefix, moved);
+        }
+
+        internal static string CreateAndroidMoveTaskToBackFailedLogLine(
+            string logPrefix,
+            string errorMessage)
+        {
+            return string.Format(
+                "[{0}] android_move_task_to_back_failed {1}",
+                logPrefix,
+                errorMessage);
+        }
+
+        internal static string CreateValidationStatusLogLine(
+            string logPrefix,
+            double playbackTime,
+            bool hasTexture,
+            bool audioPlaying,
+            bool started,
+            double startupElapsedSeconds,
+            object sourceState,
+            object sourcePackets,
+            object sourceTimeouts,
+            object sourceReconnects,
+            int windowWidth,
+            int windowHeight,
+            int textureWidth,
+            int textureHeight,
+            bool fullscreen,
+            FullScreenMode fullscreenMode,
+            object actualBackend,
+            object requestedVideoRenderer,
+            object actualVideoRenderer,
+            bool hasFrameContract,
+            object frameContractMemoryKind,
+            object frameContractDynamicRange,
+            double frameContractNominalFps,
+            bool hasPlaybackTimingContract,
+            double playbackContractMasterTimeSec,
+            bool hasAvSyncContract,
+            object avSyncContractMasterClock,
+            double avSyncContractDriftMs,
+            bool hasBridgeDescriptor,
+            object bridgeDescriptorState,
+            object bridgeDescriptorRuntimeKind,
+            bool bridgeDescriptorZeroCopySupported,
+            bool bridgeDescriptorDirectBindable,
+            bool bridgeDescriptorSourcePlaneTexturesSupported,
+            bool bridgeDescriptorFallbackCopyPath,
+            bool hasPathSelection,
+            object pathSelectionKind,
+            object pathSelectionSourceMemoryKind,
+            object pathSelectionPresentedMemoryKind,
+            bool pathSelectionTargetZeroCopy,
+            bool pathSelectionSourcePlaneTexturesSupported,
+            bool pathSelectionCpuFallback,
+            bool hasSourceTimelineContract,
+            object sourceTimelineModel,
+            bool hasPlayerSessionContract,
+            object playerSessionLifecycleState,
+            bool hasAvSyncEnterpriseMetrics,
+            uint avSyncEnterpriseSampleCount)
+        {
+            return string.Format(
+                "[{0}] time={1:F3}s texture={2} audioPlaying={3} started={4} startupElapsed={5:F3}s sourceState={6} sourcePackets={7} sourceTimeouts={8} sourceReconnects={9} window={10}x{11} textureSize={12}x{13} fullscreen={14} mode={15} backend={16} requested_renderer={17} actual_renderer={18} frame_contract_available={19} frame_contract_memory={20} frame_contract_dynamic_range={21} frame_contract_nominal_fps={22:F2} playback_contract_available={23} playback_contract_master_sec={24:F3} av_sync_contract_available={25} av_sync_contract_master={26} av_sync_contract_drift_ms={27:F1} bridge_descriptor_available={28} bridge_descriptor_state={29} bridge_descriptor_runtime={30} bridge_descriptor_zero_copy={31} bridge_descriptor_direct_bindable={32} bridge_descriptor_source_plane_textures={33} bridge_descriptor_fallback_copy={34} path_selection_available={35} path_selection_kind={36} path_selection_source_memory={37} path_selection_presented_memory={38} path_selection_target_zero_copy={39} path_selection_source_plane_textures={40} path_selection_cpu_fallback={41} source_timeline_available={42} source_timeline_model={43} player_session_available={44} player_session_lifecycle={45} av_sync_enterprise_available={46} av_sync_enterprise_sample_count={47}",
+                logPrefix,
+                playbackTime,
+                hasTexture,
+                audioPlaying,
+                started,
+                startupElapsedSeconds,
+                sourceState,
+                sourcePackets,
+                sourceTimeouts,
+                sourceReconnects,
+                windowWidth,
+                windowHeight,
+                textureWidth,
+                textureHeight,
+                fullscreen,
+                fullscreenMode,
+                actualBackend,
+                requestedVideoRenderer,
+                actualVideoRenderer,
+                hasFrameContract,
+                frameContractMemoryKind,
+                frameContractDynamicRange,
+                frameContractNominalFps,
+                hasPlaybackTimingContract,
+                playbackContractMasterTimeSec,
+                hasAvSyncContract,
+                avSyncContractMasterClock,
+                avSyncContractDriftMs,
+                hasBridgeDescriptor,
+                bridgeDescriptorState,
+                bridgeDescriptorRuntimeKind,
+                bridgeDescriptorZeroCopySupported,
+                bridgeDescriptorDirectBindable,
+                bridgeDescriptorSourcePlaneTexturesSupported,
+                bridgeDescriptorFallbackCopyPath,
+                hasPathSelection,
+                pathSelectionKind,
+                pathSelectionSourceMemoryKind,
+                pathSelectionPresentedMemoryKind,
+                pathSelectionTargetZeroCopy,
+                pathSelectionSourcePlaneTexturesSupported,
+                pathSelectionCpuFallback,
+                hasSourceTimelineContract,
+                sourceTimelineModel,
+                hasPlayerSessionContract,
+                playerSessionLifecycleState,
+                hasAvSyncEnterpriseMetrics,
+                avSyncEnterpriseSampleCount);
+        }
+
+        internal static string CreateRuntimeHealthLogLine(
+            string logPrefix,
+            object runtimeStatePublic,
+            object runtimeStateInternal,
+            object playbackIntent,
+            int streamCount,
+            int videoDecoderCount,
+            bool hasAudioDecoder,
+            double sourceLastActivityAgeSec)
+        {
+            return string.Format(
+                "[{0}] runtime_health state={1} runtime_state={2} playback_intent={3} stream_count={4} video_decoder_count={5} has_audio_decoder={6} source_last_activity_age_sec={7:F3}",
+                logPrefix,
+                runtimeStatePublic,
+                runtimeStateInternal,
+                playbackIntent,
+                streamCount,
+                videoDecoderCount,
+                hasAudioDecoder,
+                sourceLastActivityAgeSec);
+        }
+
+        internal static string CreateWgpuDescriptorLogLine(
+            string logPrefix,
+            bool wgpuRuntimeReady,
+            int wgpuOutputWidth,
+            int wgpuOutputHeight,
+            bool wgpuSupportsYuv420p,
+            bool wgpuSupportsNv12,
+            bool wgpuSupportsP010,
+            bool wgpuSupportsRgba32,
+            bool wgpuSupportsExternalTextureRgba,
+            bool wgpuSupportsExternalTextureYu12,
+            bool wgpuReadbackExportSupported)
+        {
+            return string.Format(
+                "[{0}] wgpu_descriptor runtime_ready={1} output_width={2} output_height={3} supports_yuv420p={4} supports_nv12={5} supports_p010={6} supports_rgba32={7} supports_external_texture_rgba={8} supports_external_texture_yu12={9} readback_export_supported={10}",
+                logPrefix,
+                wgpuRuntimeReady,
+                wgpuOutputWidth,
+                wgpuOutputHeight,
+                wgpuSupportsYuv420p,
+                wgpuSupportsNv12,
+                wgpuSupportsP010,
+                wgpuSupportsRgba32,
+                wgpuSupportsExternalTextureRgba,
+                wgpuSupportsExternalTextureYu12,
+                wgpuReadbackExportSupported);
+        }
+
+        internal static string CreateWgpuStateLogLine(
+            string logPrefix,
+            object wgpuRenderPath,
+            object wgpuSourceMemoryKind,
+            object wgpuPresentedMemoryKind,
+            object wgpuSourcePixelFormat,
+            object wgpuPresentedPixelFormat,
+            object wgpuExternalTextureFormat,
+            bool wgpuHasRenderedFrame,
+            long wgpuRenderedFrameIndex,
+            double wgpuRenderedTimeSec,
+            bool wgpuHasRenderError,
+            object wgpuRenderErrorKind,
+            int wgpuUploadPlaneCount,
+            bool wgpuSourceZeroCopy,
+            bool wgpuCpuFallback)
+        {
+            return string.Format(
+                "[{0}] wgpu_state render_path={1} source_memory={2} presented_memory={3} source_pixel_format={4} presented_pixel_format={5} external_texture_format={6} has_rendered_frame={7} rendered_frame_index={8} rendered_time_sec={9:F3} has_render_error={10} render_error_kind={11} upload_plane_count={12} source_zero_copy={13} cpu_fallback={14}",
+                logPrefix,
+                wgpuRenderPath,
+                wgpuSourceMemoryKind,
+                wgpuPresentedMemoryKind,
+                wgpuSourcePixelFormat,
+                wgpuPresentedPixelFormat,
+                wgpuExternalTextureFormat,
+                wgpuHasRenderedFrame,
+                wgpuRenderedFrameIndex,
+                wgpuRenderedTimeSec,
+                wgpuHasRenderError,
+                wgpuRenderErrorKind,
+                wgpuUploadPlaneCount,
+                wgpuSourceZeroCopy,
+                wgpuCpuFallback);
+        }
+
+        internal static string CreatePlaybackContractLogLine(
+            string logPrefix,
+            double masterTimeSec,
+            long masterTimeUs,
+            double externalTimeSec,
+            long externalTimeUs,
+            bool hasAudioTimeSec,
+            double audioTimeSec,
+            bool hasAudioTimeUs,
+            long audioTimeUs,
+            bool hasAudioPresentedTimeSec,
+            double audioPresentedTimeSec,
+            bool hasAudioPresentedTimeUs,
+            long audioPresentedTimeUs,
+            double audioSinkDelayMs,
+            long audioSinkDelayUs,
+            bool hasAudioClock,
+            bool hasMicrosecondMirror)
+        {
+            return string.Format(
+                "[{0}] playback_contract master_sec={1:F3} master_us={2} external_sec={3:F3} external_us={4} has_audio_time_sec={5} audio_time_sec={6:F3} has_audio_time_us={7} audio_time_us={8} has_audio_presented_time_sec={9} audio_presented_time_sec={10:F3} has_audio_presented_time_us={11} audio_presented_time_us={12} audio_sink_delay_ms={13:F1} audio_sink_delay_us={14} has_audio_clock={15} has_us_mirror={16}",
+                logPrefix,
+                masterTimeSec,
+                masterTimeUs,
+                externalTimeSec,
+                externalTimeUs,
+                hasAudioTimeSec,
+                audioTimeSec,
+                hasAudioTimeUs,
+                audioTimeUs,
+                hasAudioPresentedTimeSec,
+                audioPresentedTimeSec,
+                hasAudioPresentedTimeUs,
+                audioPresentedTimeUs,
+                audioSinkDelayMs,
+                audioSinkDelayUs,
+                hasAudioClock,
+                hasMicrosecondMirror);
+        }
+
+        internal static string CreateAvSyncContractLogLine(
+            string logPrefix,
+            object masterClock,
+            bool hasAudioClockSec,
+            double audioClockSec,
+            bool hasVideoClockSec,
+            double videoClockSec,
+            double clockDeltaMs,
+            double driftMs,
+            bool startupWarmupComplete,
+            ulong dropTotal,
+            ulong duplicateTotal)
+        {
+            return string.Format(
+                "[{0}] av_sync_contract master={1} has_audio_clock_sec={2} audio_clock_sec={3:F3} has_video_clock_sec={4} video_clock_sec={5:F3} clock_delta_ms={6:F1} drift_ms={7:F1} warmup_complete={8} drop_total={9} duplicate_total={10}",
+                logPrefix,
+                masterClock,
+                hasAudioClockSec,
+                audioClockSec,
+                hasVideoClockSec,
+                videoClockSec,
+                clockDeltaMs,
+                driftMs,
+                startupWarmupComplete,
+                dropTotal,
+                duplicateTotal);
+        }
+
+        internal static string CreateAvSyncContractSampleLogLine(
+            string logPrefix,
+            double clockDeltaMs,
+            double audioClockSec,
+            double videoClockSec)
+        {
+            return string.Format(
+                "[{0}] av_sync_contract_sample delta_ms={1:F1} audio_clock_sec={2:F3} video_clock_sec={3:F3}",
+                logPrefix,
+                clockDeltaMs,
+                audioClockSec,
+                videoClockSec);
+        }
+
+        internal static string CreateSourceTimelineLogLine(
+            string logPrefix,
+            object model,
+            object anchorKind,
+            bool hasCurrentSourceTimeUs,
+            long currentSourceTimeUs,
+            bool hasTimelineOriginUs,
+            long timelineOriginUs,
+            bool hasAnchorValueUs,
+            long anchorValueUs,
+            bool hasAnchorMonoUs,
+            long anchorMonoUs,
+            bool isRealtime)
+        {
+            return string.Format(
+                "[{0}] source_timeline model={1} anchor_kind={2} has_current_source_time_us={3} current_source_time_us={4} has_timeline_origin_us={5} timeline_origin_us={6} has_anchor_value_us={7} anchor_value_us={8} has_anchor_mono_us={9} anchor_mono_us={10} is_realtime={11}",
+                logPrefix,
+                model,
+                anchorKind,
+                hasCurrentSourceTimeUs,
+                currentSourceTimeUs,
+                hasTimelineOriginUs,
+                timelineOriginUs,
+                hasAnchorValueUs,
+                anchorValueUs,
+                hasAnchorMonoUs,
+                anchorMonoUs,
+                isRealtime);
+        }
+
+        internal static string CreateValidationPlayerSessionLogLine(
+            string logPrefix,
+            object lifecycleState,
+            object publicState,
+            object runtimeState,
+            object playbackIntent,
+            object stopReason,
+            object sourceState,
+            bool canSeek,
+            bool isRealtime,
+            bool isBuffering,
+            bool isSyncing)
+        {
+            return string.Format(
+                "[{0}] player_session lifecycle_state={1} public_state={2} runtime_state={3} playback_intent={4} stop_reason={5} source_state={6} can_seek={7} is_realtime={8} is_buffering={9} is_syncing={10}",
+                logPrefix,
+                lifecycleState,
+                publicState,
+                runtimeState,
+                playbackIntent,
+                stopReason,
+                sourceState,
+                canSeek,
+                isRealtime,
+                isBuffering,
+                isSyncing);
+        }
+
+        internal static string CreateAudioOutputPolicyLogLine(
+            string logPrefix,
+            int fileStartThresholdMs,
+            int androidFileStartThresholdMs,
+            int realtimeStartThresholdMs,
+            int realtimeStartupGraceMs,
+            int realtimeStartupMinimumThresholdMs,
+            int fileRingCapacityMs,
+            int androidFileRingCapacityMs,
+            int realtimeRingCapacityMs,
+            int fileBufferedCeilingMs,
+            int androidFileBufferedCeilingMs,
+            int realtimeBufferedCeilingMs,
+            int realtimeStartupAdditionalSinkDelayMs,
+            int realtimeSteadyAdditionalSinkDelayMs,
+            int realtimeBackendAdditionalSinkDelayMs,
+            bool realtimeStartRequiresVideoFrame,
+            bool allowAndroidFileOutputRateBridge)
+        {
+            return string.Format(
+                "[{0}] audio_output_policy file_start_ms={1} android_file_start_ms={2} realtime_start_ms={3} realtime_startup_grace_ms={4} realtime_startup_minimum_threshold_ms={5} file_ring_capacity_ms={6} android_file_ring_capacity_ms={7} realtime_ring_capacity_ms={8} file_buffered_ceiling_ms={9} android_file_buffered_ceiling_ms={10} realtime_buffered_ceiling_ms={11} realtime_startup_additional_sink_delay_ms={12} realtime_steady_additional_sink_delay_ms={13} realtime_backend_additional_sink_delay_ms={14} realtime_start_requires_video_frame={15} allow_android_file_output_rate_bridge={16}",
+                logPrefix,
+                fileStartThresholdMs,
+                androidFileStartThresholdMs,
+                realtimeStartThresholdMs,
+                realtimeStartupGraceMs,
+                realtimeStartupMinimumThresholdMs,
+                fileRingCapacityMs,
+                androidFileRingCapacityMs,
+                realtimeRingCapacityMs,
+                fileBufferedCeilingMs,
+                androidFileBufferedCeilingMs,
+                realtimeBufferedCeilingMs,
+                realtimeStartupAdditionalSinkDelayMs,
+                realtimeSteadyAdditionalSinkDelayMs,
+                realtimeBackendAdditionalSinkDelayMs,
+                realtimeStartRequiresVideoFrame,
+                allowAndroidFileOutputRateBridge);
+        }
+
+        internal static string CreateAvSyncEnterpriseLogLine(
+            string logPrefix,
+            uint sampleCount,
+            long windowSpanUs,
+            long latestRawOffsetUs,
+            long latestSmoothOffsetUs,
+            double driftSlopePpm,
+            double driftProjected2hMs,
+            long offsetAbsP95Us,
+            long offsetAbsP99Us,
+            long offsetAbsMaxUs)
+        {
+            return string.Format(
+                "[{0}] av_sync_enterprise sample_count={1} window_span_us={2} latest_raw_offset_us={3} latest_smooth_offset_us={4} drift_slope_ppm={5:F3} drift_projected_2h_ms={6:F3} offset_abs_p95_us={7} offset_abs_p99_us={8} offset_abs_max_us={9}",
+                logPrefix,
+                sampleCount,
+                windowSpanUs,
+                latestRawOffsetUs,
+                latestSmoothOffsetUs,
+                driftSlopePpm,
+                driftProjected2hMs,
+                offsetAbsP95Us,
+                offsetAbsP99Us,
+                offsetAbsMaxUs);
+        }
+
+        internal static string CreatePassiveAvSyncLogLine(
+            string logPrefix,
+            long rawOffsetUs,
+            long smoothOffsetUs,
+            double driftPpm,
+            long driftInterceptUs,
+            uint driftSampleCount,
+            object videoSchedule,
+            double audioResampleRatio,
+            bool audioResampleActive,
+            bool shouldRebuildAnchor)
+        {
+            return string.Format(
+                "[{0}] passive_av_sync raw_offset_us={1} smooth_offset_us={2} drift_ppm={3:F3} drift_intercept_us={4} drift_sample_count={5} video_schedule={6} audio_resample_ratio={7:F6} audio_resample_active={8} should_rebuild_anchor={9}",
+                logPrefix,
+                rawOffsetUs,
+                smoothOffsetUs,
+                driftPpm,
+                driftInterceptUs,
+                driftSampleCount,
+                videoSchedule,
+                audioResampleRatio,
+                audioResampleActive,
+                shouldRebuildAnchor);
+        }
+
+        internal static string CreateAvSyncLogLine(
+            string logPrefix,
+            double deltaMilliseconds,
+            double audioPresentedTimeSec,
+            double referencePlaybackTimeSec,
+            object referencePlaybackKind,
+            double playbackTime,
+            double presentedVideoTimeSec,
+            double playbackContractAudioTimeSec,
+            double playbackContractAudioPresentedTimeSec,
+            double playbackContractAudioSinkDelayMs,
+            double audioPipelineDelayMs)
+        {
+            return string.Format(
+                "[{0}] av_sync delta_ms={1:F1} audio_presented_sec={2:F3} reference_sec={3:F3} reference_kind={4} playback_sec={5:F3} presented_video_sec={6:F3} contract_audio_time_sec={7:F3} contract_audio_presented_sec={8:F3} contract_audio_sink_delay_ms={9:F1} audio_pipeline_delay_ms={10:F1}",
+                logPrefix,
+                deltaMilliseconds,
+                audioPresentedTimeSec,
+                referencePlaybackTimeSec,
+                referencePlaybackKind,
+                playbackTime,
+                presentedVideoTimeSec,
+                playbackContractAudioTimeSec,
+                playbackContractAudioPresentedTimeSec,
+                playbackContractAudioSinkDelayMs,
+                audioPipelineDelayMs);
+        }
+
+        internal static string CreateRealtimeLatencyLogLine(
+            string logPrefix,
+            double realtimeLatencyMilliseconds,
+            double publisherElapsedTimeSec,
+            double realtimeReferenceTimeSec)
+        {
+            return string.Format(
+                "[{0}] realtime_latency latency_ms={1:F1} publisher_elapsed_sec={2:F3} reference_sec={3:F3}",
+                logPrefix,
+                realtimeLatencyMilliseconds,
+                publisherElapsedTimeSec,
+                realtimeReferenceTimeSec);
+        }
+
+        internal static string CreateRealtimeProbeLogLine(
+            string logPrefix,
+            long realtimeProbeUnixMs,
+            double realtimeReferenceTimeSec)
+        {
+            return string.Format(
+                "[{0}] realtime_probe unix_ms={1} reference_sec={2:F3}",
+                logPrefix,
+                realtimeProbeUnixMs,
+                realtimeReferenceTimeSec);
         }
 
         internal static string CreateMediaPlayerAuditStartLogLine(
