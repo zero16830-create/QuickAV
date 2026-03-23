@@ -5063,6 +5063,22 @@ namespace UnityAV
             builder.AppendLine("source_timeline_anchor_mono_us=" + summary.AnchorMonoUs);
         }
 
+        internal static void AppendValidationSummaryPassiveAvSync(
+            StringBuilder builder,
+            PassiveAvSyncAuditStringsView summary)
+        {
+            builder.AppendLine("passive_av_sync_available=" + summary.Available);
+            builder.AppendLine("passive_av_sync_raw_offset_us=" + summary.RawOffsetUs);
+            builder.AppendLine("passive_av_sync_smooth_offset_us=" + summary.SmoothOffsetUs);
+            builder.AppendLine("passive_av_sync_drift_ppm=" + summary.DriftPpm);
+            builder.AppendLine("passive_av_sync_drift_intercept_us=" + summary.DriftInterceptUs);
+            builder.AppendLine("passive_av_sync_drift_sample_count=" + summary.DriftSampleCount);
+            builder.AppendLine("passive_av_sync_video_schedule=" + summary.VideoSchedule);
+            builder.AppendLine("passive_av_sync_audio_resample_ratio=" + summary.AudioResampleRatio);
+            builder.AppendLine("passive_av_sync_audio_resample_active=" + summary.AudioResampleActive);
+            builder.AppendLine("passive_av_sync_should_rebuild_anchor=" + summary.ShouldRebuildAnchor);
+        }
+
         internal static PlaybackStartObservationView CreatePlaybackStartObservation(
             bool hasReportedStarted,
             bool reportedStarted,

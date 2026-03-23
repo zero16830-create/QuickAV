@@ -759,6 +759,20 @@ namespace UnityAV
                         AnchorMonoUs = _observedSourceTimelineAnchorMonoUs,
                         IsRealtime = _observedSourceTimelineIsRealtime,
                     };
+                var summaryPassiveAvSync =
+                    new MediaNativeInteropCommon.PassiveAvSyncAuditStringsView
+                    {
+                        Available = _observedPassiveAvSyncAvailable,
+                        RawOffsetUs = _observedPassiveAvSyncRawOffsetUs,
+                        SmoothOffsetUs = _observedPassiveAvSyncSmoothOffsetUs,
+                        DriftPpm = _observedPassiveAvSyncDriftPpm,
+                        DriftInterceptUs = _observedPassiveAvSyncDriftInterceptUs,
+                        DriftSampleCount = _observedPassiveAvSyncDriftSampleCount,
+                        VideoSchedule = _observedPassiveAvSyncVideoSchedule,
+                        AudioResampleRatio = _observedPassiveAvSyncAudioResampleRatio,
+                        AudioResampleActive = _observedPassiveAvSyncAudioResampleActive,
+                        ShouldRebuildAnchor = _observedPassiveAvSyncShouldRebuildAnchor,
+                    };
                 var backendRuntimeObservation =
                     MediaNativeInteropCommon.CreateMediaPlayerBackendRuntimeObservation(
                         Player != null,
@@ -824,16 +838,9 @@ namespace UnityAV
                 builder.AppendLine("av_sync_enterprise_available=" + _observedAvSyncEnterpriseAvailable);
                 builder.AppendLine("av_sync_enterprise_sample_count=" + _observedAvSyncEnterpriseSampleCount);
                 builder.AppendLine("av_sync_enterprise_drift_projected_2h_ms=" + _observedAvSyncEnterpriseDriftProjected2hMs);
-                builder.AppendLine("passive_av_sync_available=" + _observedPassiveAvSyncAvailable);
-                builder.AppendLine("passive_av_sync_raw_offset_us=" + _observedPassiveAvSyncRawOffsetUs);
-                builder.AppendLine("passive_av_sync_smooth_offset_us=" + _observedPassiveAvSyncSmoothOffsetUs);
-                builder.AppendLine("passive_av_sync_drift_ppm=" + _observedPassiveAvSyncDriftPpm);
-                builder.AppendLine("passive_av_sync_drift_intercept_us=" + _observedPassiveAvSyncDriftInterceptUs);
-                builder.AppendLine("passive_av_sync_drift_sample_count=" + _observedPassiveAvSyncDriftSampleCount);
-                builder.AppendLine("passive_av_sync_video_schedule=" + _observedPassiveAvSyncVideoSchedule);
-                builder.AppendLine("passive_av_sync_audio_resample_ratio=" + _observedPassiveAvSyncAudioResampleRatio);
-                builder.AppendLine("passive_av_sync_audio_resample_active=" + _observedPassiveAvSyncAudioResampleActive);
-                builder.AppendLine("passive_av_sync_should_rebuild_anchor=" + _observedPassiveAvSyncShouldRebuildAnchor);
+                MediaNativeInteropCommon.AppendValidationSummaryPassiveAvSync(
+                    builder,
+                    summaryPassiveAvSync);
                 builder.AppendLine("summary_path=" + summaryPath);
                 File.WriteAllText(summaryPath, builder.ToString(), Encoding.UTF8);
                 Debug.Log("[CodexValidation] summary_written=" + summaryPath);
