@@ -743,6 +743,22 @@ namespace UnityAV
                         ExternalTimeUs = _observedPlaybackContractExternalTimeUs,
                         HasMicrosecondMirror = _observedPlaybackContractHasUsMirror,
                     };
+                var summarySourceTimeline =
+                    new MediaNativeInteropCommon.SourceTimelineAuditStringsView
+                    {
+                        Available = _observedSourceTimelineAvailable,
+                        Model = _observedSourceTimelineModel,
+                        AnchorKind = _observedSourceTimelineAnchorKind,
+                        HasCurrentSourceTimeUs = _observedSourceTimelineHasCurrentSourceTimeUs,
+                        CurrentSourceTimeUs = _observedSourceTimelineCurrentSourceTimeUs,
+                        HasTimelineOriginUs = _observedSourceTimelineHasTimelineOriginUs,
+                        TimelineOriginUs = _observedSourceTimelineTimelineOriginUs,
+                        HasAnchorValueUs = _observedSourceTimelineHasAnchorValueUs,
+                        AnchorValueUs = _observedSourceTimelineAnchorValueUs,
+                        HasAnchorMonoUs = _observedSourceTimelineHasAnchorMonoUs,
+                        AnchorMonoUs = _observedSourceTimelineAnchorMonoUs,
+                        IsRealtime = _observedSourceTimelineIsRealtime,
+                    };
                 var backendRuntimeObservation =
                     MediaNativeInteropCommon.CreateMediaPlayerBackendRuntimeObservation(
                         Player != null,
@@ -782,18 +798,9 @@ namespace UnityAV
                 MediaNativeInteropCommon.AppendValidationSummaryPlayerSession(
                     builder,
                     summaryPlayerSession);
-                builder.AppendLine("source_timeline_available=" + _observedSourceTimelineAvailable);
-                builder.AppendLine("source_timeline_model=" + _observedSourceTimelineModel);
-                builder.AppendLine("source_timeline_anchor_kind=" + _observedSourceTimelineAnchorKind);
-                builder.AppendLine("source_timeline_is_realtime=" + _observedSourceTimelineIsRealtime);
-                builder.AppendLine("source_timeline_has_current_source_time_us=" + _observedSourceTimelineHasCurrentSourceTimeUs);
-                builder.AppendLine("source_timeline_current_source_time_us=" + _observedSourceTimelineCurrentSourceTimeUs);
-                builder.AppendLine("source_timeline_has_timeline_origin_us=" + _observedSourceTimelineHasTimelineOriginUs);
-                builder.AppendLine("source_timeline_timeline_origin_us=" + _observedSourceTimelineTimelineOriginUs);
-                builder.AppendLine("source_timeline_has_anchor_value_us=" + _observedSourceTimelineHasAnchorValueUs);
-                builder.AppendLine("source_timeline_anchor_value_us=" + _observedSourceTimelineAnchorValueUs);
-                builder.AppendLine("source_timeline_has_anchor_mono_us=" + _observedSourceTimelineHasAnchorMonoUs);
-                builder.AppendLine("source_timeline_anchor_mono_us=" + _observedSourceTimelineAnchorMonoUs);
+                MediaNativeInteropCommon.AppendValidationSummarySourceTimeline(
+                    builder,
+                    summarySourceTimeline);
                 MediaNativeInteropCommon.AppendValidationSummaryPlaybackContract(
                     builder,
                     summaryPlaybackContract);

@@ -5045,6 +5045,24 @@ namespace UnityAV
             builder.AppendLine("playback_contract_has_us_mirror=" + summary.HasMicrosecondMirror);
         }
 
+        internal static void AppendValidationSummarySourceTimeline(
+            StringBuilder builder,
+            SourceTimelineAuditStringsView summary)
+        {
+            builder.AppendLine("source_timeline_available=" + summary.Available);
+            builder.AppendLine("source_timeline_model=" + summary.Model);
+            builder.AppendLine("source_timeline_anchor_kind=" + summary.AnchorKind);
+            builder.AppendLine("source_timeline_is_realtime=" + summary.IsRealtime);
+            builder.AppendLine("source_timeline_has_current_source_time_us=" + summary.HasCurrentSourceTimeUs);
+            builder.AppendLine("source_timeline_current_source_time_us=" + summary.CurrentSourceTimeUs);
+            builder.AppendLine("source_timeline_has_timeline_origin_us=" + summary.HasTimelineOriginUs);
+            builder.AppendLine("source_timeline_timeline_origin_us=" + summary.TimelineOriginUs);
+            builder.AppendLine("source_timeline_has_anchor_value_us=" + summary.HasAnchorValueUs);
+            builder.AppendLine("source_timeline_anchor_value_us=" + summary.AnchorValueUs);
+            builder.AppendLine("source_timeline_has_anchor_mono_us=" + summary.HasAnchorMonoUs);
+            builder.AppendLine("source_timeline_anchor_mono_us=" + summary.AnchorMonoUs);
+        }
+
         internal static PlaybackStartObservationView CreatePlaybackStartObservation(
             bool hasReportedStarted,
             bool reportedStarted,
