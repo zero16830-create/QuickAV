@@ -1050,13 +1050,18 @@ namespace UnityAV
                         ObservedAudioDuringWindow = _observedAudioDuringWindow,
                         ObservedStartedDuringWindow = _observedStartedDuringWindow,
                     });
-                builder.AppendLine("runtime_health_available=" + finalSnapshot.HasRuntimeHealth);
-                builder.AppendLine("state=" + finalSnapshot.RuntimeStatePublic);
-                builder.AppendLine("runtime_state=" + finalSnapshot.RuntimeStateInternal);
-                builder.AppendLine("playback_intent=" + finalSnapshot.PlaybackIntent);
-                builder.AppendLine("stream_count=" + finalSnapshot.StreamCount);
-                builder.AppendLine("video_decoder_count=" + finalSnapshot.VideoDecoderCount);
-                builder.AppendLine("has_audio_decoder=" + finalSnapshot.HasAudioDecoder);
+                MediaNativeInteropCommon.AppendValidationSummaryRuntimeHealth(
+                    builder,
+                    new MediaNativeInteropCommon.ValidationSummaryRuntimeHealthView
+                    {
+                        Available = finalSnapshot.HasRuntimeHealth,
+                        State = finalSnapshot.RuntimeStatePublic.ToString(),
+                        RuntimeState = finalSnapshot.RuntimeStateInternal.ToString(),
+                        PlaybackIntent = finalSnapshot.PlaybackIntent.ToString(),
+                        StreamCount = finalSnapshot.StreamCount.ToString(),
+                        VideoDecoderCount = finalSnapshot.VideoDecoderCount.ToString(),
+                        HasAudioDecoder = finalSnapshot.HasAudioDecoder.ToString(),
+                    });
                 MediaNativeInteropCommon.AppendValidationSummarySourceRuntime(
                     builder,
                     new MediaNativeInteropCommon.ValidationSummarySourceRuntimeView
@@ -1068,8 +1073,13 @@ namespace UnityAV
                         IncludeLastActivityAgeSeconds = true,
                         LastActivityAgeSeconds = finalSnapshot.SourceLastActivityAgeSec.ToString("F3"),
                     });
-                builder.AppendLine("path_selection_available=" + finalSnapshot.HasPathSelection);
-                builder.AppendLine("path_selection_kind=" + finalSnapshot.PathSelectionKind);
+                MediaNativeInteropCommon.AppendValidationSummaryPathSelection(
+                    builder,
+                    new MediaNativeInteropCommon.ValidationSummaryPathSelectionView
+                    {
+                        Available = finalSnapshot.HasPathSelection,
+                        Kind = finalSnapshot.PathSelectionKind,
+                    });
                 builder.AppendLine("frame_contract_available=" + finalSnapshot.HasFrameContract);
                 builder.AppendLine("frame_contract_memory=" + finalSnapshot.FrameContractMemoryKind);
                 builder.AppendLine("frame_contract_dynamic_range=" + finalSnapshot.FrameContractDynamicRange);

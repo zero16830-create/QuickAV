@@ -1574,6 +1574,23 @@ namespace UnityAV
             public bool HasPresentedFrame;
         }
 
+        internal struct ValidationSummaryRuntimeHealthView
+        {
+            public bool Available;
+            public string State;
+            public string RuntimeState;
+            public string PlaybackIntent;
+            public string StreamCount;
+            public string VideoDecoderCount;
+            public string HasAudioDecoder;
+        }
+
+        internal struct ValidationSummaryPathSelectionView
+        {
+            public bool Available;
+            public string Kind;
+        }
+
         internal struct AvSyncEnterpriseMetricsView
         {
             public uint SampleCount;
@@ -5231,6 +5248,27 @@ namespace UnityAV
             builder.AppendLine("native_video_active=" + summary.Active);
             builder.AppendLine("native_activation_decision=" + summary.ActivationDecision);
             builder.AppendLine("has_presented_native_video_frame=" + summary.HasPresentedFrame);
+        }
+
+        internal static void AppendValidationSummaryRuntimeHealth(
+            StringBuilder builder,
+            ValidationSummaryRuntimeHealthView summary)
+        {
+            builder.AppendLine("runtime_health_available=" + summary.Available);
+            builder.AppendLine("state=" + summary.State);
+            builder.AppendLine("runtime_state=" + summary.RuntimeState);
+            builder.AppendLine("playback_intent=" + summary.PlaybackIntent);
+            builder.AppendLine("stream_count=" + summary.StreamCount);
+            builder.AppendLine("video_decoder_count=" + summary.VideoDecoderCount);
+            builder.AppendLine("has_audio_decoder=" + summary.HasAudioDecoder);
+        }
+
+        internal static void AppendValidationSummaryPathSelection(
+            StringBuilder builder,
+            ValidationSummaryPathSelectionView summary)
+        {
+            builder.AppendLine("path_selection_available=" + summary.Available);
+            builder.AppendLine("path_selection_kind=" + summary.Kind);
         }
 
         internal static void AppendValidationSummaryPlaybackContract(
