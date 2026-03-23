@@ -84,7 +84,10 @@ namespace UnityAV
             if (!string.IsNullOrEmpty(overrideUri))
             {
                 Player.Uri = overrideUri;
-                Debug.Log("[CodexValidation] override uri=" + overrideUri);
+                Debug.Log(
+                    MediaNativeInteropCommon.CreateOverrideUriLogLine(
+                        ValidationLogPrefix,
+                        overrideUri));
             }
 
             var overrideBackend = TryReadOverrideValue(BackendArgumentName, AndroidBackendExtraName);
@@ -94,8 +97,10 @@ namespace UnityAV
                 Player.PreferredBackend = parsedBackend;
                 Player.StrictBackend = parsedBackend != MediaBackendKind.Auto;
                 Debug.Log(
-                    "[CodexValidation] override backend=" + parsedBackend
-                    + " strict=" + Player.StrictBackend);
+                    MediaNativeInteropCommon.CreateOverrideBackendLogLine(
+                        ValidationLogPrefix,
+                        parsedBackend.ToString(),
+                        Player.StrictBackend));
             }
 
             ValidationSeconds = TryReadFloatArgument(
@@ -138,20 +143,25 @@ namespace UnityAV
 
             if (Player == null)
             {
-                Debug.LogError("[CodexValidation] missing MediaPlayer");
+                Debug.LogError(
+                    MediaNativeInteropCommon.CreateMissingComponentLogLine(
+                        ValidationLogPrefix,
+                        "MediaPlayer"));
                 StartCoroutine(QuitAfterDelay(1f, 2));
                 return;
             }
 
             Application.runInBackground = true;
-            Debug.Log("[CodexValidation] runInBackground=True");
+            Debug.Log(
+                MediaNativeInteropCommon.CreateRunInBackgroundEnabledLogLine(
+                    ValidationLogPrefix));
 
             _hasAudioListener = FindObjectsOfType<AudioListener>().Length > 0;
             _lastLogTime = Time.realtimeSinceStartup;
             _startTime = _lastLogTime;
             Debug.Log(
-                string.Format(
-                    "[CodexValidation] start validation seconds={0:F1} requestedWindow={1}x{2} explicitWindow={3} media_player_audit=True",
+                MediaNativeInteropCommon.CreateMediaPlayerAuditStartLogLine(
+                    ValidationLogPrefix,
                     ValidationSeconds,
                     Player.Width,
                     Player.Height,
@@ -239,8 +249,8 @@ namespace UnityAV
                         : default(MediaPlayer.NativeVideoActivationDecisionKind));
 
             Debug.Log(
-                string.Format(
-                    "[CodexValidation] time={0:F3}s texture={1} audioPlaying={2} started={3} startupElapsed={4:F3}s sourceState={5} sourcePackets={6} sourceTimeouts={7} sourceReconnects={8} window={9}x{10} textureSize={11}x{12} fullscreen={13} mode={14} backend={15} requested_renderer={16} actual_renderer={17} playback_contract_available={18} playback_contract_master_sec={19} playback_contract_has_us_mirror={20} source_timeline_available={21} source_timeline_model={22} source_timeline_anchor_kind={23} player_session_available={24} player_session_lifecycle={25} player_session_is_realtime={26} audio_output_policy_available={27} av_sync_enterprise_available={28} av_sync_enterprise_sample_count={29} av_sync_enterprise_drift_projected_2h_ms={30}",
+                MediaNativeInteropCommon.CreateMediaPlayerAuditStatusLogLine(
+                    ValidationLogPrefix,
                     snapshot.PlaybackTime,
                     snapshot.HasTexture,
                     snapshot.AudioPlaying,
@@ -259,22 +269,14 @@ namespace UnityAV
                     backendRuntimeObservation.ActualBackend,
                     backendRuntimeObservation.RequestedVideoRenderer,
                     nativeVideoRuntimeObservation.ActualRenderer,
-                    _observedPlaybackContract.Available,
-                    _observedPlaybackContract.MasterTimeSec,
-                    _observedPlaybackContract.HasMicrosecondMirror,
-                    _observedSourceTimeline.Available,
-                    _observedSourceTimeline.Model,
-                    _observedSourceTimeline.AnchorKind,
-                    _observedPlayerSession.Available,
-                    _observedPlayerSession.LifecycleState,
-                    _observedPlayerSession.IsRealtime,
-                    _observedAudioOutputPolicy.Available,
-                    _observedAvSyncEnterprise.Available,
-                    _observedAvSyncEnterprise.SampleCount,
-                    _observedAvSyncEnterprise.DriftProjected2hMs));
+                    _observedPlaybackContract,
+                    _observedSourceTimeline,
+                    _observedPlayerSession,
+                    _observedAudioOutputPolicy,
+                    _observedAvSyncEnterprise));
             Debug.Log(
-                string.Format(
-                    "[CodexValidation] media_player_audit audioSourcePresent={0} hasAudioListener={1} nativeVideoActive={2} nativeActivationDecision={3} nativeFrame={4} actualBackend={5}",
+                MediaNativeInteropCommon.CreateMediaPlayerAuditDetailLogLine(
+                    ValidationLogPrefix,
                     snapshot.AudioSourcePresent,
                     snapshot.HasAudioListener,
                     snapshot.NativeVideoActive,
@@ -285,8 +287,8 @@ namespace UnityAV
             if (snapshot.PlayerSessionAvailable)
             {
                 Debug.Log(
-                    string.Format(
-                        "[CodexValidation] player_session_detail lifecycle={0} public={1} runtime={2} intent={3} stop_reason={4} source_state={5} can_seek={6} realtime={7} buffering={8} syncing={9}",
+                    MediaNativeInteropCommon.CreatePlayerSessionDetailLogLine(
+                        ValidationLogPrefix,
                         snapshot.PlayerSessionLifecycleState,
                         snapshot.PlayerSessionPublicState,
                         snapshot.PlayerSessionRuntimeState,
@@ -738,8 +740,8 @@ namespace UnityAV
 
             Screen.SetResolution(width, height, false);
             Debug.Log(
-                string.Format(
-                    "[CodexValidation] window_configured={0}x{1} reason={2} fullscreen={3} mode={4}",
+                MediaNativeInteropCommon.CreateWindowConfiguredLogLine(
+                    ValidationLogPrefix,
                     width,
                     height,
                     source,
@@ -857,7 +859,10 @@ namespace UnityAV
                     backend = MediaBackendKind.Gstreamer;
                     return true;
                 default:
-                    Debug.LogWarning("[CodexValidation] ignore unknown backend=" + rawValue);
+                    Debug.LogWarning(
+                        MediaNativeInteropCommon.CreateIgnoreUnknownBackendLogLine(
+                            ValidationLogPrefix,
+                            rawValue));
                     return false;
             }
         }

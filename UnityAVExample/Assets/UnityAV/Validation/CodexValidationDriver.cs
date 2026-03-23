@@ -86,7 +86,10 @@ namespace UnityAV
             if (!string.IsNullOrEmpty(overrideUri))
             {
                 Player.Uri = overrideUri;
-                Debug.Log("[CodexValidation] override uri=" + overrideUri);
+                Debug.Log(
+                    MediaNativeInteropCommon.CreateOverrideUriLogLine(
+                        ValidationLogPrefix,
+                        overrideUri));
             }
 
             var overrideBackend = TryReadOverrideValue(BackendArgumentName, AndroidBackendExtraName);
@@ -96,8 +99,10 @@ namespace UnityAV
                 Player.PreferredBackend = parsedBackend;
                 Player.StrictBackend = parsedBackend != MediaBackendKind.Auto;
                 Debug.Log(
-                    "[CodexValidation] override backend=" + parsedBackend
-                    + " strict=" + Player.StrictBackend);
+                    MediaNativeInteropCommon.CreateOverrideBackendLogLine(
+                        ValidationLogPrefix,
+                        parsedBackend.ToString(),
+                        Player.StrictBackend));
             }
 
             var overrideVideoRenderer = TryReadOverrideValue(
@@ -107,7 +112,10 @@ namespace UnityAV
             if (TryParseVideoRenderer(overrideVideoRenderer, out parsedVideoRenderer))
             {
                 Player.VideoRenderer = parsedVideoRenderer;
-                Debug.Log("[CodexValidation] override video_renderer=" + parsedVideoRenderer);
+                Debug.Log(
+                    MediaNativeInteropCommon.CreateOverrideVideoRendererLogLine(
+                        ValidationLogPrefix,
+                        parsedVideoRenderer.ToString()));
             }
 
             bool hasExplicitLoopValue;
@@ -118,7 +126,10 @@ namespace UnityAV
                 out hasExplicitLoopValue);
             if (hasExplicitLoopValue)
             {
-                Debug.Log("[CodexValidation] override loop=" + Player.Loop);
+                Debug.Log(
+                    MediaNativeInteropCommon.CreateOverrideLoopLogLine(
+                        ValidationLogPrefix,
+                        Player.Loop));
             }
 
             ValidationSeconds = TryReadFloatArgument(
@@ -173,20 +184,26 @@ namespace UnityAV
 
             if (Player == null)
             {
-                Debug.LogError("[CodexValidation] missing MediaPlayerPull");
+                Debug.LogError(
+                    MediaNativeInteropCommon.CreateMissingComponentLogLine(
+                        ValidationLogPrefix,
+                        "MediaPlayerPull"));
                 StartCoroutine(QuitAfterDelay(1f, 2));
                 return;
             }
 
             // 场景验证需要在无人值守运行时维持稳定时钟，避免失焦后被系统节流。
             Application.runInBackground = true;
-            Debug.Log("[CodexValidation] runInBackground=True");
+            Debug.Log(
+                MediaNativeInteropCommon.CreateRunInBackgroundEnabledLogLine(
+                    ValidationLogPrefix));
             QualitySettings.vSyncCount = 0;
             Application.targetFrameRate = PreviewTargetFrameRate;
             Debug.Log(
-                "[CodexValidation] frame_pacing targetFrameRate="
-                + Application.targetFrameRate
-                + " vSyncCount=" + QualitySettings.vSyncCount);
+                MediaNativeInteropCommon.CreateFramePacingLogLine(
+                    ValidationLogPrefix,
+                    Application.targetFrameRate,
+                    QualitySettings.vSyncCount));
 
             _lastLogTime = Time.realtimeSinceStartup;
             _startTime = _lastLogTime;
@@ -1337,8 +1354,8 @@ namespace UnityAV
 
             Screen.SetResolution(width, height, false);
             Debug.Log(
-                string.Format(
-                    "[CodexValidation] window_configured={0}x{1} reason={2} fullscreen={3} mode={4}",
+                MediaNativeInteropCommon.CreateWindowConfiguredLogLine(
+                    ValidationLogPrefix,
                     width,
                     height,
                     source,
@@ -1529,7 +1546,10 @@ namespace UnityAV
                     backend = MediaBackendKind.Gstreamer;
                     return true;
                 default:
-                    Debug.LogWarning("[CodexValidation] ignore unknown backend=" + rawValue);
+                    Debug.LogWarning(
+                        MediaNativeInteropCommon.CreateIgnoreUnknownBackendLogLine(
+                            ValidationLogPrefix,
+                            rawValue));
                     return false;
             }
         }
@@ -1553,7 +1573,10 @@ namespace UnityAV
                     renderer = MediaPlayerPull.PullVideoRendererKind.Wgpu;
                     return true;
                 default:
-                    Debug.LogWarning("[CodexValidation] ignore unknown video_renderer=" + rawValue);
+                    Debug.LogWarning(
+                        MediaNativeInteropCommon.CreateIgnoreUnknownVideoRendererLogLine(
+                            ValidationLogPrefix,
+                            rawValue));
                     return false;
             }
         }

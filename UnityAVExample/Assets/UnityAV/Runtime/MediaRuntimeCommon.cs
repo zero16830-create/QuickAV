@@ -5178,6 +5178,224 @@ namespace UnityAV
             return string.Format("[{0}] time read failed: {1}", logPrefix, errorMessage);
         }
 
+        internal static string CreateOverrideUriLogLine(
+            string logPrefix,
+            string overrideUri)
+        {
+            return string.Format("[{0}] override uri={1}", logPrefix, overrideUri);
+        }
+
+        internal static string CreateOverrideBackendLogLine(
+            string logPrefix,
+            string backend,
+            bool strict)
+        {
+            return string.Format(
+                "[{0}] override backend={1} strict={2}",
+                logPrefix,
+                backend,
+                strict);
+        }
+
+        internal static string CreateOverrideVideoRendererLogLine(
+            string logPrefix,
+            string videoRenderer)
+        {
+            return string.Format(
+                "[{0}] override video_renderer={1}",
+                logPrefix,
+                videoRenderer);
+        }
+
+        internal static string CreateOverrideLoopLogLine(
+            string logPrefix,
+            bool loopEnabled)
+        {
+            return string.Format("[{0}] override loop={1}", logPrefix, loopEnabled);
+        }
+
+        internal static string CreateMissingComponentLogLine(
+            string logPrefix,
+            string componentName)
+        {
+            return string.Format("[{0}] missing {1}", logPrefix, componentName);
+        }
+
+        internal static string CreateRunInBackgroundEnabledLogLine(string logPrefix)
+        {
+            return string.Format("[{0}] runInBackground=True", logPrefix);
+        }
+
+        internal static string CreateFramePacingLogLine(
+            string logPrefix,
+            int targetFrameRate,
+            int vSyncCount)
+        {
+            return string.Format(
+                "[{0}] frame_pacing targetFrameRate={1} vSyncCount={2}",
+                logPrefix,
+                targetFrameRate,
+                vSyncCount);
+        }
+
+        internal static string CreateWindowConfiguredLogLine(
+            string logPrefix,
+            int width,
+            int height,
+            string reason,
+            bool fullscreen,
+            FullScreenMode mode)
+        {
+            return string.Format(
+                "[{0}] window_configured={1}x{2} reason={3} fullscreen={4} mode={5}",
+                logPrefix,
+                width,
+                height,
+                reason,
+                fullscreen,
+                mode);
+        }
+
+        internal static string CreateIgnoreUnknownBackendLogLine(
+            string logPrefix,
+            string rawValue)
+        {
+            return string.Format("[{0}] ignore unknown backend={1}", logPrefix, rawValue);
+        }
+
+        internal static string CreateIgnoreUnknownVideoRendererLogLine(
+            string logPrefix,
+            string rawValue)
+        {
+            return string.Format("[{0}] ignore unknown video_renderer={1}", logPrefix, rawValue);
+        }
+
+        internal static string CreateMediaPlayerAuditStartLogLine(
+            string logPrefix,
+            float validationSeconds,
+            int requestedWidth,
+            int requestedHeight,
+            bool explicitWindow)
+        {
+            return string.Format(
+                "[{0}] start validation seconds={1:F1} requestedWindow={2}x{3} explicitWindow={4} media_player_audit=True",
+                logPrefix,
+                validationSeconds,
+                requestedWidth,
+                requestedHeight,
+                explicitWindow);
+        }
+
+        internal static string CreateMediaPlayerAuditStatusLogLine(
+            string logPrefix,
+            double playbackTime,
+            bool hasTexture,
+            bool audioPlaying,
+            bool started,
+            double startupElapsedSeconds,
+            string sourceState,
+            string sourcePackets,
+            string sourceTimeouts,
+            string sourceReconnects,
+            int windowWidth,
+            int windowHeight,
+            int textureWidth,
+            int textureHeight,
+            bool fullscreen,
+            FullScreenMode fullscreenMode,
+            string actualBackend,
+            string requestedRenderer,
+            string actualRenderer,
+            PlaybackTimingAuditStringsView playbackContract,
+            SourceTimelineAuditStringsView sourceTimeline,
+            PlayerSessionAuditStringsView playerSession,
+            AudioOutputPolicyAuditStringsView audioOutputPolicy,
+            AvSyncEnterpriseAuditStringsView avSyncEnterprise)
+        {
+            return string.Format(
+                "[{0}] time={1:F3}s texture={2} audioPlaying={3} started={4} startupElapsed={5:F3}s sourceState={6} sourcePackets={7} sourceTimeouts={8} sourceReconnects={9} window={10}x{11} textureSize={12}x{13} fullscreen={14} mode={15} backend={16} requested_renderer={17} actual_renderer={18} playback_contract_available={19} playback_contract_master_sec={20} playback_contract_has_us_mirror={21} source_timeline_available={22} source_timeline_model={23} source_timeline_anchor_kind={24} player_session_available={25} player_session_lifecycle={26} player_session_is_realtime={27} audio_output_policy_available={28} av_sync_enterprise_available={29} av_sync_enterprise_sample_count={30} av_sync_enterprise_drift_projected_2h_ms={31}",
+                logPrefix,
+                playbackTime,
+                hasTexture,
+                audioPlaying,
+                started,
+                startupElapsedSeconds,
+                sourceState,
+                sourcePackets,
+                sourceTimeouts,
+                sourceReconnects,
+                windowWidth,
+                windowHeight,
+                textureWidth,
+                textureHeight,
+                fullscreen,
+                fullscreenMode,
+                actualBackend,
+                requestedRenderer,
+                actualRenderer,
+                playbackContract.Available,
+                playbackContract.MasterTimeSec,
+                playbackContract.HasMicrosecondMirror,
+                sourceTimeline.Available,
+                sourceTimeline.Model,
+                sourceTimeline.AnchorKind,
+                playerSession.Available,
+                playerSession.LifecycleState,
+                playerSession.IsRealtime,
+                audioOutputPolicy.Available,
+                avSyncEnterprise.Available,
+                avSyncEnterprise.SampleCount,
+                avSyncEnterprise.DriftProjected2hMs);
+        }
+
+        internal static string CreateMediaPlayerAuditDetailLogLine(
+            string logPrefix,
+            bool audioSourcePresent,
+            bool hasAudioListener,
+            bool nativeVideoActive,
+            string nativeActivationDecision,
+            bool hasPresentedNativeVideoFrame,
+            string actualBackend)
+        {
+            return string.Format(
+                "[{0}] media_player_audit audioSourcePresent={1} hasAudioListener={2} nativeVideoActive={3} nativeActivationDecision={4} nativeFrame={5} actualBackend={6}",
+                logPrefix,
+                audioSourcePresent,
+                hasAudioListener,
+                nativeVideoActive,
+                nativeActivationDecision,
+                hasPresentedNativeVideoFrame,
+                actualBackend);
+        }
+
+        internal static string CreatePlayerSessionDetailLogLine(
+            string logPrefix,
+            string lifecycleState,
+            string publicState,
+            string runtimeState,
+            string playbackIntent,
+            string stopReason,
+            string sourceState,
+            string canSeek,
+            string isRealtime,
+            string isBuffering,
+            string isSyncing)
+        {
+            return string.Format(
+                "[{0}] player_session_detail lifecycle={1} public={2} runtime={3} intent={4} stop_reason={5} source_state={6} can_seek={7} realtime={8} buffering={9} syncing={10}",
+                logPrefix,
+                lifecycleState,
+                publicState,
+                runtimeState,
+                playbackIntent,
+                stopReason,
+                sourceState,
+                canSeek,
+                isRealtime,
+                isBuffering,
+                isSyncing);
+        }
+
         internal static ValidationVideoTextureObservationView
             CreatePullValidationVideoTextureObservation(
                 bool hasPresentedVideoFrame,
