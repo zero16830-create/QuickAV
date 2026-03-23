@@ -5088,6 +5088,29 @@ namespace UnityAV
             builder.AppendLine("av_sync_enterprise_drift_projected_2h_ms=" + summary.DriftProjected2hMs);
         }
 
+        internal static void AppendValidationSummaryAudioOutputPolicy(
+            StringBuilder builder,
+            AudioOutputPolicyAuditStringsView summary)
+        {
+            builder.AppendLine("audio_output_policy_available=" + summary.Available);
+            builder.AppendLine("audio_output_policy_file_start_ms=" + summary.FileStartThresholdMilliseconds);
+            builder.AppendLine("audio_output_policy_android_file_start_ms=" + summary.AndroidFileStartThresholdMilliseconds);
+            builder.AppendLine("audio_output_policy_realtime_start_ms=" + summary.RealtimeStartThresholdMilliseconds);
+            builder.AppendLine("audio_output_policy_realtime_startup_grace_ms=" + summary.RealtimeStartupGraceMilliseconds);
+            builder.AppendLine("audio_output_policy_realtime_startup_minimum_threshold_ms=" + summary.RealtimeStartupMinimumThresholdMilliseconds);
+            builder.AppendLine("audio_output_policy_file_ring_capacity_ms=" + summary.FileRingCapacityMilliseconds);
+            builder.AppendLine("audio_output_policy_android_file_ring_capacity_ms=" + summary.AndroidFileRingCapacityMilliseconds);
+            builder.AppendLine("audio_output_policy_realtime_ring_capacity_ms=" + summary.RealtimeRingCapacityMilliseconds);
+            builder.AppendLine("audio_output_policy_file_buffered_ceiling_ms=" + summary.FileBufferedCeilingMilliseconds);
+            builder.AppendLine("audio_output_policy_android_file_buffered_ceiling_ms=" + summary.AndroidFileBufferedCeilingMilliseconds);
+            builder.AppendLine("audio_output_policy_realtime_buffered_ceiling_ms=" + summary.RealtimeBufferedCeilingMilliseconds);
+            builder.AppendLine("audio_output_policy_realtime_startup_additional_sink_delay_ms=" + summary.RealtimeStartupAdditionalSinkDelayMilliseconds);
+            builder.AppendLine("audio_output_policy_realtime_steady_additional_sink_delay_ms=" + summary.RealtimeSteadyAdditionalSinkDelayMilliseconds);
+            builder.AppendLine("audio_output_policy_realtime_backend_additional_sink_delay_ms=" + summary.RealtimeBackendAdditionalSinkDelayMilliseconds);
+            builder.AppendLine("audio_output_policy_realtime_start_requires_video_frame=" + summary.RealtimeStartRequiresVideoFrame);
+            builder.AppendLine("audio_output_policy_allow_android_file_output_rate_bridge=" + summary.AllowAndroidFileOutputRateBridge);
+        }
+
         internal static PlaybackStartObservationView CreatePlaybackStartObservation(
             bool hasReportedStarted,
             bool reportedStarted,

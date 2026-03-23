@@ -780,6 +780,27 @@ namespace UnityAV
                         SampleCount = _observedAvSyncEnterpriseSampleCount,
                         DriftProjected2hMs = _observedAvSyncEnterpriseDriftProjected2hMs,
                     };
+                var summaryAudioOutputPolicy =
+                    new MediaNativeInteropCommon.AudioOutputPolicyAuditStringsView
+                    {
+                        Available = _observedAudioOutputPolicyAvailable,
+                        FileStartThresholdMilliseconds = _observedAudioOutputPolicyFileStartMs,
+                        AndroidFileStartThresholdMilliseconds = _observedAudioOutputPolicyAndroidFileStartMs,
+                        RealtimeStartThresholdMilliseconds = _observedAudioOutputPolicyRealtimeStartMs,
+                        RealtimeStartupGraceMilliseconds = _observedAudioOutputPolicyRealtimeStartupGraceMs,
+                        RealtimeStartupMinimumThresholdMilliseconds = _observedAudioOutputPolicyRealtimeStartupMinimumThresholdMs,
+                        FileRingCapacityMilliseconds = _observedAudioOutputPolicyFileRingCapacityMs,
+                        AndroidFileRingCapacityMilliseconds = _observedAudioOutputPolicyAndroidFileRingCapacityMs,
+                        RealtimeRingCapacityMilliseconds = _observedAudioOutputPolicyRealtimeRingCapacityMs,
+                        FileBufferedCeilingMilliseconds = _observedAudioOutputPolicyFileBufferedCeilingMs,
+                        AndroidFileBufferedCeilingMilliseconds = _observedAudioOutputPolicyAndroidFileBufferedCeilingMs,
+                        RealtimeBufferedCeilingMilliseconds = _observedAudioOutputPolicyRealtimeBufferedCeilingMs,
+                        RealtimeStartupAdditionalSinkDelayMilliseconds = _observedAudioOutputPolicyRealtimeStartupAdditionalSinkDelayMs,
+                        RealtimeSteadyAdditionalSinkDelayMilliseconds = _observedAudioOutputPolicyRealtimeSteadyAdditionalSinkDelayMs,
+                        RealtimeBackendAdditionalSinkDelayMilliseconds = _observedAudioOutputPolicyRealtimeBackendAdditionalSinkDelayMs,
+                        RealtimeStartRequiresVideoFrame = _observedAudioOutputPolicyRealtimeStartRequiresVideoFrame,
+                        AllowAndroidFileOutputRateBridge = _observedAudioOutputPolicyAllowAndroidFileOutputRateBridge,
+                    };
                 var backendRuntimeObservation =
                     MediaNativeInteropCommon.CreateMediaPlayerBackendRuntimeObservation(
                         Player != null,
@@ -825,23 +846,9 @@ namespace UnityAV
                 MediaNativeInteropCommon.AppendValidationSummaryPlaybackContract(
                     builder,
                     summaryPlaybackContract);
-                builder.AppendLine("audio_output_policy_available=" + _observedAudioOutputPolicyAvailable);
-                builder.AppendLine("audio_output_policy_file_start_ms=" + _observedAudioOutputPolicyFileStartMs);
-                builder.AppendLine("audio_output_policy_android_file_start_ms=" + _observedAudioOutputPolicyAndroidFileStartMs);
-                builder.AppendLine("audio_output_policy_realtime_start_ms=" + _observedAudioOutputPolicyRealtimeStartMs);
-                builder.AppendLine("audio_output_policy_realtime_startup_grace_ms=" + _observedAudioOutputPolicyRealtimeStartupGraceMs);
-                builder.AppendLine("audio_output_policy_realtime_startup_minimum_threshold_ms=" + _observedAudioOutputPolicyRealtimeStartupMinimumThresholdMs);
-                builder.AppendLine("audio_output_policy_file_ring_capacity_ms=" + _observedAudioOutputPolicyFileRingCapacityMs);
-                builder.AppendLine("audio_output_policy_android_file_ring_capacity_ms=" + _observedAudioOutputPolicyAndroidFileRingCapacityMs);
-                builder.AppendLine("audio_output_policy_realtime_ring_capacity_ms=" + _observedAudioOutputPolicyRealtimeRingCapacityMs);
-                builder.AppendLine("audio_output_policy_file_buffered_ceiling_ms=" + _observedAudioOutputPolicyFileBufferedCeilingMs);
-                builder.AppendLine("audio_output_policy_android_file_buffered_ceiling_ms=" + _observedAudioOutputPolicyAndroidFileBufferedCeilingMs);
-                builder.AppendLine("audio_output_policy_realtime_buffered_ceiling_ms=" + _observedAudioOutputPolicyRealtimeBufferedCeilingMs);
-                builder.AppendLine("audio_output_policy_realtime_startup_additional_sink_delay_ms=" + _observedAudioOutputPolicyRealtimeStartupAdditionalSinkDelayMs);
-                builder.AppendLine("audio_output_policy_realtime_steady_additional_sink_delay_ms=" + _observedAudioOutputPolicyRealtimeSteadyAdditionalSinkDelayMs);
-                builder.AppendLine("audio_output_policy_realtime_backend_additional_sink_delay_ms=" + _observedAudioOutputPolicyRealtimeBackendAdditionalSinkDelayMs);
-                builder.AppendLine("audio_output_policy_realtime_start_requires_video_frame=" + _observedAudioOutputPolicyRealtimeStartRequiresVideoFrame);
-                builder.AppendLine("audio_output_policy_allow_android_file_output_rate_bridge=" + _observedAudioOutputPolicyAllowAndroidFileOutputRateBridge);
+                MediaNativeInteropCommon.AppendValidationSummaryAudioOutputPolicy(
+                    builder,
+                    summaryAudioOutputPolicy);
                 MediaNativeInteropCommon.AppendValidationSummaryAvSyncEnterprise(
                     builder,
                     summaryAvSyncEnterprise);
