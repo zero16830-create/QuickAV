@@ -1580,6 +1580,24 @@ namespace UnityAV
             public string AndroidFileRateBridgeActive;
         }
 
+        internal struct ValidationSummaryFrameContractView
+        {
+            public bool Available;
+            public string MemoryKind;
+            public string DynamicRange;
+            public string NominalFps;
+        }
+
+        internal struct ValidationSummaryAvSyncContractView
+        {
+            public bool Available;
+            public string MasterClock;
+            public string DriftMs;
+            public string ClockDeltaMs;
+            public string DropTotal;
+            public string DuplicateTotal;
+        }
+
         internal struct ValidationSummarySourceRuntimeView
         {
             public string State;
@@ -5319,6 +5337,7 @@ namespace UnityAV
         }
 
         internal static ValidationSummaryPlayerSessionExtendedView CreateValidationSummaryPlayerSessionExtended(
+            bool available,
             string lifecycleState,
             string publicState,
             string runtimeState,
@@ -5340,7 +5359,7 @@ namespace UnityAV
         {
             return new ValidationSummaryPlayerSessionExtendedView
             {
-                Available = !string.Equals(lifecycleState, "n/a", StringComparison.OrdinalIgnoreCase),
+                Available = available,
                 LifecycleState = lifecycleState,
                 PublicState = publicState,
                 RuntimeState = runtimeState,
@@ -5431,6 +5450,31 @@ namespace UnityAV
             builder.AppendLine("path_selection_kind=" + summary.Kind);
         }
 
+        internal static ValidationSummaryFrameContractView CreateValidationSummaryFrameContract(
+            bool available,
+            string memoryKind,
+            string dynamicRange,
+            string nominalFps)
+        {
+            return new ValidationSummaryFrameContractView
+            {
+                Available = available,
+                MemoryKind = memoryKind,
+                DynamicRange = dynamicRange,
+                NominalFps = nominalFps,
+            };
+        }
+
+        internal static void AppendValidationSummaryFrameContract(
+            StringBuilder builder,
+            ValidationSummaryFrameContractView summary)
+        {
+            builder.AppendLine("frame_contract_available=" + summary.Available);
+            builder.AppendLine("frame_contract_memory=" + summary.MemoryKind);
+            builder.AppendLine("frame_contract_dynamic_range=" + summary.DynamicRange);
+            builder.AppendLine("frame_contract_nominal_fps=" + summary.NominalFps);
+        }
+
         internal static void AppendValidationSummaryPlaybackContract(
             StringBuilder builder,
             PlaybackTimingAuditStringsView summary)
@@ -5464,6 +5508,37 @@ namespace UnityAV
             builder.AppendLine("playback_contract_audio_sink_delay_us=" + summary.AudioSinkDelayUs);
             builder.AppendLine("playback_contract_has_us_mirror=" + summary.HasMicrosecondMirror);
             builder.AppendLine("playback_contract_has_audio_clock=" + summary.HasAudioClock);
+        }
+
+        internal static ValidationSummaryAvSyncContractView CreateValidationSummaryAvSyncContract(
+            bool available,
+            string masterClock,
+            string driftMs,
+            string clockDeltaMs,
+            string dropTotal,
+            string duplicateTotal)
+        {
+            return new ValidationSummaryAvSyncContractView
+            {
+                Available = available,
+                MasterClock = masterClock,
+                DriftMs = driftMs,
+                ClockDeltaMs = clockDeltaMs,
+                DropTotal = dropTotal,
+                DuplicateTotal = duplicateTotal,
+            };
+        }
+
+        internal static void AppendValidationSummaryAvSyncContract(
+            StringBuilder builder,
+            ValidationSummaryAvSyncContractView summary)
+        {
+            builder.AppendLine("av_sync_contract_available=" + summary.Available);
+            builder.AppendLine("av_sync_contract_master_clock=" + summary.MasterClock);
+            builder.AppendLine("av_sync_contract_drift_ms=" + summary.DriftMs);
+            builder.AppendLine("av_sync_contract_clock_delta_ms=" + summary.ClockDeltaMs);
+            builder.AppendLine("av_sync_contract_drop_total=" + summary.DropTotal);
+            builder.AppendLine("av_sync_contract_duplicate_total=" + summary.DuplicateTotal);
         }
 
         internal static void AppendValidationSummarySourceTimeline(

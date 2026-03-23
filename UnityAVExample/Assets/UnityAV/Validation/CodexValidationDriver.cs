@@ -1049,6 +1049,9 @@ namespace UnityAV
                         ObservedTextureDuringWindow = _observedTextureDuringWindow,
                         ObservedAudioDuringWindow = _observedAudioDuringWindow,
                         ObservedStartedDuringWindow = _observedStartedDuringWindow,
+                        IncludeValidationWindowStartReason =
+                            !string.IsNullOrEmpty(_validationWindowStartReason),
+                        ValidationWindowStartReason = _validationWindowStartReason,
                     });
                 MediaNativeInteropCommon.AppendValidationSummaryRuntimeHealth(
                     builder,
@@ -1146,6 +1149,7 @@ namespace UnityAV
                         finalSnapshot.PlaybackContractHasAudioClock.ToString());
                 var summaryPlayerSession =
                     MediaNativeInteropCommon.CreateValidationSummaryPlayerSessionExtended(
+                        finalSnapshot.HasPlayerSessionContract,
                         finalSnapshot.PlayerSessionLifecycleState.ToString(),
                         finalSnapshot.PlayerSessionPublicState.ToString(),
                         finalSnapshot.PlayerSessionRuntimeState.ToString(),
@@ -1176,19 +1180,29 @@ namespace UnityAV
                         finalSnapshot.AvSyncEnterpriseOffsetAbsP95Us.ToString(),
                         finalSnapshot.AvSyncEnterpriseOffsetAbsP99Us.ToString(),
                         finalSnapshot.AvSyncEnterpriseOffsetAbsMaxUs.ToString());
-                builder.AppendLine("frame_contract_available=" + finalSnapshot.HasFrameContract);
-                builder.AppendLine("frame_contract_memory=" + finalSnapshot.FrameContractMemoryKind);
-                builder.AppendLine("frame_contract_dynamic_range=" + finalSnapshot.FrameContractDynamicRange);
-                builder.AppendLine("frame_contract_nominal_fps=" + finalSnapshot.FrameContractNominalFps.ToString("F2"));
+                var summaryFrameContract =
+                    MediaNativeInteropCommon.CreateValidationSummaryFrameContract(
+                        finalSnapshot.HasFrameContract,
+                        finalSnapshot.FrameContractMemoryKind,
+                        finalSnapshot.FrameContractDynamicRange,
+                        finalSnapshot.FrameContractNominalFps.ToString("F2"));
+                var summaryAvSyncContract =
+                    MediaNativeInteropCommon.CreateValidationSummaryAvSyncContract(
+                        finalSnapshot.HasAvSyncContract,
+                        finalSnapshot.AvSyncContractMasterClock,
+                        finalSnapshot.AvSyncContractDriftMs.ToString("F1"),
+                        finalSnapshot.AvSyncContractClockDeltaMs.ToString("F1"),
+                        finalSnapshot.AvSyncContractDropTotal.ToString(),
+                        finalSnapshot.AvSyncContractDuplicateTotal.ToString());
+                MediaNativeInteropCommon.AppendValidationSummaryFrameContract(
+                    builder,
+                    summaryFrameContract);
                 MediaNativeInteropCommon.AppendValidationSummaryPlaybackContractExtended(
                     builder,
                     summaryPlaybackContract);
-                builder.AppendLine("av_sync_contract_available=" + finalSnapshot.HasAvSyncContract);
-                builder.AppendLine("av_sync_contract_master_clock=" + finalSnapshot.AvSyncContractMasterClock);
-                builder.AppendLine("av_sync_contract_drift_ms=" + finalSnapshot.AvSyncContractDriftMs.ToString("F1"));
-                builder.AppendLine("av_sync_contract_clock_delta_ms=" + finalSnapshot.AvSyncContractClockDeltaMs.ToString("F1"));
-                builder.AppendLine("av_sync_contract_drop_total=" + finalSnapshot.AvSyncContractDropTotal);
-                builder.AppendLine("av_sync_contract_duplicate_total=" + finalSnapshot.AvSyncContractDuplicateTotal);
+                MediaNativeInteropCommon.AppendValidationSummaryAvSyncContract(
+                    builder,
+                    summaryAvSyncContract);
                 MediaNativeInteropCommon.AppendValidationSummarySourceTimeline(
                     builder,
                     summarySourceTimeline);
