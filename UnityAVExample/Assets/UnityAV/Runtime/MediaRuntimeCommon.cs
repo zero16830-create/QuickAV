@@ -1530,6 +1530,12 @@ namespace UnityAV
         {
             public bool RequireAudioOutput;
             public bool AudioEnabled;
+            public bool ConfiguredRequireAudioOutput;
+            public string Source;
+            public bool RuntimeContractAvailable;
+            public bool RuntimeStateReported;
+            public bool RuntimeShouldPlay;
+            public int RuntimeBlockReason;
         }
 
         internal struct ValidationAudioPlaybackObservationView
@@ -1543,6 +1549,7 @@ namespace UnityAV
             public bool HasTexture;
             public bool AudioPlaying;
             public bool Started;
+            public bool RuntimePlaybackConfirmed;
             public bool HasPresentedNativeVideoFrame;
             public double PlaybackTimeSec;
         }
@@ -1559,6 +1566,20 @@ namespace UnityAV
             public string ActualVideoRenderer;
             public bool IncludeRequireAudioOutput;
             public bool RequireAudioOutput;
+            public bool IncludeConfiguredRequireAudioOutput;
+            public bool ConfiguredRequireAudioOutput;
+            public bool IncludeAudioGateConfiguredAudioEnabled;
+            public bool AudioGateConfiguredAudioEnabled;
+            public bool IncludeAudioGateSource;
+            public string AudioGateSource;
+            public bool IncludeAudioGateRuntimeContractAvailable;
+            public bool AudioGateRuntimeContractAvailable;
+            public bool IncludeAudioGateRuntimeStateReported;
+            public bool AudioGateRuntimeStateReported;
+            public bool IncludeAudioGateRuntimeShouldPlay;
+            public bool AudioGateRuntimeShouldPlay;
+            public bool IncludeAudioGateRuntimeBlockReason;
+            public string AudioGateRuntimeBlockReason;
             public double PlaybackAdvanceSeconds;
         }
 
@@ -1567,6 +1588,10 @@ namespace UnityAV
             public bool HasTexture;
             public bool AudioPlaying;
             public bool Started;
+            public bool IncludeAudioSourcePresent;
+            public bool AudioSourcePresent;
+            public bool IncludeHasAudioListener;
+            public bool HasAudioListener;
             public bool ObservedTextureDuringWindow;
             public bool ObservedAudioDuringWindow;
             public bool ObservedStartedDuringWindow;
@@ -4856,7 +4881,6 @@ namespace UnityAV
             return CreatePullValidationWindowStartObservation(
                 inputs.HasTexture,
                 inputs.RequireAudioOutput,
-                inputs.AudioEnabled,
                 inputs.AudioPlaying,
                 startupElapsedSeconds,
                 startupTimeoutSeconds);
@@ -4864,12 +4888,36 @@ namespace UnityAV
 
         internal static PullValidationAudioGatePolicyView CreatePullValidationAudioGatePolicy(
             bool requireAudioOutput,
-            MediaPlayerPull player)
+            bool audioEnabled,
+            AudioStartRuntimeCommandView runtimeCommand)
         {
+            var effectiveRequireAudioOutput = false;
+            var source = "config_disabled";
+            if (requireAudioOutput)
+            {
+                if (runtimeCommand.ContractAvailable
+                    && runtimeCommand.StateReported)
+                {
+                    effectiveRequireAudioOutput = runtimeCommand.ShouldPlay;
+                    source = "runtime_" + runtimeCommand.Source;
+                }
+                else
+                {
+                    effectiveRequireAudioOutput = audioEnabled;
+                    source = "player_enable_audio";
+                }
+            }
+
             return new PullValidationAudioGatePolicyView
             {
-                RequireAudioOutput = requireAudioOutput,
-                AudioEnabled = player != null && player.EnableAudio,
+                RequireAudioOutput = effectiveRequireAudioOutput,
+                AudioEnabled = audioEnabled,
+                ConfiguredRequireAudioOutput = requireAudioOutput,
+                Source = source,
+                RuntimeContractAvailable = runtimeCommand.ContractAvailable,
+                RuntimeStateReported = runtimeCommand.StateReported,
+                RuntimeShouldPlay = runtimeCommand.ShouldPlay,
+                RuntimeBlockReason = runtimeCommand.BlockReason,
             };
         }
 
@@ -4887,13 +4935,12 @@ namespace UnityAV
             CreatePullValidationWindowStartObservation(
                 bool hasTexture,
                 bool requireAudioOutput,
-                bool audioEnabled,
                 bool audioPlaying,
                 float startupElapsedSeconds,
                 float startupTimeoutSeconds)
         {
             var outputsReady = hasTexture
-                && (!requireAudioOutput || !audioEnabled || audioPlaying);
+                && (!requireAudioOutput || audioPlaying);
             if (outputsReady)
             {
                 return new ValidationWindowStartObservationView
@@ -4926,7 +4973,7 @@ namespace UnityAV
                 float startupTimeoutSeconds)
         {
             return CreateMediaPlayerValidationWindowStartObservation(
-                inputs.Started,
+                inputs.Started || inputs.RuntimePlaybackConfirmed,
                 inputs.PlaybackTimeSec,
                 inputs.HasPresentedNativeVideoFrame,
                 startupElapsedSeconds,
@@ -4987,7 +5034,6 @@ namespace UnityAV
                 string validationWindowStartReason,
                 ValidationWindowEvidenceObservationView evidenceObservation,
                 bool requireAudioOutput,
-                bool audioEnabled,
                 double minimumPlaybackAdvanceSeconds,
                 double validationWindowInitialPlaybackTimeSec)
         {
@@ -4997,7 +5043,6 @@ namespace UnityAV
                 evidenceObservation.ObservedTextureDuringWindow,
                 evidenceObservation.ObservedAudioDuringWindow,
                 requireAudioOutput,
-                audioEnabled,
                 minimumPlaybackAdvanceSeconds,
                 validationWindowInitialPlaybackTimeSec,
                 evidenceObservation.MaxObservedPlaybackTime);
@@ -5010,7 +5055,6 @@ namespace UnityAV
                 bool observedTextureDuringWindow,
                 bool observedAudioDuringWindow,
                 bool requireAudioOutput,
-                bool audioEnabled,
                 double minimumPlaybackAdvanceSeconds,
                 double validationWindowInitialPlaybackTimeSec,
                 double maxObservedPlaybackTimeSec)
@@ -5051,7 +5095,6 @@ namespace UnityAV
             }
 
             if (requireAudioOutput
-                && audioEnabled
                 && !observedAudioDuringWindow)
             {
                 return new ValidationResultObservationView
@@ -5157,9 +5200,7 @@ namespace UnityAV
             return new ValidationResultObservationView
             {
                 Passed = true,
-                Reason = observedAudioDuringWindow
-                    ? "steady-playback-with-audio"
-                    : "steady-playback-no-audio",
+                Reason = "steady-playback",
                 PlaybackAdvanceSeconds = playbackAdvanceSeconds,
             };
         }
@@ -6050,7 +6091,7 @@ namespace UnityAV
                 currentObservation.MaxObservedPlaybackTime,
                 inputs.HasTexture,
                 inputs.AudioPlaying,
-                inputs.Started,
+                inputs.Started || inputs.RuntimePlaybackConfirmed,
                 inputs.HasPresentedNativeVideoFrame,
                 inputs.PlaybackTimeSec);
         }
@@ -6105,6 +6146,53 @@ namespace UnityAV
                 builder.AppendLine("require_audio_output=" + summary.RequireAudioOutput);
             }
 
+            if (summary.IncludeConfiguredRequireAudioOutput)
+            {
+                builder.AppendLine(
+                    "configured_require_audio_output="
+                    + summary.ConfiguredRequireAudioOutput);
+            }
+
+            if (summary.IncludeAudioGateConfiguredAudioEnabled)
+            {
+                builder.AppendLine(
+                    "audio_gate_configured_audio_enabled="
+                    + summary.AudioGateConfiguredAudioEnabled);
+            }
+
+            if (summary.IncludeAudioGateSource)
+            {
+                builder.AppendLine("audio_gate_source=" + summary.AudioGateSource);
+            }
+
+            if (summary.IncludeAudioGateRuntimeContractAvailable)
+            {
+                builder.AppendLine(
+                    "audio_gate_runtime_contract_available="
+                    + summary.AudioGateRuntimeContractAvailable);
+            }
+
+            if (summary.IncludeAudioGateRuntimeStateReported)
+            {
+                builder.AppendLine(
+                    "audio_gate_runtime_state_reported="
+                    + summary.AudioGateRuntimeStateReported);
+            }
+
+            if (summary.IncludeAudioGateRuntimeShouldPlay)
+            {
+                builder.AppendLine(
+                    "audio_gate_runtime_should_play="
+                    + summary.AudioGateRuntimeShouldPlay);
+            }
+
+            if (summary.IncludeAudioGateRuntimeBlockReason)
+            {
+                builder.AppendLine(
+                    "audio_gate_runtime_block_reason="
+                    + summary.AudioGateRuntimeBlockReason);
+            }
+
             builder.AppendLine("playback_advance_sec=" + summary.PlaybackAdvanceSeconds.ToString("F3"));
         }
 
@@ -6115,6 +6203,14 @@ namespace UnityAV
             builder.AppendLine("has_texture=" + summary.HasTexture);
             builder.AppendLine("audio_playing=" + summary.AudioPlaying);
             builder.AppendLine("started=" + summary.Started);
+            if (summary.IncludeAudioSourcePresent)
+            {
+                builder.AppendLine("audio_source_present=" + summary.AudioSourcePresent);
+            }
+            if (summary.IncludeHasAudioListener)
+            {
+                builder.AppendLine("has_audio_listener=" + summary.HasAudioListener);
+            }
             builder.AppendLine("observed_texture_during_window=" + summary.ObservedTextureDuringWindow);
             builder.AppendLine("observed_audio_during_window=" + summary.ObservedAudioDuringWindow);
             builder.AppendLine("observed_started_during_window=" + summary.ObservedStartedDuringWindow);

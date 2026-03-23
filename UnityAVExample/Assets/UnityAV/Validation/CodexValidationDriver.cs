@@ -238,7 +238,11 @@ namespace UnityAV
                 if (!_validationWindowStarted)
                 {
                     var startupElapsed = now - startTime;
-                    var validationGateInputs = CreateValidationGateInputs(snapshot);
+                    var audioGatePolicy = ResolveValidationAudioGatePolicy(snapshot);
+                    var validationGateInputs =
+                        CreateValidationGateInputs(
+                            snapshot,
+                            audioGatePolicy);
                     var validationWindowStartObservation =
                         MediaNativeInteropCommon.CreatePullValidationWindowStartObservation(
                             validationGateInputs,
@@ -251,9 +255,7 @@ namespace UnityAV
                             startupElapsed,
                             validationWindowStartObservation.Reason,
                             snapshot.PlaybackTime,
-                            MediaNativeInteropCommon.CreatePullValidationAudioGatePolicy(
-                                RequireAudioOutput,
-                                Player));
+                            audioGatePolicy);
                     }
                 }
                 else
@@ -974,14 +976,55 @@ namespace UnityAV
                     startupElapsed));
         }
 
+        private MediaNativeInteropCommon.PullValidationAudioGatePolicyView
+            ResolveValidationAudioGatePolicy(ValidationSnapshot snapshot)
+        {
+            if (_validationWindowStarted)
+            {
+                return _validationWindowAudioGatePolicy;
+            }
+
+            var runtimeCommand =
+                MediaNativeInteropCommon.ResolveAudioStartRuntimeCommand(
+                    snapshot.HasPlayerSessionContract,
+                    new MediaNativeInteropCommon.PlayerSessionContractView
+                    {
+                        AudioStartStateReported =
+                            snapshot.PlayerSessionAudioStartStateReported,
+                        ShouldStartAudio =
+                            snapshot.PlayerSessionShouldStartAudio,
+                        AudioStartBlockReason =
+                            snapshot.PlayerSessionAudioStartBlockReason,
+                        RequiredBufferedSamples =
+                            snapshot.PlayerSessionRequiredBufferedSamples,
+                        ReportedBufferedSamples =
+                            snapshot.PlayerSessionReportedBufferedSamples,
+                        RequiresPresentedVideoFrame =
+                            snapshot.PlayerSessionRequiresPresentedVideoFrame,
+                        HasPresentedVideoFrame =
+                            snapshot.PlayerSessionHasPresentedVideoFrame,
+                        AndroidFileRateBridgeActive =
+                            snapshot.PlayerSessionAndroidFileRateBridgeActive,
+                    });
+            return MediaNativeInteropCommon.CreatePullValidationAudioGatePolicy(
+                RequireAudioOutput,
+                Player != null && Player.EnableAudio,
+                runtimeCommand);
+        }
+
         private MediaNativeInteropCommon.PullValidationGateInputsView
             CreateValidationGateInputs(ValidationSnapshot snapshot)
         {
-            var audioGatePolicy = _validationWindowStarted
-                ? _validationWindowAudioGatePolicy
-                : MediaNativeInteropCommon.CreatePullValidationAudioGatePolicy(
-                    RequireAudioOutput,
-                    Player);
+            return CreateValidationGateInputs(
+                snapshot,
+                ResolveValidationAudioGatePolicy(snapshot));
+        }
+
+        private MediaNativeInteropCommon.PullValidationGateInputsView
+            CreateValidationGateInputs(
+                ValidationSnapshot snapshot,
+                MediaNativeInteropCommon.PullValidationAudioGatePolicyView audioGatePolicy)
+        {
             return new MediaNativeInteropCommon.PullValidationGateInputsView
             {
                 HasTexture = snapshot.HasTexture,
@@ -1033,7 +1076,6 @@ namespace UnityAV
                     _validationWindowStartReason,
                     CreateValidationEvidenceObservation(),
                     validationGateInputs.RequireAudioOutput,
-                    validationGateInputs.AudioEnabled,
                     MediaNativeInteropCommon.MinimumValidationPlaybackAdvanceSeconds,
                     _validationWindowInitialPlaybackTime);
             var playbackAdvance = resultObservation.PlaybackAdvanceSeconds;
@@ -1081,6 +1123,8 @@ namespace UnityAV
                         Player != null ? Player.ActualBackendKind : default(MediaBackendKind),
                         Player != null ? Player.VideoRenderer : default(MediaPlayerPull.PullVideoRendererKind),
                         Player != null ? Player.ActualVideoRenderer : default(MediaPlayerPull.PullVideoRendererKind));
+                var summaryAudioGatePolicy =
+                    ResolveValidationAudioGatePolicy(finalSnapshot);
                 var builder = new StringBuilder();
                 MediaNativeInteropCommon.AppendValidationSummaryHeader(
                     builder,
@@ -1095,7 +1139,27 @@ namespace UnityAV
                         RequestedVideoRenderer = backendRuntimeObservation.RequestedVideoRenderer,
                         ActualVideoRenderer = backendRuntimeObservation.ActualVideoRenderer,
                         IncludeRequireAudioOutput = true,
-                        RequireAudioOutput = RequireAudioOutput,
+                        RequireAudioOutput = summaryAudioGatePolicy.RequireAudioOutput,
+                        IncludeConfiguredRequireAudioOutput = true,
+                        ConfiguredRequireAudioOutput =
+                            summaryAudioGatePolicy.ConfiguredRequireAudioOutput,
+                        IncludeAudioGateConfiguredAudioEnabled = true,
+                        AudioGateConfiguredAudioEnabled =
+                            summaryAudioGatePolicy.AudioEnabled,
+                        IncludeAudioGateSource = true,
+                        AudioGateSource = summaryAudioGatePolicy.Source,
+                        IncludeAudioGateRuntimeContractAvailable = true,
+                        AudioGateRuntimeContractAvailable =
+                            summaryAudioGatePolicy.RuntimeContractAvailable,
+                        IncludeAudioGateRuntimeStateReported = true,
+                        AudioGateRuntimeStateReported =
+                            summaryAudioGatePolicy.RuntimeStateReported,
+                        IncludeAudioGateRuntimeShouldPlay = true,
+                        AudioGateRuntimeShouldPlay =
+                            summaryAudioGatePolicy.RuntimeShouldPlay,
+                        IncludeAudioGateRuntimeBlockReason = true,
+                        AudioGateRuntimeBlockReason =
+                            summaryAudioGatePolicy.RuntimeBlockReason.ToString(),
                         PlaybackAdvanceSeconds = result.PlaybackAdvanceSeconds,
                     });
                 MediaNativeInteropCommon.AppendValidationSummaryWindow(

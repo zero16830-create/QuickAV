@@ -469,11 +469,18 @@ namespace UnityAV
         private MediaNativeInteropCommon.MediaPlayerValidationGateInputsView
             CreateValidationGateInputs(ValidationSnapshot snapshot)
         {
+            var runtimePlaybackConfirmed =
+                snapshot.PlayerSessionAvailable
+                && string.Equals(
+                    snapshot.PlayerSessionLifecycleState,
+                    "Playing",
+                    StringComparison.OrdinalIgnoreCase);
             return new MediaNativeInteropCommon.MediaPlayerValidationGateInputsView
             {
                 HasTexture = snapshot.HasTexture,
                 AudioPlaying = snapshot.AudioPlaying,
                 Started = snapshot.Started,
+                RuntimePlaybackConfirmed = runtimePlaybackConfirmed,
                 HasPresentedNativeVideoFrame = snapshot.HasPresentedNativeVideoFrame,
                 PlaybackTimeSec = snapshot.PlaybackTime,
             };
@@ -606,6 +613,10 @@ namespace UnityAV
                         HasTexture = finalSnapshot.HasTexture,
                         AudioPlaying = finalSnapshot.AudioPlaying,
                         Started = finalSnapshot.Started,
+                        IncludeAudioSourcePresent = true,
+                        AudioSourcePresent = finalSnapshot.AudioSourcePresent,
+                        IncludeHasAudioListener = true,
+                        HasAudioListener = finalSnapshot.HasAudioListener,
                         ObservedTextureDuringWindow = _observedTextureDuringWindow,
                         ObservedAudioDuringWindow = _observedAudioDuringWindow,
                         ObservedStartedDuringWindow = _observedStartedDuringWindow,
