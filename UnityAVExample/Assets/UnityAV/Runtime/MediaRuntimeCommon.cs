@@ -1523,6 +1523,7 @@ namespace UnityAV
             public bool AudioEnabled;
             public bool AudioPlaying;
             public bool Started;
+            public bool HasPresentedNativeVideoFrame;
             public double PlaybackTimeSec;
         }
 
@@ -4931,6 +4932,29 @@ namespace UnityAV
             };
         }
 
+        internal static double ResolveValidationGatePlaybackTime(
+            double playbackTimeSec,
+            double referencePlaybackTimeSec)
+        {
+            return referencePlaybackTimeSec >= 0.0
+                ? referencePlaybackTimeSec
+                : playbackTimeSec;
+        }
+
+        internal static bool IsPlayerSessionRuntimePlaybackConfirmed(
+            bool available,
+            PlayerSessionContractView contract)
+        {
+            if (!available)
+            {
+                return false;
+            }
+
+            return contract.LifecycleState == 6
+                || contract.PublicState == 3
+                || contract.RuntimeState == 3;
+        }
+
         internal static ValidationWindowStartObservationView
             CreatePullValidationWindowStartObservation(
                 bool hasTexture,
@@ -6074,7 +6098,7 @@ namespace UnityAV
                 inputs.HasTexture,
                 inputs.AudioPlaying,
                 inputs.Started,
-                false,
+                inputs.HasPresentedNativeVideoFrame,
                 inputs.PlaybackTimeSec);
         }
 
