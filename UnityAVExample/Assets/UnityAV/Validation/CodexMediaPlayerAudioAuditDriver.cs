@@ -773,6 +773,13 @@ namespace UnityAV
                         AudioResampleActive = _observedPassiveAvSyncAudioResampleActive,
                         ShouldRebuildAnchor = _observedPassiveAvSyncShouldRebuildAnchor,
                     };
+                var summaryAvSyncEnterprise =
+                    new MediaNativeInteropCommon.AvSyncEnterpriseAuditStringsView
+                    {
+                        Available = _observedAvSyncEnterpriseAvailable,
+                        SampleCount = _observedAvSyncEnterpriseSampleCount,
+                        DriftProjected2hMs = _observedAvSyncEnterpriseDriftProjected2hMs,
+                    };
                 var backendRuntimeObservation =
                     MediaNativeInteropCommon.CreateMediaPlayerBackendRuntimeObservation(
                         Player != null,
@@ -835,9 +842,9 @@ namespace UnityAV
                 builder.AppendLine("audio_output_policy_realtime_backend_additional_sink_delay_ms=" + _observedAudioOutputPolicyRealtimeBackendAdditionalSinkDelayMs);
                 builder.AppendLine("audio_output_policy_realtime_start_requires_video_frame=" + _observedAudioOutputPolicyRealtimeStartRequiresVideoFrame);
                 builder.AppendLine("audio_output_policy_allow_android_file_output_rate_bridge=" + _observedAudioOutputPolicyAllowAndroidFileOutputRateBridge);
-                builder.AppendLine("av_sync_enterprise_available=" + _observedAvSyncEnterpriseAvailable);
-                builder.AppendLine("av_sync_enterprise_sample_count=" + _observedAvSyncEnterpriseSampleCount);
-                builder.AppendLine("av_sync_enterprise_drift_projected_2h_ms=" + _observedAvSyncEnterpriseDriftProjected2hMs);
+                MediaNativeInteropCommon.AppendValidationSummaryAvSyncEnterprise(
+                    builder,
+                    summaryAvSyncEnterprise);
                 MediaNativeInteropCommon.AppendValidationSummaryPassiveAvSync(
                     builder,
                     summaryPassiveAvSync);

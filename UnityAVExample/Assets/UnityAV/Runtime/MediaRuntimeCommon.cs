@@ -5079,6 +5079,15 @@ namespace UnityAV
             builder.AppendLine("passive_av_sync_should_rebuild_anchor=" + summary.ShouldRebuildAnchor);
         }
 
+        internal static void AppendValidationSummaryAvSyncEnterprise(
+            StringBuilder builder,
+            AvSyncEnterpriseAuditStringsView summary)
+        {
+            builder.AppendLine("av_sync_enterprise_available=" + summary.Available);
+            builder.AppendLine("av_sync_enterprise_sample_count=" + summary.SampleCount);
+            builder.AppendLine("av_sync_enterprise_drift_projected_2h_ms=" + summary.DriftProjected2hMs);
+        }
+
         internal static PlaybackStartObservationView CreatePlaybackStartObservation(
             bool hasReportedStarted,
             bool reportedStarted,
