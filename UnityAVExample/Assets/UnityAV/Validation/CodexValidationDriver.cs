@@ -16,6 +16,7 @@ namespace UnityAV
     {
         private const float MinimumPlaybackAdvanceSeconds = 1.0f;
         private const int PreviewTargetFrameRate = 120;
+        private const string ValidationLogPrefix = "CodexValidation";
 
         public MediaPlayerPull Player;
         public float ValidationSeconds = 6f;
@@ -927,8 +928,8 @@ namespace UnityAV
             _validationWindowInitialPlaybackTime = playbackTime;
             _maxObservedPlaybackTime = playbackTime;
             Debug.Log(
-                string.Format(
-                    "[CodexValidation] validation_window_started reason={0} startup_elapsed={1:F3}s",
+                MediaNativeInteropCommon.CreateValidationWindowStartedLogLine(
+                    ValidationLogPrefix,
                     reason,
                     startupElapsed));
         }
@@ -976,18 +977,10 @@ namespace UnityAV
 
             if (!resultObservation.Passed)
             {
-                if (resultObservation.Reason == "playback-stalled")
-                {
-                    Debug.LogError(
-                        string.Format(
-                            "[CodexValidation] result=failed reason=playback-stalled advance={0:F3}s",
-                            playbackAdvance));
-                }
-                else
-                {
-                    Debug.LogError(
-                        "[CodexValidation] result=failed reason=" + resultObservation.Reason);
-                }
+                Debug.LogError(
+                    MediaNativeInteropCommon.CreateValidationResultFailedLogLine(
+                        ValidationLogPrefix,
+                        resultObservation));
 
                 return ValidationResultInfo.Failed(
                     resultObservation.Reason,
@@ -995,14 +988,15 @@ namespace UnityAV
             }
 
             Debug.Log(
-                string.Format(
-                    "[CodexValidation] result=passed reason={0} advance={1:F3}s sourceState={2} sourceTimeouts={3} sourceReconnects={4}",
-                    resultObservation.Reason,
-                    playbackAdvance,
+                MediaNativeInteropCommon.CreateValidationResultPassedLogLine(
+                    ValidationLogPrefix,
+                    resultObservation,
                     finalSnapshot.SourceState,
                     finalSnapshot.SourceTimeouts,
                     finalSnapshot.SourceReconnects));
-            Debug.Log("[CodexValidation] complete");
+            Debug.Log(
+                MediaNativeInteropCommon.CreateValidationCompleteLogLine(
+                    ValidationLogPrefix));
             return ValidationResultInfo.PassedWithAdvance(playbackAdvance);
         }
 
@@ -1220,11 +1214,17 @@ namespace UnityAV
                     summaryPassiveAvSync);
                 builder.AppendLine("summary_path=" + summaryPath);
                 File.WriteAllText(summaryPath, builder.ToString(), Encoding.UTF8);
-                Debug.Log("[CodexValidation] summary_written=" + summaryPath);
+                Debug.Log(
+                    MediaNativeInteropCommon.CreateSummaryWrittenLogLine(
+                        ValidationLogPrefix,
+                        summaryPath));
             }
             catch (Exception ex)
             {
-                Debug.LogWarning("[CodexValidation] summary_write_failed " + ex.Message);
+                Debug.LogWarning(
+                    MediaNativeInteropCommon.CreateSummaryWriteFailedLogLine(
+                        ValidationLogPrefix,
+                        ex.Message));
             }
         }
 
@@ -1236,7 +1236,10 @@ namespace UnityAV
             }
             catch (Exception ex)
             {
-                Debug.LogWarning("[CodexValidation] time read failed: " + ex.Message);
+                Debug.LogWarning(
+                    MediaNativeInteropCommon.CreateTimeReadFailedLogLine(
+                        ValidationLogPrefix,
+                        ex.Message));
                 return -1.0;
             }
         }

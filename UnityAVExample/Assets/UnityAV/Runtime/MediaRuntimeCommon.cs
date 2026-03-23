@@ -4973,6 +4973,79 @@ namespace UnityAV
             };
         }
 
+        internal static string CreateValidationWindowStartedLogLine(
+            string logPrefix,
+            string reason,
+            float startupElapsedSeconds)
+        {
+            return string.Format(
+                "[{0}] validation_window_started reason={1} startup_elapsed={2:F3}s",
+                logPrefix,
+                reason,
+                startupElapsedSeconds);
+        }
+
+        internal static string CreateValidationResultFailedLogLine(
+            string logPrefix,
+            ValidationResultObservationView resultObservation)
+        {
+            if (resultObservation.Reason == "playback-stalled")
+            {
+                return string.Format(
+                    "[{0}] result=failed reason=playback-stalled advance={1:F3}s",
+                    logPrefix,
+                    resultObservation.PlaybackAdvanceSeconds);
+            }
+
+            return string.Format(
+                "[{0}] result=failed reason={1}",
+                logPrefix,
+                resultObservation.Reason);
+        }
+
+        internal static string CreateValidationResultPassedLogLine(
+            string logPrefix,
+            ValidationResultObservationView resultObservation,
+            string sourceState,
+            string sourceTimeouts,
+            string sourceReconnects)
+        {
+            return string.Format(
+                "[{0}] result=passed reason={1} advance={2:F3}s sourceState={3} sourceTimeouts={4} sourceReconnects={5}",
+                logPrefix,
+                resultObservation.Reason,
+                resultObservation.PlaybackAdvanceSeconds,
+                sourceState,
+                sourceTimeouts,
+                sourceReconnects);
+        }
+
+        internal static string CreateValidationCompleteLogLine(string logPrefix)
+        {
+            return string.Format("[{0}] complete", logPrefix);
+        }
+
+        internal static string CreateSummaryWrittenLogLine(
+            string logPrefix,
+            string summaryPath)
+        {
+            return string.Format("[{0}] summary_written={1}", logPrefix, summaryPath);
+        }
+
+        internal static string CreateSummaryWriteFailedLogLine(
+            string logPrefix,
+            string errorMessage)
+        {
+            return string.Format("[{0}] summary_write_failed {1}", logPrefix, errorMessage);
+        }
+
+        internal static string CreateTimeReadFailedLogLine(
+            string logPrefix,
+            string errorMessage)
+        {
+            return string.Format("[{0}] time read failed: {1}", logPrefix, errorMessage);
+        }
+
         internal static ValidationVideoTextureObservationView
             CreatePullValidationVideoTextureObservation(
                 bool hasPresentedVideoFrame,
