@@ -452,6 +452,62 @@ namespace UnityAV
             return presentedFrameStrictZeroCopy || unityDirectShaderStrictZeroCopy;
         }
 
+        private string BuildEvaluationObservedPathRequirementContext(
+            bool requireDirectBindingFirst)
+        {
+            if (requireDirectBindingFirst)
+            {
+                return " require_direct_binding=" + RequireDirectBinding
+                    + " prefer_unity_direct_shader="
+                    + Player.PreferNativeVideoUnityDirectShader
+                    + " require_unity_direct_shader=" + RequireUnityDirectShader
+                    + " prefer_unity_compute=" + Player.PreferNativeVideoUnityCompute
+                    + " require_unity_compute=" + RequireUnityCompute;
+            }
+
+            return " prefer_unity_direct_shader=" + Player.PreferNativeVideoUnityDirectShader
+                + " require_unity_direct_shader=" + RequireUnityDirectShader
+                + " prefer_unity_compute=" + Player.PreferNativeVideoUnityCompute
+                + " require_direct_binding=" + RequireDirectBinding
+                + " require_unity_compute=" + RequireUnityCompute;
+        }
+
+        private string BuildEvaluationObservedPathStateContext(
+            ValidationSnapshot snapshot)
+        {
+            return " source_plane_textures_supported="
+                + snapshot.SourcePlaneTexturesSupported
+                + " observed_source_plane_textures="
+                + _observedSourcePlaneTexturesDuringWindow
+                + " observed_direct_shader_path="
+                + _observedDirectShaderPathDuringWindow
+                + " observed_compute_path="
+                + _observedComputePathDuringWindow
+                + " direct_shader_path_active=" + snapshot.DirectShaderPathActive
+                + " compute_path_active=" + snapshot.ComputePathActive
+                + " source_plane_texture_flags=0x"
+                + snapshot.SourcePlaneTextureFlags.ToString("X");
+        }
+
+        private string BuildEvaluationObservedPathFailureContext(
+            ValidationSnapshot snapshot,
+            bool requireDirectBindingFirst)
+        {
+            return BuildEvaluationObservedPathRequirementContext(requireDirectBindingFirst)
+                + " source_plane_textures_supported="
+                + snapshot.SourcePlaneTexturesSupported
+                + " observed_source_plane_textures="
+                + _observedSourcePlaneTexturesDuringWindow
+                + " observed_direct_shader_path="
+                + _observedDirectShaderPathDuringWindow
+                + " observed_compute_path="
+                + _observedComputePathDuringWindow
+                + " direct_shader_path_active=" + snapshot.DirectShaderPathActive
+                + " compute_path_active=" + snapshot.ComputePathActive
+                + " source_plane_texture_flags=0x"
+                + snapshot.SourcePlaneTextureFlags.ToString("X");
+        }
+
         private ValidationSnapshot EmitStatus()
         {
             var snapshot = CaptureSnapshot();
@@ -604,23 +660,9 @@ namespace UnityAV
             {
                 Debug.LogError(
                     "[CodexNativeValidation] result=failed reason=no-native-frame"
-                    + " require_direct_binding=" + RequireDirectBinding
-                    + " prefer_unity_direct_shader=" + Player.PreferNativeVideoUnityDirectShader
-                    + " require_unity_direct_shader=" + RequireUnityDirectShader
-                    + " prefer_unity_compute=" + Player.PreferNativeVideoUnityCompute
-                    + " require_unity_compute=" + RequireUnityCompute
-                    + " source_plane_textures_supported="
-                    + snapshot.SourcePlaneTexturesSupported
-                    + " observed_source_plane_textures="
-                    + _observedSourcePlaneTexturesDuringWindow
-                    + " observed_direct_shader_path="
-                    + _observedDirectShaderPathDuringWindow
-                    + " observed_compute_path="
-                    + _observedComputePathDuringWindow
-                    + " direct_shader_path_active=" + snapshot.DirectShaderPathActive
-                    + " compute_path_active=" + snapshot.ComputePathActive
-                    + " source_plane_texture_flags=0x"
-                    + snapshot.SourcePlaneTextureFlags.ToString("X")
+                    + BuildEvaluationObservedPathFailureContext(
+                        snapshot,
+                        requireDirectBindingFirst: true)
                     + BackendSummary);
                 return false;
             }
@@ -629,23 +671,9 @@ namespace UnityAV
             {
                 Debug.LogError(
                     "[CodexNativeValidation] result=failed reason=final-native-frame-missing"
-                    + " require_direct_binding=" + RequireDirectBinding
-                    + " prefer_unity_direct_shader=" + Player.PreferNativeVideoUnityDirectShader
-                    + " require_unity_direct_shader=" + RequireUnityDirectShader
-                    + " prefer_unity_compute=" + Player.PreferNativeVideoUnityCompute
-                    + " require_unity_compute=" + RequireUnityCompute
-                    + " source_plane_textures_supported="
-                    + snapshot.SourcePlaneTexturesSupported
-                    + " observed_source_plane_textures="
-                    + _observedSourcePlaneTexturesDuringWindow
-                    + " observed_direct_shader_path="
-                    + _observedDirectShaderPathDuringWindow
-                    + " observed_compute_path="
-                    + _observedComputePathDuringWindow
-                    + " direct_shader_path_active=" + snapshot.DirectShaderPathActive
-                    + " compute_path_active=" + snapshot.ComputePathActive
-                    + " source_plane_texture_flags=0x"
-                    + snapshot.SourcePlaneTextureFlags.ToString("X")
+                    + BuildEvaluationObservedPathFailureContext(
+                        snapshot,
+                        requireDirectBindingFirst: true)
                     + BackendSummary);
                 return false;
             }
@@ -655,23 +683,9 @@ namespace UnityAV
                 Debug.LogError(
                     "[CodexNativeValidation] result=failed reason=insufficient-playback-advance advance="
                     + playbackAdvance.ToString("F3")
-                    + " require_direct_binding=" + RequireDirectBinding
-                    + " prefer_unity_direct_shader=" + Player.PreferNativeVideoUnityDirectShader
-                    + " require_unity_direct_shader=" + RequireUnityDirectShader
-                    + " prefer_unity_compute=" + Player.PreferNativeVideoUnityCompute
-                    + " require_unity_compute=" + RequireUnityCompute
-                    + " source_plane_textures_supported="
-                    + snapshot.SourcePlaneTexturesSupported
-                    + " observed_source_plane_textures="
-                    + _observedSourcePlaneTexturesDuringWindow
-                    + " observed_direct_shader_path="
-                    + _observedDirectShaderPathDuringWindow
-                    + " observed_compute_path="
-                    + _observedComputePathDuringWindow
-                    + " direct_shader_path_active=" + snapshot.DirectShaderPathActive
-                    + " compute_path_active=" + snapshot.ComputePathActive
-                    + " source_plane_texture_flags=0x"
-                    + snapshot.SourcePlaneTextureFlags.ToString("X")
+                    + BuildEvaluationObservedPathFailureContext(
+                        snapshot,
+                        requireDirectBindingFirst: true)
                     + BackendSummary);
                 return false;
             }
@@ -682,25 +696,11 @@ namespace UnityAV
                 {
                     Debug.LogError(
                         "[CodexNativeValidation] result=failed reason=direct-binding-state-unavailable"
-                        + " prefer_unity_direct_shader=" + Player.PreferNativeVideoUnityDirectShader
-                        + " require_unity_direct_shader=" + RequireUnityDirectShader
-                        + " prefer_unity_compute=" + Player.PreferNativeVideoUnityCompute
-                        + " require_direct_binding=" + RequireDirectBinding
-                        + " require_unity_compute=" + RequireUnityCompute
+                        + BuildEvaluationObservedPathRequirementContext(
+                            requireDirectBindingFirst: false)
                         + " observed_frame_direct_bindable="
                         + _observedDirectBindableFrameDuringWindow
-                        + " source_plane_textures_supported="
-                        + snapshot.SourcePlaneTexturesSupported
-                        + " observed_source_plane_textures="
-                        + _observedSourcePlaneTexturesDuringWindow
-                        + " observed_direct_shader_path="
-                        + _observedDirectShaderPathDuringWindow
-                        + " observed_compute_path="
-                        + _observedComputePathDuringWindow
-                        + " direct_shader_path_active=" + snapshot.DirectShaderPathActive
-                        + " compute_path_active=" + snapshot.ComputePathActive
-                        + " source_plane_texture_flags=0x"
-                        + snapshot.SourcePlaneTextureFlags.ToString("X")
+                        + BuildEvaluationObservedPathStateContext(snapshot)
                         + " pixel_format=" + snapshot.PixelFormat
                         + " source_pixel_format=" + snapshot.SourcePixelFormat
                         + BackendSummary);
@@ -711,25 +711,11 @@ namespace UnityAV
                 {
                     Debug.LogError(
                         "[CodexNativeValidation] result=failed reason=direct-binding-not-observed"
-                        + " prefer_unity_direct_shader=" + Player.PreferNativeVideoUnityDirectShader
-                        + " require_unity_direct_shader=" + RequireUnityDirectShader
-                        + " prefer_unity_compute=" + Player.PreferNativeVideoUnityCompute
-                        + " require_direct_binding=" + RequireDirectBinding
-                        + " require_unity_compute=" + RequireUnityCompute
+                        + BuildEvaluationObservedPathRequirementContext(
+                            requireDirectBindingFirst: false)
                         + " observed_frame_direct_bindable="
                         + _observedDirectBindableFrameDuringWindow
-                        + " source_plane_textures_supported="
-                        + snapshot.SourcePlaneTexturesSupported
-                        + " observed_source_plane_textures="
-                        + _observedSourcePlaneTexturesDuringWindow
-                        + " observed_direct_shader_path="
-                        + _observedDirectShaderPathDuringWindow
-                        + " observed_compute_path="
-                        + _observedComputePathDuringWindow
-                        + " direct_shader_path_active=" + snapshot.DirectShaderPathActive
-                        + " compute_path_active=" + snapshot.ComputePathActive
-                        + " source_plane_texture_flags=0x"
-                        + snapshot.SourcePlaneTextureFlags.ToString("X")
+                        + BuildEvaluationObservedPathStateContext(snapshot)
                         + " pixel_format=" + snapshot.PixelFormat
                         + " source_pixel_format=" + snapshot.SourcePixelFormat
                         + " final_native_texture_bound=" + FormatBindingState(snapshot)
@@ -746,23 +732,9 @@ namespace UnityAV
                 {
                     Debug.LogError(
                         "[CodexNativeValidation] result=failed reason=source-plane-textures-not-observed-for-direct-shader"
-                        + " prefer_unity_direct_shader=" + Player.PreferNativeVideoUnityDirectShader
-                        + " require_unity_direct_shader=" + RequireUnityDirectShader
-                        + " prefer_unity_compute=" + Player.PreferNativeVideoUnityCompute
-                        + " require_direct_binding=" + RequireDirectBinding
-                        + " require_unity_compute=" + RequireUnityCompute
-                        + " source_plane_textures_supported="
-                        + snapshot.SourcePlaneTexturesSupported
-                        + " observed_source_plane_textures="
-                        + _observedSourcePlaneTexturesDuringWindow
-                        + " observed_direct_shader_path="
-                        + _observedDirectShaderPathDuringWindow
-                        + " observed_compute_path="
-                        + _observedComputePathDuringWindow
-                        + " direct_shader_path_active=" + snapshot.DirectShaderPathActive
-                        + " compute_path_active=" + snapshot.ComputePathActive
-                        + " source_plane_texture_flags=0x"
-                        + snapshot.SourcePlaneTextureFlags.ToString("X")
+                        + BuildEvaluationObservedPathFailureContext(
+                            snapshot,
+                            requireDirectBindingFirst: false)
                         + " pixel_format=" + snapshot.PixelFormat
                         + " source_pixel_format=" + snapshot.SourcePixelFormat
                         + BackendSummary);
@@ -773,23 +745,9 @@ namespace UnityAV
                 {
                     Debug.LogError(
                         "[CodexNativeValidation] result=failed reason=unity-direct-shader-not-observed"
-                        + " prefer_unity_direct_shader=" + Player.PreferNativeVideoUnityDirectShader
-                        + " require_unity_direct_shader=" + RequireUnityDirectShader
-                        + " prefer_unity_compute=" + Player.PreferNativeVideoUnityCompute
-                        + " require_direct_binding=" + RequireDirectBinding
-                        + " require_unity_compute=" + RequireUnityCompute
-                        + " source_plane_textures_supported="
-                        + snapshot.SourcePlaneTexturesSupported
-                        + " observed_source_plane_textures="
-                        + _observedSourcePlaneTexturesDuringWindow
-                        + " observed_direct_shader_path="
-                        + _observedDirectShaderPathDuringWindow
-                        + " observed_compute_path="
-                        + _observedComputePathDuringWindow
-                        + " direct_shader_path_active=" + snapshot.DirectShaderPathActive
-                        + " compute_path_active=" + snapshot.ComputePathActive
-                        + " source_plane_texture_flags=0x"
-                        + snapshot.SourcePlaneTextureFlags.ToString("X")
+                        + BuildEvaluationObservedPathFailureContext(
+                            snapshot,
+                            requireDirectBindingFirst: false)
                         + " pixel_format=" + snapshot.PixelFormat
                         + " source_pixel_format=" + snapshot.SourcePixelFormat
                         + BackendSummary);
@@ -803,23 +761,9 @@ namespace UnityAV
                 {
                     Debug.LogError(
                         "[CodexNativeValidation] result=failed reason=source-plane-textures-not-observed"
-                        + " prefer_unity_direct_shader=" + Player.PreferNativeVideoUnityDirectShader
-                        + " require_unity_direct_shader=" + RequireUnityDirectShader
-                        + " prefer_unity_compute=" + Player.PreferNativeVideoUnityCompute
-                        + " require_direct_binding=" + RequireDirectBinding
-                        + " require_unity_compute=" + RequireUnityCompute
-                        + " source_plane_textures_supported="
-                        + snapshot.SourcePlaneTexturesSupported
-                        + " observed_source_plane_textures="
-                        + _observedSourcePlaneTexturesDuringWindow
-                        + " observed_direct_shader_path="
-                        + _observedDirectShaderPathDuringWindow
-                        + " observed_compute_path="
-                        + _observedComputePathDuringWindow
-                        + " direct_shader_path_active=" + snapshot.DirectShaderPathActive
-                        + " compute_path_active=" + snapshot.ComputePathActive
-                        + " source_plane_texture_flags=0x"
-                        + snapshot.SourcePlaneTextureFlags.ToString("X")
+                        + BuildEvaluationObservedPathFailureContext(
+                            snapshot,
+                            requireDirectBindingFirst: false)
                         + " pixel_format=" + snapshot.PixelFormat
                         + " source_pixel_format=" + snapshot.SourcePixelFormat
                         + BackendSummary);
@@ -830,23 +774,9 @@ namespace UnityAV
                 {
                     Debug.LogError(
                         "[CodexNativeValidation] result=failed reason=unity-compute-not-observed"
-                        + " prefer_unity_direct_shader=" + Player.PreferNativeVideoUnityDirectShader
-                        + " require_unity_direct_shader=" + RequireUnityDirectShader
-                        + " prefer_unity_compute=" + Player.PreferNativeVideoUnityCompute
-                        + " require_direct_binding=" + RequireDirectBinding
-                        + " require_unity_compute=" + RequireUnityCompute
-                        + " source_plane_textures_supported="
-                        + snapshot.SourcePlaneTexturesSupported
-                        + " observed_source_plane_textures="
-                        + _observedSourcePlaneTexturesDuringWindow
-                        + " observed_direct_shader_path="
-                        + _observedDirectShaderPathDuringWindow
-                        + " observed_compute_path="
-                        + _observedComputePathDuringWindow
-                        + " direct_shader_path_active=" + snapshot.DirectShaderPathActive
-                        + " compute_path_active=" + snapshot.ComputePathActive
-                        + " source_plane_texture_flags=0x"
-                        + snapshot.SourcePlaneTextureFlags.ToString("X")
+                        + BuildEvaluationObservedPathFailureContext(
+                            snapshot,
+                            requireDirectBindingFirst: false)
                         + " pixel_format=" + snapshot.PixelFormat
                         + " source_pixel_format=" + snapshot.SourcePixelFormat
                         + BackendSummary);
