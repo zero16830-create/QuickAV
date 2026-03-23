@@ -709,20 +709,18 @@ namespace UnityAV
                     SummaryFileName);
                 var builder = new StringBuilder();
                 var fallbackPlayerSessionAudit =
-                    new MediaNativeInteropCommon.PlayerSessionAuditStringsView
-                    {
-                        Available = finalSnapshot.PlayerSessionAvailable,
-                        LifecycleState = finalSnapshot.PlayerSessionLifecycleState,
-                        PublicState = finalSnapshot.PlayerSessionPublicState,
-                        RuntimeState = finalSnapshot.PlayerSessionRuntimeState,
-                        PlaybackIntent = finalSnapshot.PlayerSessionPlaybackIntent,
-                        StopReason = finalSnapshot.PlayerSessionStopReason,
-                        SourceState = finalSnapshot.PlayerSessionSourceState,
-                        CanSeek = finalSnapshot.PlayerSessionCanSeek,
-                        IsRealtime = finalSnapshot.PlayerSessionIsRealtime,
-                        IsBuffering = finalSnapshot.PlayerSessionIsBuffering,
-                        IsSyncing = finalSnapshot.PlayerSessionIsSyncing,
-                    };
+                    MediaNativeInteropCommon.CreatePlayerSessionAuditStringsFallback(
+                        finalSnapshot.PlayerSessionAvailable,
+                        finalSnapshot.PlayerSessionLifecycleState,
+                        finalSnapshot.PlayerSessionPublicState,
+                        finalSnapshot.PlayerSessionRuntimeState,
+                        finalSnapshot.PlayerSessionPlaybackIntent,
+                        finalSnapshot.PlayerSessionStopReason,
+                        finalSnapshot.PlayerSessionSourceState,
+                        finalSnapshot.PlayerSessionCanSeek,
+                        finalSnapshot.PlayerSessionIsRealtime,
+                        finalSnapshot.PlayerSessionIsBuffering,
+                        finalSnapshot.PlayerSessionIsSyncing);
                 var summaryPlayerSession =
                     MediaNativeInteropCommon.CreateValidationSummaryPlayerSession(
                         _observedPlayerSessionAvailable,

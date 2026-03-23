@@ -2514,6 +2514,35 @@ namespace UnityAV
             };
         }
 
+        internal static PlayerSessionAuditStringsView CreatePlayerSessionAuditStringsFallback(
+            bool available,
+            string lifecycleState,
+            string publicState,
+            string runtimeState,
+            string playbackIntent,
+            string stopReason,
+            string sourceState,
+            string canSeek,
+            string isRealtime,
+            string isBuffering,
+            string isSyncing)
+        {
+            return new PlayerSessionAuditStringsView
+            {
+                Available = available,
+                LifecycleState = lifecycleState,
+                PublicState = publicState,
+                RuntimeState = runtimeState,
+                PlaybackIntent = playbackIntent,
+                StopReason = stopReason,
+                SourceState = sourceState,
+                CanSeek = canSeek,
+                IsRealtime = isRealtime,
+                IsBuffering = isBuffering,
+                IsSyncing = isSyncing,
+            };
+        }
+
         internal static PlayerSessionAuditStringsView CreateResolvedPlayerSessionAuditStrings(
             string observedLifecycleState,
             string observedPublicState,
