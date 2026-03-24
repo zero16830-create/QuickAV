@@ -1014,6 +1014,40 @@ namespace UnityAV
             public bool FallbackCopyPath;
         }
 
+        internal struct NativeVideoBridgeDescriptorAuditView
+        {
+            public bool Available;
+            public string State;
+            public string RuntimeKind;
+            public bool ZeroCopySupported;
+            public bool PresentedFrameDirectBindable;
+            public bool SourcePlaneTexturesSupported;
+            public bool FallbackCopyPath;
+            public string BackendKind;
+            public string TargetPlatformKind;
+            public string TargetSurfaceKind;
+            public int TargetWidth;
+            public int TargetHeight;
+            public string TargetPixelFormat;
+            public string TargetFlags;
+            public string PlatformKind;
+            public string SurfaceKind;
+            public bool Supported;
+            public bool HardwareDecodeSupported;
+            public bool AcquireReleaseSupported;
+            public string CapsFlags;
+            public bool TargetValid;
+            public bool RequestedExternalTextureTarget;
+            public bool DirectTargetPresentAllowed;
+            public bool TargetBindingSupported;
+            public bool ExternalTextureTargetSupported;
+            public bool FrameAcquireSupported;
+            public bool FrameReleaseSupported;
+            public bool SourceSurfaceZeroCopy;
+            public bool PresentedFrameStrictZeroCopy;
+            public bool SourcePlaneViewsSupported;
+        }
+
         internal struct NativeVideoPathSelectionView
         {
             public NativeVideoPathKind Kind;
@@ -1037,6 +1071,21 @@ namespace UnityAV
             public bool TargetZeroCopy;
             public bool SourcePlaneTexturesSupported;
             public bool CpuFallback;
+        }
+
+        internal struct NativeVideoPathSelectionAuditView
+        {
+            public bool Available;
+            public string Kind;
+            public string SourceMemoryKind;
+            public string PresentedMemoryKind;
+            public bool TargetZeroCopy;
+            public bool SourcePlaneTexturesSupported;
+            public bool CpuFallback;
+            public bool HasSourceFrame;
+            public bool HasPresentedFrame;
+            public string BridgeState;
+            public bool SourceSurfaceZeroCopy;
         }
 
         internal struct WgpuRenderDescriptorView
@@ -2432,6 +2481,67 @@ namespace UnityAV
                 TargetZeroCopy = selection.TargetZeroCopy,
                 SourcePlaneTexturesSupported = selection.SourcePlaneTexturesSupported,
                 CpuFallback = selection.CpuFallback,
+            };
+        }
+
+        internal static NativeVideoBridgeDescriptorAuditView CreateNativeVideoBridgeDescriptorAudit(
+            bool available,
+            NativeVideoBridgeDescriptorView descriptor)
+        {
+            var observation = CreateNativeVideoBridgeDescriptorObservation(available, descriptor);
+            return new NativeVideoBridgeDescriptorAuditView
+            {
+                Available = observation.Available,
+                State = observation.State,
+                RuntimeKind = observation.RuntimeKind,
+                ZeroCopySupported = observation.ZeroCopySupported,
+                PresentedFrameDirectBindable = observation.PresentedFrameDirectBindable,
+                SourcePlaneTexturesSupported = observation.SourcePlaneTexturesSupported,
+                FallbackCopyPath = observation.FallbackCopyPath,
+                BackendKind = available ? descriptor.BackendKind.ToString() : "Unavailable",
+                TargetPlatformKind = available ? descriptor.TargetPlatformKind.ToString() : "Unavailable",
+                TargetSurfaceKind = available ? descriptor.TargetSurfaceKind.ToString() : "Unavailable",
+                TargetWidth = available ? descriptor.TargetWidth : -1,
+                TargetHeight = available ? descriptor.TargetHeight : -1,
+                TargetPixelFormat = available ? descriptor.TargetPixelFormat.ToString() : "Unavailable",
+                TargetFlags = available ? descriptor.TargetFlags.ToString() : "0",
+                PlatformKind = available ? descriptor.PlatformKind.ToString() : "Unavailable",
+                SurfaceKind = available ? descriptor.SurfaceKind.ToString() : "Unavailable",
+                Supported = available && descriptor.Supported,
+                HardwareDecodeSupported = available && descriptor.HardwareDecodeSupported,
+                AcquireReleaseSupported = available && descriptor.AcquireReleaseSupported,
+                CapsFlags = available ? descriptor.CapsFlags.ToString() : "0",
+                TargetValid = available && descriptor.TargetValid,
+                RequestedExternalTextureTarget = available && descriptor.RequestedExternalTextureTarget,
+                DirectTargetPresentAllowed = available && descriptor.DirectTargetPresentAllowed,
+                TargetBindingSupported = available && descriptor.TargetBindingSupported,
+                ExternalTextureTargetSupported = available && descriptor.ExternalTextureTargetSupported,
+                FrameAcquireSupported = available && descriptor.FrameAcquireSupported,
+                FrameReleaseSupported = available && descriptor.FrameReleaseSupported,
+                SourceSurfaceZeroCopy = available && descriptor.SourceSurfaceZeroCopy,
+                PresentedFrameStrictZeroCopy = available && descriptor.PresentedFrameStrictZeroCopy,
+                SourcePlaneViewsSupported = available && descriptor.SourcePlaneViewsSupported,
+            };
+        }
+
+        internal static NativeVideoPathSelectionAuditView CreateNativeVideoPathSelectionAudit(
+            bool available,
+            NativeVideoPathSelectionView selection)
+        {
+            var observation = CreateNativeVideoPathSelectionObservation(available, selection);
+            return new NativeVideoPathSelectionAuditView
+            {
+                Available = observation.Available,
+                Kind = observation.Kind,
+                SourceMemoryKind = observation.SourceMemoryKind,
+                PresentedMemoryKind = observation.PresentedMemoryKind,
+                TargetZeroCopy = observation.TargetZeroCopy,
+                SourcePlaneTexturesSupported = observation.SourcePlaneTexturesSupported,
+                CpuFallback = observation.CpuFallback,
+                HasSourceFrame = available && selection.HasSourceFrame,
+                HasPresentedFrame = available && selection.HasPresentedFrame,
+                BridgeState = available ? selection.BridgeState.ToString() : "Unavailable",
+                SourceSurfaceZeroCopy = available && selection.SourceSurfaceZeroCopy,
             };
         }
 

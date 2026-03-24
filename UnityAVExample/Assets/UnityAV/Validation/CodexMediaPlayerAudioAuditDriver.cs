@@ -447,14 +447,14 @@ namespace UnityAV
                     passiveAvSyncSnapshot);
             MediaNativeInteropCommon.NativeVideoBridgeDescriptorView bridgeDescriptor;
             var hasBridgeDescriptor = Player.TryGetNativeVideoBridgeDescriptor(out bridgeDescriptor);
-            var bridgeDescriptorObservation =
-                MediaNativeInteropCommon.CreateNativeVideoBridgeDescriptorObservation(
-                    hasBridgeDescriptor,
-                    bridgeDescriptor);
             MediaNativeInteropCommon.NativeVideoPathSelectionView pathSelection;
             var hasPathSelection = Player.TryGetNativeVideoPathSelection(out pathSelection);
-            var pathSelectionObservation =
-                MediaNativeInteropCommon.CreateNativeVideoPathSelectionObservation(
+            var bridgeDescriptorAudit =
+                MediaNativeInteropCommon.CreateNativeVideoBridgeDescriptorAudit(
+                    hasBridgeDescriptor,
+                    bridgeDescriptor);
+            var pathSelectionAudit =
+                MediaNativeInteropCommon.CreateNativeVideoPathSelectionAudit(
                     hasPathSelection,
                     pathSelection);
             var hasPresentedNativeVideoFrame =
@@ -584,91 +584,67 @@ namespace UnityAV
                     avSyncEnterpriseObservation.DriftProjected2hMs,
                 AvSyncEnterpriseAudit = avSyncEnterpriseObservation,
                 PassiveAvSyncAudit = passiveAvSyncObservation,
-                HasBridgeDescriptor = bridgeDescriptorObservation.Available,
-                BridgeDescriptorState = bridgeDescriptorObservation.State,
-                BridgeDescriptorRuntimeKind = bridgeDescriptorObservation.RuntimeKind,
-                BridgeDescriptorZeroCopySupported =
-                    bridgeDescriptorObservation.ZeroCopySupported,
+                HasBridgeDescriptor = bridgeDescriptorAudit.Available,
+                BridgeDescriptorState = bridgeDescriptorAudit.State,
+                BridgeDescriptorRuntimeKind = bridgeDescriptorAudit.RuntimeKind,
+                BridgeDescriptorZeroCopySupported = bridgeDescriptorAudit.ZeroCopySupported,
                 BridgeDescriptorDirectBindable =
-                    bridgeDescriptorObservation.PresentedFrameDirectBindable,
+                    bridgeDescriptorAudit.PresentedFrameDirectBindable,
                 BridgeDescriptorSourcePlaneTexturesSupported =
-                    bridgeDescriptorObservation.SourcePlaneTexturesSupported,
+                    bridgeDescriptorAudit.SourcePlaneTexturesSupported,
                 BridgeDescriptorFallbackCopyPath =
-                    bridgeDescriptorObservation.FallbackCopyPath,
-                BridgeDescriptorBackendKind = hasBridgeDescriptor
-                    ? bridgeDescriptor.BackendKind.ToString()
-                    : "Unavailable",
-                BridgeDescriptorTargetPlatformKind = hasBridgeDescriptor
-                    ? bridgeDescriptor.TargetPlatformKind.ToString()
-                    : "Unavailable",
-                BridgeDescriptorTargetSurfaceKind = hasBridgeDescriptor
-                    ? bridgeDescriptor.TargetSurfaceKind.ToString()
-                    : "Unavailable",
-                BridgeDescriptorTargetWidth = hasBridgeDescriptor
-                    ? bridgeDescriptor.TargetWidth
-                    : -1,
-                BridgeDescriptorTargetHeight = hasBridgeDescriptor
-                    ? bridgeDescriptor.TargetHeight
-                    : -1,
-                BridgeDescriptorTargetPixelFormat = hasBridgeDescriptor
-                    ? bridgeDescriptor.TargetPixelFormat.ToString()
-                    : "Unavailable",
-                BridgeDescriptorTargetFlags = hasBridgeDescriptor
-                    ? bridgeDescriptor.TargetFlags.ToString()
-                    : "0",
-                BridgeDescriptorPlatformKind = hasBridgeDescriptor
-                    ? bridgeDescriptor.PlatformKind.ToString()
-                    : "Unavailable",
-                BridgeDescriptorSurfaceKind = hasBridgeDescriptor
-                    ? bridgeDescriptor.SurfaceKind.ToString()
-                    : "Unavailable",
-                BridgeDescriptorSupported = hasBridgeDescriptor
-                    && bridgeDescriptor.Supported,
-                BridgeDescriptorHardwareDecodeSupported = hasBridgeDescriptor
-                    && bridgeDescriptor.HardwareDecodeSupported,
-                BridgeDescriptorAcquireReleaseSupported = hasBridgeDescriptor
-                    && bridgeDescriptor.AcquireReleaseSupported,
-                BridgeDescriptorCapsFlags = hasBridgeDescriptor
-                    ? bridgeDescriptor.CapsFlags.ToString()
-                    : "0",
-                BridgeDescriptorTargetValid = hasBridgeDescriptor
-                    && bridgeDescriptor.TargetValid,
-                BridgeDescriptorRequestedExternalTextureTarget = hasBridgeDescriptor
-                    && bridgeDescriptor.RequestedExternalTextureTarget,
-                BridgeDescriptorDirectTargetPresentAllowed = hasBridgeDescriptor
-                    && bridgeDescriptor.DirectTargetPresentAllowed,
-                BridgeDescriptorTargetBindingSupported = hasBridgeDescriptor
-                    && bridgeDescriptor.TargetBindingSupported,
-                BridgeDescriptorExternalTextureTargetSupported = hasBridgeDescriptor
-                    && bridgeDescriptor.ExternalTextureTargetSupported,
-                BridgeDescriptorFrameAcquireSupported = hasBridgeDescriptor
-                    && bridgeDescriptor.FrameAcquireSupported,
-                BridgeDescriptorFrameReleaseSupported = hasBridgeDescriptor
-                    && bridgeDescriptor.FrameReleaseSupported,
-                BridgeDescriptorSourceSurfaceZeroCopy = hasBridgeDescriptor
-                    && bridgeDescriptor.SourceSurfaceZeroCopy,
-                BridgeDescriptorPresentedFrameStrictZeroCopy = hasBridgeDescriptor
-                    && bridgeDescriptor.PresentedFrameStrictZeroCopy,
-                BridgeDescriptorSourcePlaneViewsSupported = hasBridgeDescriptor
-                    && bridgeDescriptor.SourcePlaneViewsSupported,
-                HasPathSelection = pathSelectionObservation.Available,
-                PathSelectionKind = pathSelectionObservation.Kind,
-                PathSelectionSourceMemoryKind = pathSelectionObservation.SourceMemoryKind,
+                    bridgeDescriptorAudit.FallbackCopyPath,
+                BridgeDescriptorBackendKind = bridgeDescriptorAudit.BackendKind,
+                BridgeDescriptorTargetPlatformKind =
+                    bridgeDescriptorAudit.TargetPlatformKind,
+                BridgeDescriptorTargetSurfaceKind =
+                    bridgeDescriptorAudit.TargetSurfaceKind,
+                BridgeDescriptorTargetWidth = bridgeDescriptorAudit.TargetWidth,
+                BridgeDescriptorTargetHeight = bridgeDescriptorAudit.TargetHeight,
+                BridgeDescriptorTargetPixelFormat =
+                    bridgeDescriptorAudit.TargetPixelFormat,
+                BridgeDescriptorTargetFlags = bridgeDescriptorAudit.TargetFlags,
+                BridgeDescriptorPlatformKind = bridgeDescriptorAudit.PlatformKind,
+                BridgeDescriptorSurfaceKind = bridgeDescriptorAudit.SurfaceKind,
+                BridgeDescriptorSupported = bridgeDescriptorAudit.Supported,
+                BridgeDescriptorHardwareDecodeSupported =
+                    bridgeDescriptorAudit.HardwareDecodeSupported,
+                BridgeDescriptorAcquireReleaseSupported =
+                    bridgeDescriptorAudit.AcquireReleaseSupported,
+                BridgeDescriptorCapsFlags = bridgeDescriptorAudit.CapsFlags,
+                BridgeDescriptorTargetValid = bridgeDescriptorAudit.TargetValid,
+                BridgeDescriptorRequestedExternalTextureTarget =
+                    bridgeDescriptorAudit.RequestedExternalTextureTarget,
+                BridgeDescriptorDirectTargetPresentAllowed =
+                    bridgeDescriptorAudit.DirectTargetPresentAllowed,
+                BridgeDescriptorTargetBindingSupported =
+                    bridgeDescriptorAudit.TargetBindingSupported,
+                BridgeDescriptorExternalTextureTargetSupported =
+                    bridgeDescriptorAudit.ExternalTextureTargetSupported,
+                BridgeDescriptorFrameAcquireSupported =
+                    bridgeDescriptorAudit.FrameAcquireSupported,
+                BridgeDescriptorFrameReleaseSupported =
+                    bridgeDescriptorAudit.FrameReleaseSupported,
+                BridgeDescriptorSourceSurfaceZeroCopy =
+                    bridgeDescriptorAudit.SourceSurfaceZeroCopy,
+                BridgeDescriptorPresentedFrameStrictZeroCopy =
+                    bridgeDescriptorAudit.PresentedFrameStrictZeroCopy,
+                BridgeDescriptorSourcePlaneViewsSupported =
+                    bridgeDescriptorAudit.SourcePlaneViewsSupported,
+                HasPathSelection = pathSelectionAudit.Available,
+                PathSelectionKind = pathSelectionAudit.Kind,
+                PathSelectionSourceMemoryKind = pathSelectionAudit.SourceMemoryKind,
                 PathSelectionPresentedMemoryKind =
-                    pathSelectionObservation.PresentedMemoryKind,
-                PathSelectionTargetZeroCopy = pathSelectionObservation.TargetZeroCopy,
+                    pathSelectionAudit.PresentedMemoryKind,
+                PathSelectionTargetZeroCopy = pathSelectionAudit.TargetZeroCopy,
                 PathSelectionSourcePlaneTexturesSupported =
-                    pathSelectionObservation.SourcePlaneTexturesSupported,
-                PathSelectionCpuFallback = pathSelectionObservation.CpuFallback,
-                PathSelectionHasSourceFrame = hasPathSelection
-                    && pathSelection.HasSourceFrame,
-                PathSelectionHasPresentedFrame = hasPathSelection
-                    && pathSelection.HasPresentedFrame,
-                PathSelectionBridgeState = hasPathSelection
-                    ? pathSelection.BridgeState.ToString()
-                    : "Unavailable",
-                PathSelectionSourceSurfaceZeroCopy = hasPathSelection
-                    && pathSelection.SourceSurfaceZeroCopy,
+                    pathSelectionAudit.SourcePlaneTexturesSupported,
+                PathSelectionCpuFallback = pathSelectionAudit.CpuFallback,
+                PathSelectionHasSourceFrame = pathSelectionAudit.HasSourceFrame,
+                PathSelectionHasPresentedFrame = pathSelectionAudit.HasPresentedFrame,
+                PathSelectionBridgeState = pathSelectionAudit.BridgeState,
+                PathSelectionSourceSurfaceZeroCopy =
+                    pathSelectionAudit.SourceSurfaceZeroCopy,
             };
         }
 
