@@ -259,12 +259,12 @@ namespace UnityAV
                             validationWindowStartObservation.Reason,
                             snapshot.ValidationGatePlaybackTimeSec,
                             audioGatePolicy);
-                        RecordValidationObservation(snapshot);
+                        snapshot = RecordValidationObservation(snapshot);
                     }
                 }
                 else
                 {
-                    RecordValidationObservation(snapshot);
+                    snapshot = RecordValidationObservation(snapshot);
                 }
 
                 if (_validationWindowStarted
@@ -292,13 +292,6 @@ namespace UnityAV
         private ValidationSnapshot EmitStatus()
         {
             var snapshot = CaptureSnapshot();
-            var backendRuntimeObservation =
-                MediaNativeInteropCommon.CreatePullBackendRuntimeObservation(
-                    Player != null,
-                    Player != null ? Player.PreferredBackend : default(MediaBackendKind),
-                    Player != null ? Player.ActualBackendKind : default(MediaBackendKind),
-                    Player != null ? Player.VideoRenderer : default(MediaPlayerPull.PullVideoRendererKind),
-                    Player != null ? Player.ActualVideoRenderer : default(MediaPlayerPull.PullVideoRendererKind));
 
             Debug.Log(
                 MediaNativeInteropCommon.CreateValidationStatusLogLine(
@@ -307,7 +300,7 @@ namespace UnityAV
                     hasTexture: snapshot.HasTexture,
                     audioPlaying: snapshot.AudioPlaying,
                     started: snapshot.Started,
-                    startupElapsedSeconds: Player.StartupElapsedSeconds,
+                    startupElapsedSeconds: snapshot.StartupElapsedSeconds,
                     sourceState: snapshot.SourceState,
                     sourcePackets: snapshot.SourcePackets,
                     sourceTimeouts: snapshot.SourceTimeouts,
@@ -318,9 +311,9 @@ namespace UnityAV
                     textureHeight: snapshot.TextureHeight,
                     fullscreen: Screen.fullScreen,
                     fullscreenMode: Screen.fullScreenMode,
-                    actualBackend: backendRuntimeObservation.ActualBackend,
-                    requestedVideoRenderer: backendRuntimeObservation.RequestedVideoRenderer,
-                    actualVideoRenderer: backendRuntimeObservation.ActualVideoRenderer,
+                    actualBackend: snapshot.ActualBackend,
+                    requestedVideoRenderer: snapshot.RequestedVideoRenderer,
+                    actualVideoRenderer: snapshot.ActualVideoRenderer,
                     hasFrameContract: snapshot.HasFrameContract,
                     frameContractMemoryKind: snapshot.FrameContractMemoryKind,
                     frameContractDynamicRange: snapshot.FrameContractDynamicRange,
@@ -706,6 +699,13 @@ namespace UnityAV
                 MediaNativeInteropCommon.CreateWgpuRenderStateObservation(
                     hasWgpuRenderState,
                     wgpuState);
+            var backendRuntimeObservation =
+                MediaNativeInteropCommon.CreatePullBackendRuntimeObservation(
+                    Player != null,
+                    Player != null ? Player.PreferredBackend : default(MediaBackendKind),
+                    Player != null ? Player.ActualBackendKind : default(MediaBackendKind),
+                    Player != null ? Player.VideoRenderer : default(MediaPlayerPull.PullVideoRendererKind),
+                    Player != null ? Player.ActualVideoRenderer : default(MediaPlayerPull.PullVideoRendererKind));
             var hasRealtimeLatencySample = false;
             var realtimeLatencyMilliseconds = 0.0;
             var publisherElapsedTimeSec = 0.0;
@@ -740,6 +740,15 @@ namespace UnityAV
 
             return new ValidationSnapshot
             {
+                Uri = Player != null ? Player.Uri : string.Empty,
+                RequestedBackend = backendRuntimeObservation.RequestedBackend,
+                ActualBackend = backendRuntimeObservation.ActualBackend,
+                RequestedVideoRenderer = backendRuntimeObservation.RequestedVideoRenderer,
+                ActualVideoRenderer = backendRuntimeObservation.ActualVideoRenderer,
+                StartupElapsedSeconds = Player.StartupElapsedSeconds,
+                SessionId = Player != null ? Player.SessionId : -1,
+                AudioSampleRate = Player != null ? Player.AudioSampleRate : 0,
+                AudioChannels = Player != null ? Player.AudioChannels : 0,
                 PlaybackTime = playbackTime,
                 ValidationGatePlaybackTimeSec = validationGatePlaybackTimeSec,
                 AudioStartRuntimeCommand = audioStartRuntimeCommand,
@@ -1051,7 +1060,7 @@ namespace UnityAV
         }
 
         private MediaNativeInteropCommon.ValidationWindowEvidenceObservationView
-            CreateValidationEvidenceObservation()
+            CreateCurrentValidationEvidenceObservation()
         {
             return new MediaNativeInteropCommon.ValidationWindowEvidenceObservationView
             {
@@ -1063,12 +1072,25 @@ namespace UnityAV
             };
         }
 
-        private void RecordValidationObservation(ValidationSnapshot snapshot)
+        private static MediaNativeInteropCommon.ValidationWindowEvidenceObservationView
+            CreateValidationEvidenceObservation(ValidationSnapshot snapshot)
+        {
+            return new MediaNativeInteropCommon.ValidationWindowEvidenceObservationView
+            {
+                ObservedTextureDuringWindow = snapshot.ObservedTextureDuringWindow,
+                ObservedAudioDuringWindow = snapshot.ObservedAudioDuringWindow,
+                ObservedStartedDuringWindow = snapshot.ObservedStartedDuringWindow,
+                ObservedNativeFrameDuringWindow = snapshot.ObservedNativeFrameDuringWindow,
+                MaxObservedPlaybackTime = snapshot.MaxObservedPlaybackTimeSec,
+            };
+        }
+
+        private ValidationSnapshot RecordValidationObservation(ValidationSnapshot snapshot)
         {
             var validationGateInputs = CreateValidationGateInputs(snapshot);
             var evidenceObservation =
                 MediaNativeInteropCommon.AccumulatePullValidationWindowEvidenceObservation(
-                    CreateValidationEvidenceObservation(),
+                    CreateCurrentValidationEvidenceObservation(),
                     validationGateInputs);
             _observedTextureDuringWindow =
                 evidenceObservation.ObservedTextureDuringWindow;
@@ -1080,8 +1102,22 @@ namespace UnityAV
                 evidenceObservation.ObservedNativeFrameDuringWindow;
             _maxObservedPlaybackTime =
                 evidenceObservation.MaxObservedPlaybackTime;
+            snapshot.ObservedTextureDuringWindow =
+                evidenceObservation.ObservedTextureDuringWindow;
+            snapshot.ObservedAudioDuringWindow =
+                evidenceObservation.ObservedAudioDuringWindow;
+            snapshot.ObservedStartedDuringWindow =
+                evidenceObservation.ObservedStartedDuringWindow;
+            snapshot.ObservedNativeFrameDuringWindow =
+                evidenceObservation.ObservedNativeFrameDuringWindow;
+            snapshot.MaxObservedPlaybackTimeSec =
+                evidenceObservation.MaxObservedPlaybackTime;
+            snapshot.ValidationWindowStartReason = _validationWindowStartReason;
+            snapshot.ValidationWindowInitialPlaybackTimeSec =
+                _validationWindowInitialPlaybackTime;
             _lastValidationWindowSnapshot = snapshot;
             _hasValidationWindowSnapshot = true;
+            return snapshot;
         }
 
         private ValidationResultInfo EvaluateValidationResult(ValidationSnapshot finalSnapshot)
@@ -1090,11 +1126,11 @@ namespace UnityAV
             var validationGateInputs = CreateValidationGateInputs(summarySnapshot);
             var resultObservation =
                 MediaNativeInteropCommon.CreatePullValidationResultObservation(
-                    _validationWindowStartReason,
-                    CreateValidationEvidenceObservation(),
+                    summarySnapshot.ValidationWindowStartReason,
+                    CreateValidationEvidenceObservation(summarySnapshot),
                     validationGateInputs.RequireAudioOutput,
                     MediaNativeInteropCommon.MinimumValidationPlaybackAdvanceSeconds,
-                    _validationWindowInitialPlaybackTime);
+                    summarySnapshot.ValidationWindowInitialPlaybackTimeSec);
             var playbackAdvance = resultObservation.PlaybackAdvanceSeconds;
 
             if (!resultObservation.Passed)
@@ -1133,13 +1169,6 @@ namespace UnityAV
                 var summaryPath = Path.Combine(
                     Application.persistentDataPath,
                     SummaryFileName);
-                var backendRuntimeObservation =
-                    MediaNativeInteropCommon.CreatePullBackendRuntimeObservation(
-                        Player != null,
-                        Player != null ? Player.PreferredBackend : default(MediaBackendKind),
-                        Player != null ? Player.ActualBackendKind : default(MediaBackendKind),
-                        Player != null ? Player.VideoRenderer : default(MediaPlayerPull.PullVideoRendererKind),
-                        Player != null ? Player.ActualVideoRenderer : default(MediaPlayerPull.PullVideoRendererKind));
                 var summarySnapshot = ResolveValidationWindowSnapshot(finalSnapshot);
                 var summaryAudioGatePolicy = summarySnapshot.AudioGatePolicy;
                 var builder = new StringBuilder();
@@ -1149,12 +1178,12 @@ namespace UnityAV
                     {
                         Passed = result.Passed,
                         Reason = result.Reason,
-                        Uri = Player != null ? Player.Uri : string.Empty,
-                        RequestedBackend = backendRuntimeObservation.RequestedBackend,
-                        ActualBackend = backendRuntimeObservation.ActualBackend,
+                        Uri = summarySnapshot.Uri,
+                        RequestedBackend = summarySnapshot.RequestedBackend,
+                        ActualBackend = summarySnapshot.ActualBackend,
                         IncludeVideoRenderer = true,
-                        RequestedVideoRenderer = backendRuntimeObservation.RequestedVideoRenderer,
-                        ActualVideoRenderer = backendRuntimeObservation.ActualVideoRenderer,
+                        RequestedVideoRenderer = summarySnapshot.RequestedVideoRenderer,
+                        ActualVideoRenderer = summarySnapshot.ActualVideoRenderer,
                         IncludeRequireAudioOutput = true,
                         RequireAudioOutput = summaryAudioGatePolicy.RequireAudioOutput,
                         IncludeConfiguredRequireAudioOutput = true,
@@ -1186,14 +1215,16 @@ namespace UnityAV
                         HasTexture = summarySnapshot.HasTexture,
                         AudioPlaying = summarySnapshot.AudioPlaying,
                         Started = summarySnapshot.Started,
-                        ObservedTextureDuringWindow = _observedTextureDuringWindow,
-                        ObservedAudioDuringWindow = _observedAudioDuringWindow,
-                        ObservedStartedDuringWindow = _observedStartedDuringWindow,
+                        ObservedTextureDuringWindow = summarySnapshot.ObservedTextureDuringWindow,
+                        ObservedAudioDuringWindow = summarySnapshot.ObservedAudioDuringWindow,
+                        ObservedStartedDuringWindow = summarySnapshot.ObservedStartedDuringWindow,
                         IncludeObservedNativeFrameDuringWindow = true,
-                        ObservedNativeFrameDuringWindow = _observedNativeFrameDuringWindow,
+                        ObservedNativeFrameDuringWindow =
+                            summarySnapshot.ObservedNativeFrameDuringWindow,
                         IncludeValidationWindowStartReason =
-                            !string.IsNullOrEmpty(_validationWindowStartReason),
-                        ValidationWindowStartReason = _validationWindowStartReason,
+                            !string.IsNullOrEmpty(summarySnapshot.ValidationWindowStartReason),
+                        ValidationWindowStartReason =
+                            summarySnapshot.ValidationWindowStartReason,
                     });
                 MediaNativeInteropCommon.AppendValidationSummaryRuntimeHealth(
                     builder,
@@ -1358,9 +1389,9 @@ namespace UnityAV
                 MediaNativeInteropCommon.AppendValidationSummaryEnterpriseMetrics(
                     builder,
                     MediaNativeInteropCommon.CreateValidationSummaryEnterpriseMetrics(
-                        sessionId: Player != null ? Player.SessionId : -1,
+                        sessionId: summarySnapshot.SessionId,
                         sourceTimelineModel: summarySnapshot.SourceTimelineModel,
-                        uri: Player != null ? Player.Uri : string.Empty,
+                        uri: summarySnapshot.Uri,
                         hasAvSyncContract: summarySnapshot.HasAvSyncContract,
                         hasAvSyncAudioClockSec: summarySnapshot.AvSyncContractHasAudioClockSec,
                         avSyncAudioClockSec: summarySnapshot.AvSyncContractAudioClockSec,
@@ -1385,8 +1416,8 @@ namespace UnityAV
                         avSyncEnterpriseOffsetAbsP95Us: summarySnapshot.AvSyncEnterpriseOffsetAbsP95Us,
                         avSyncEnterpriseOffsetAbsP99Us: summarySnapshot.AvSyncEnterpriseOffsetAbsP99Us,
                         reportedBufferedSamples: summarySnapshot.PlayerSessionReportedBufferedSamples,
-                        audioSampleRate: Player != null ? Player.AudioSampleRate : 0,
-                        audioChannels: Player != null ? Player.AudioChannels : 0,
+                        audioSampleRate: summarySnapshot.AudioSampleRate,
+                        audioChannels: summarySnapshot.AudioChannels,
                         platform: Application.platform,
                         deviceModel: SystemInfo.deviceModel));
                 builder.AppendLine("summary_path=" + summaryPath);
@@ -1865,6 +1896,15 @@ namespace UnityAV
 
         private struct ValidationSnapshot
         {
+            public string Uri;
+            public string RequestedBackend;
+            public string ActualBackend;
+            public string RequestedVideoRenderer;
+            public string ActualVideoRenderer;
+            public float StartupElapsedSeconds;
+            public int SessionId;
+            public int AudioSampleRate;
+            public int AudioChannels;
             public double PlaybackTime;
             public double ValidationGatePlaybackTimeSec;
             public MediaNativeInteropCommon.AudioStartRuntimeCommandView AudioStartRuntimeCommand;
@@ -1872,6 +1912,13 @@ namespace UnityAV
             public bool HasTexture;
             public bool AudioPlaying;
             public bool Started;
+            public bool ObservedTextureDuringWindow;
+            public bool ObservedAudioDuringWindow;
+            public bool ObservedStartedDuringWindow;
+            public bool ObservedNativeFrameDuringWindow;
+            public string ValidationWindowStartReason;
+            public double ValidationWindowInitialPlaybackTimeSec;
+            public double MaxObservedPlaybackTimeSec;
             public bool HasPresentedNativeVideoFrame;
             public int TextureWidth;
             public int TextureHeight;
