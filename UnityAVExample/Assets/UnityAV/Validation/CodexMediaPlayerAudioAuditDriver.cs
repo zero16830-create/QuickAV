@@ -238,7 +238,7 @@ namespace UnityAV
                     snapshot.HasTexture,
                     snapshot.AudioPlaying,
                     snapshot.Started,
-                    Player.StartupElapsedSeconds,
+                    snapshot.StartupElapsedSeconds,
                     snapshot.SourceState,
                     snapshot.SourcePackets,
                     snapshot.SourceTimeouts,
@@ -505,6 +505,7 @@ namespace UnityAV
                 ActualBackend = backendRuntimeObservation.ActualBackend,
                 RequestedVideoRenderer = backendRuntimeObservation.RequestedVideoRenderer,
                 ActualVideoRenderer = nativeVideoRuntimeObservation.ActualRenderer,
+                StartupElapsedSeconds = Player.StartupElapsedSeconds,
                 PlaybackTime = playbackTime,
                 ValidationGatePlaybackTimeSec = validationGatePlaybackTimeSec,
                 HasTexture = textureObservation.HasTexture,
@@ -1128,6 +1129,7 @@ namespace UnityAV
             public string ActualBackend;
             public string RequestedVideoRenderer;
             public string ActualVideoRenderer;
+            public float StartupElapsedSeconds;
             public double PlaybackTime;
             public double ValidationGatePlaybackTimeSec;
             public bool HasTexture;
