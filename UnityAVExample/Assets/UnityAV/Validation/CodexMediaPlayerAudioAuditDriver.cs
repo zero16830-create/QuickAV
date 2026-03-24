@@ -350,7 +350,11 @@ namespace UnityAV
 
         private ValidationSnapshot CaptureSnapshot()
         {
-            var playbackTime = SafeReadPlaybackTime();
+            MediaNativeInteropCommon.PlaybackTimingContractView playbackTimingContract;
+            var hasPlaybackTimingContract = Player.TryGetPlaybackTimingContract(out playbackTimingContract);
+            var playbackTime = ResolveObservedPlaybackTime(
+                hasPlaybackTimingContract,
+                playbackTimingContract);
             var textureObservation =
                 MediaNativeInteropCommon.CreateMediaPlayerValidationVideoTextureObservation(
                     Player.TargetMaterial != null ? Player.TargetMaterial.mainTexture : null);
@@ -407,10 +411,9 @@ namespace UnityAV
                 MediaNativeInteropCommon.CreateSourceTimelineAuditStrings(
                     sourceTimelineAvailable,
                     sourceTimelineContract);
-            MediaNativeInteropCommon.PlaybackTimingContractView playbackTimingContract;
             var playbackContractObservation =
                 MediaNativeInteropCommon.CreatePlaybackTimingAuditStrings(
-                    Player.TryGetPlaybackTimingContract(out playbackTimingContract),
+                    hasPlaybackTimingContract,
                     playbackTimingContract);
             MediaNativeInteropCommon.AvSyncContractView avSyncContract;
             var hasAvSyncContract = Player.TryGetAvSyncContract(out avSyncContract);
@@ -1049,6 +1052,26 @@ namespace UnityAV
                         ex.Message));
                 return -1.0;
             }
+        }
+
+        private double ResolveObservedPlaybackTime(
+            bool hasPlaybackTimingContract,
+            MediaNativeInteropCommon.PlaybackTimingContractView playbackTimingContract)
+        {
+            if (hasPlaybackTimingContract)
+            {
+                if (playbackTimingContract.ExternalTimeSec >= 0.0)
+                {
+                    return playbackTimingContract.ExternalTimeSec;
+                }
+
+                if (playbackTimingContract.MasterTimeSec >= 0.0)
+                {
+                    return playbackTimingContract.MasterTimeSec;
+                }
+            }
+
+            return SafeReadPlaybackTime();
         }
 
         private void Update()
