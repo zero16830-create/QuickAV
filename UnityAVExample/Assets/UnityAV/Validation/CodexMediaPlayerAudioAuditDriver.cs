@@ -197,12 +197,12 @@ namespace UnityAV
                             startupElapsed,
                             validationWindowStartObservation.Reason,
                             snapshot.ValidationGatePlaybackTimeSec);
-                        RecordValidationObservation(snapshot);
+                        snapshot = RecordValidationObservation(snapshot);
                     }
                 }
                 else
                 {
-                    RecordValidationObservation(snapshot);
+                    snapshot = RecordValidationObservation(snapshot);
                 }
 
                 if (_validationWindowStarted
@@ -608,7 +608,7 @@ namespace UnityAV
         }
 
         private MediaNativeInteropCommon.ValidationWindowEvidenceObservationView
-            CreateValidationEvidenceObservation()
+            CreateCurrentValidationEvidenceObservation()
         {
             return new MediaNativeInteropCommon.ValidationWindowEvidenceObservationView
             {
@@ -620,12 +620,25 @@ namespace UnityAV
             };
         }
 
-        private void RecordValidationObservation(ValidationSnapshot snapshot)
+        private static MediaNativeInteropCommon.ValidationWindowEvidenceObservationView
+            CreateValidationEvidenceObservation(ValidationSnapshot snapshot)
+        {
+            return new MediaNativeInteropCommon.ValidationWindowEvidenceObservationView
+            {
+                ObservedTextureDuringWindow = snapshot.ObservedTextureDuringWindow,
+                ObservedAudioDuringWindow = snapshot.ObservedAudioDuringWindow,
+                ObservedStartedDuringWindow = snapshot.ObservedStartedDuringWindow,
+                ObservedNativeFrameDuringWindow = snapshot.ObservedNativeFrameDuringWindow,
+                MaxObservedPlaybackTime = snapshot.MaxObservedPlaybackTimeSec,
+            };
+        }
+
+        private ValidationSnapshot RecordValidationObservation(ValidationSnapshot snapshot)
         {
             var validationGateInputs = CreateValidationGateInputs(snapshot);
             var evidenceObservation =
                 MediaNativeInteropCommon.AccumulateMediaPlayerValidationWindowEvidenceObservation(
-                    CreateValidationEvidenceObservation(),
+                    CreateCurrentValidationEvidenceObservation(),
                     validationGateInputs);
             _observedTextureDuringWindow =
                 evidenceObservation.ObservedTextureDuringWindow;
@@ -637,8 +650,22 @@ namespace UnityAV
                 evidenceObservation.ObservedNativeFrameDuringWindow;
             _maxObservedPlaybackTime =
                 evidenceObservation.MaxObservedPlaybackTime;
+            snapshot.ObservedTextureDuringWindow =
+                evidenceObservation.ObservedTextureDuringWindow;
+            snapshot.ObservedAudioDuringWindow =
+                evidenceObservation.ObservedAudioDuringWindow;
+            snapshot.ObservedStartedDuringWindow =
+                evidenceObservation.ObservedStartedDuringWindow;
+            snapshot.ObservedNativeFrameDuringWindow =
+                evidenceObservation.ObservedNativeFrameDuringWindow;
+            snapshot.MaxObservedPlaybackTimeSec =
+                evidenceObservation.MaxObservedPlaybackTime;
+            snapshot.ValidationWindowStartReason = _validationWindowStartReason;
+            snapshot.ValidationWindowInitialPlaybackTimeSec =
+                _validationWindowInitialPlaybackTime;
             _lastValidationWindowSnapshot = snapshot;
             _hasValidationWindowSnapshot = true;
+            return snapshot;
         }
 
         private ValidationResultInfo EvaluateValidationResult(ValidationSnapshot finalSnapshot)
@@ -646,10 +673,10 @@ namespace UnityAV
             var summarySnapshot = ResolveValidationWindowSnapshot(finalSnapshot);
             var resultObservation =
                 MediaNativeInteropCommon.CreateMediaPlayerValidationResultObservation(
-                    _validationWindowStartReason,
-                    CreateValidationEvidenceObservation(),
+                    summarySnapshot.ValidationWindowStartReason,
+                    CreateValidationEvidenceObservation(summarySnapshot),
                     MediaNativeInteropCommon.MinimumValidationPlaybackAdvanceSeconds,
-                    _validationWindowInitialPlaybackTime);
+                    summarySnapshot.ValidationWindowInitialPlaybackTimeSec);
             var playbackAdvance = resultObservation.PlaybackAdvanceSeconds;
 
             if (!resultObservation.Passed)
@@ -729,13 +756,15 @@ namespace UnityAV
                         AudioSourcePresent = summarySnapshot.AudioSourcePresent,
                         IncludeHasAudioListener = true,
                         HasAudioListener = summarySnapshot.HasAudioListener,
-                        ObservedTextureDuringWindow = _observedTextureDuringWindow,
-                        ObservedAudioDuringWindow = _observedAudioDuringWindow,
-                        ObservedStartedDuringWindow = _observedStartedDuringWindow,
+                        ObservedTextureDuringWindow = summarySnapshot.ObservedTextureDuringWindow,
+                        ObservedAudioDuringWindow = summarySnapshot.ObservedAudioDuringWindow,
+                        ObservedStartedDuringWindow = summarySnapshot.ObservedStartedDuringWindow,
                         IncludeObservedNativeFrameDuringWindow = true,
-                        ObservedNativeFrameDuringWindow = _observedNativeFrameDuringWindow,
+                        ObservedNativeFrameDuringWindow =
+                            summarySnapshot.ObservedNativeFrameDuringWindow,
                         IncludeValidationWindowStartReason = true,
-                        ValidationWindowStartReason = _validationWindowStartReason,
+                        ValidationWindowStartReason =
+                            summarySnapshot.ValidationWindowStartReason,
                     });
                 MediaNativeInteropCommon.AppendValidationSummarySourceRuntime(
                     builder,
@@ -1035,6 +1064,13 @@ namespace UnityAV
             public bool HasAudioListener;
             public bool Started;
             public bool RuntimePlaybackConfirmed;
+            public bool ObservedTextureDuringWindow;
+            public bool ObservedAudioDuringWindow;
+            public bool ObservedStartedDuringWindow;
+            public bool ObservedNativeFrameDuringWindow;
+            public string ValidationWindowStartReason;
+            public double ValidationWindowInitialPlaybackTimeSec;
+            public double MaxObservedPlaybackTimeSec;
             public int TextureWidth;
             public int TextureHeight;
             public string SourceState;
