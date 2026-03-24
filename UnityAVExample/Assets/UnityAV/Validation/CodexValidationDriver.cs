@@ -565,11 +565,14 @@ namespace UnityAV
         private ValidationSnapshot CaptureSnapshot()
         {
             TrySyncVisibleSurfaceMaterial();
-            var playbackTime = SafeReadPlaybackTime();
-            var textureObservation =
-                MediaNativeInteropCommon.CreatePullValidationVideoTextureObservation(
-                    Player.HasPresentedVideoFrame,
-                    Player.TargetMaterial != null ? Player.TargetMaterial.mainTexture : null);
+            MediaNativeInteropCommon.PlaybackTimingContractView playbackTimingContract;
+            var hasPlaybackTimingContract = Player.TryGetPlaybackTimingContract(
+                out playbackTimingContract);
+            var playbackTime = ResolveObservedPlaybackTime(
+                hasPlaybackTimingContract,
+                playbackTimingContract);
+            var targetTexture =
+                Player.TargetMaterial != null ? Player.TargetMaterial.mainTexture : null;
             var audioSource = Player.GetComponent<AudioSource>();
             var audioPlaybackObservation =
                 MediaNativeInteropCommon.CreateValidationAudioPlaybackObservation(
@@ -618,9 +621,6 @@ namespace UnityAV
                 MediaNativeInteropCommon.CreateVideoFrameObservation(
                     hasFrameContract,
                     frameContract);
-            MediaNativeInteropCommon.PlaybackTimingContractView playbackTimingContract;
-            var hasPlaybackTimingContract = Player.TryGetPlaybackTimingContract(
-                out playbackTimingContract);
             var playbackTimingObservation =
                 MediaNativeInteropCommon.CreatePlaybackTimingObservation(
                     hasPlaybackTimingContract,
@@ -687,6 +687,13 @@ namespace UnityAV
                 MediaNativeInteropCommon.CreateNativeVideoPathSelectionObservation(
                     hasPathSelection,
                     pathSelection);
+            var hasPresentedNativeVideoFrame =
+                (hasPlayerSessionContract && playerSessionContract.HasPresentedVideoFrame)
+                || (hasPathSelection && pathSelection.HasPresentedFrame);
+            var textureObservation =
+                MediaNativeInteropCommon.CreatePullValidationVideoTextureObservation(
+                    hasPresentedNativeVideoFrame,
+                    targetTexture);
             MediaNativeInteropCommon.WgpuRenderDescriptorView wgpuDescriptor;
             var hasWgpuRenderDescriptor = Player.TryGetWgpuRenderDescriptor(out wgpuDescriptor);
             var wgpuDescriptorObservation =
@@ -752,11 +759,11 @@ namespace UnityAV
                 PlaybackTime = playbackTime,
                 ValidationGatePlaybackTimeSec = validationGatePlaybackTimeSec,
                 AudioStartRuntimeCommand = audioStartRuntimeCommand,
-                AudioGatePolicy = validationAudioGatePolicy,
+                AudioGatePolicy = currentValidationAudioGatePolicy,
                 HasTexture = textureObservation.HasTexture,
                 AudioPlaying = audioPlaybackObservation.Playing,
                 Started = playbackStartObservation.Started,
-                HasPresentedNativeVideoFrame = Player.HasPresentedVideoFrame,
+                HasPresentedNativeVideoFrame = hasPresentedNativeVideoFrame,
                 TextureWidth = textureObservation.TextureWidth,
                 TextureHeight = textureObservation.TextureHeight,
                 HasRuntimeHealth = runtimeHealthObservation.Available,
@@ -1452,6 +1459,26 @@ namespace UnityAV
             }
         }
 
+        private double ResolveObservedPlaybackTime(
+            bool hasPlaybackTimingContract,
+            MediaNativeInteropCommon.PlaybackTimingContractView playbackTimingContract)
+        {
+            if (hasPlaybackTimingContract)
+            {
+                if (playbackTimingContract.ExternalTimeSec >= 0.0)
+                {
+                    return playbackTimingContract.ExternalTimeSec;
+                }
+
+                if (playbackTimingContract.MasterTimeSec >= 0.0)
+                {
+                    return playbackTimingContract.MasterTimeSec;
+                }
+            }
+
+            return SafeReadPlaybackTime();
+        }
+
         private void Update()
         {
             TryConfigureWindow();
@@ -2120,3 +2147,6 @@ namespace UnityAV
         }
     }
 }
+
+
+
