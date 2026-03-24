@@ -389,12 +389,12 @@ namespace UnityAV
                     referencePlaybackTime);
             MediaNativeInteropCommon.PlayerSessionContractView playerSessionContract;
             var playerSessionAvailable = Player.TryGetPlayerSessionContract(out playerSessionContract);
-            var runtimePlaybackConfirmed =
+            var playerSessionPlaybackConfirmed =
                 playerSessionAvailable && playerSessionContract.PlaybackConfirmed;
             var playbackStartObservation =
                 MediaNativeInteropCommon.CreatePlaybackStartObservation(
-                    runtimePlaybackConfirmed,
-                    runtimePlaybackConfirmed,
+                    playerSessionPlaybackConfirmed,
+                    playerSessionPlaybackConfirmed,
                     runtimeHealthObservation.Available,
                     runtimeHealthObservation.IsPlaying,
                     validationGatePlaybackTimeSec,
@@ -517,7 +517,7 @@ namespace UnityAV
                 AudioSourcePresent = audioPlaybackObservation.SourcePresent,
                 HasAudioListener = _hasAudioListener,
                 Started = playbackStartObservation.Started,
-                RuntimePlaybackConfirmed = runtimePlaybackConfirmed,
+                PlayerSessionPlaybackConfirmed = playerSessionPlaybackConfirmed,
                 TextureWidth = textureObservation.TextureWidth,
                 TextureHeight = textureObservation.TextureHeight,
                 SourceState = runtimeHealthObservation.SourceState,
@@ -703,7 +703,7 @@ namespace UnityAV
                 HasTexture = snapshot.HasTexture,
                 AudioPlaying = snapshot.AudioPlaying,
                 Started = snapshot.Started,
-                RuntimePlaybackConfirmed = snapshot.RuntimePlaybackConfirmed,
+                PlayerSessionPlaybackConfirmed = snapshot.PlayerSessionPlaybackConfirmed,
                 HasPresentedNativeVideoFrame = snapshot.HasPresentedNativeVideoFrame,
                 PlaybackTimeSec = snapshot.ValidationGatePlaybackTimeSec,
             };
@@ -1307,7 +1307,7 @@ namespace UnityAV
             public bool AudioSourcePresent;
             public bool HasAudioListener;
             public bool Started;
-            public bool RuntimePlaybackConfirmed;
+            public bool PlayerSessionPlaybackConfirmed;
             public bool ObservedTextureDuringWindow;
             public bool ObservedAudioDuringWindow;
             public bool ObservedStartedDuringWindow;

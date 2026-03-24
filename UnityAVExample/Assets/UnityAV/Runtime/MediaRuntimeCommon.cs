@@ -145,7 +145,7 @@ namespace UnityAV
         internal const uint RustAVAvSyncContractVersion = 1u;
         internal const uint RustAVAudioOutputPolicyVersion = 2u;
         internal const uint RustAVSourceTimelineContractVersion = 1u;
-        internal const uint RustAVPlayerSessionContractVersion = 2u;
+        internal const uint RustAVPlayerSessionContractVersion = 3u;
         internal const uint RustAVAvSyncEnterpriseMetricsVersion = 2u;
         internal const uint RustAVPassiveAvSyncSnapshotVersion = 1u;
         internal const uint RustAVVideoColorInfoVersion = 1u;
@@ -734,6 +734,7 @@ namespace UnityAV
             public int RequiresPresentedVideoFrame;
             public int HasPresentedVideoFrame;
             public int AndroidFileRateBridgeActive;
+            public int PlaybackConfirmed;
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -1391,6 +1392,7 @@ namespace UnityAV
             public bool RequiresPresentedVideoFrame;
             public bool HasPresentedVideoFrame;
             public bool AndroidFileRateBridgeActive;
+            public bool PlaybackConfirmed;
         }
 
         internal struct PlayerSessionObservationView
@@ -1414,6 +1416,7 @@ namespace UnityAV
             public bool RequiresPresentedVideoFrame;
             public bool HasPresentedVideoFrame;
             public bool AndroidFileRateBridgeActive;
+            public bool PlaybackConfirmed;
         }
 
         internal struct PlayerSessionAuditStringsView
@@ -1552,7 +1555,7 @@ namespace UnityAV
             public bool HasTexture;
             public bool AudioPlaying;
             public bool Started;
-            public bool RuntimePlaybackConfirmed;
+            public bool PlayerSessionPlaybackConfirmed;
             public bool HasPresentedNativeVideoFrame;
             public double PlaybackTimeSec;
         }
@@ -1819,6 +1822,7 @@ namespace UnityAV
             public bool RequiresPresentedVideoFrame;
             public bool HasPresentedVideoFrame;
             public bool AndroidFileRateBridgeActive;
+            public bool PlaybackConfirmed;
         }
 
         internal struct NativeVideoStartupWarmupCommandView
@@ -4940,20 +4944,6 @@ namespace UnityAV
                 : playbackTimeSec;
         }
 
-        internal static bool IsPlayerSessionRuntimePlaybackConfirmed(
-            bool available,
-            PlayerSessionContractView contract)
-        {
-            if (!available)
-            {
-                return false;
-            }
-
-            return contract.LifecycleState == 6
-                || contract.PublicState == 3
-                || contract.RuntimeState == 3;
-        }
-
         internal static ValidationWindowStartObservationView
             CreatePullValidationWindowStartObservation(
                 bool hasTexture,
@@ -5017,7 +5007,7 @@ namespace UnityAV
                 float startupTimeoutSeconds)
         {
             return CreateMediaPlayerValidationWindowStartObservation(
-                inputs.Started || inputs.RuntimePlaybackConfirmed,
+                inputs.Started || inputs.PlayerSessionPlaybackConfirmed,
                 inputs.PlaybackTimeSec,
                 inputs.HasPresentedNativeVideoFrame,
                 startupElapsedSeconds,
@@ -6145,7 +6135,7 @@ namespace UnityAV
                 currentObservation.MaxObservedPlaybackTime,
                 inputs.HasTexture,
                 inputs.AudioPlaying,
-                inputs.Started || inputs.RuntimePlaybackConfirmed,
+                inputs.Started || inputs.PlayerSessionPlaybackConfirmed,
                 inputs.HasPresentedNativeVideoFrame,
                 inputs.PlaybackTimeSec);
         }
@@ -7938,6 +7928,7 @@ namespace UnityAV
                 RequiresPresentedVideoFrame = contract.RequiresPresentedVideoFrame != 0,
                 HasPresentedVideoFrame = contract.HasPresentedVideoFrame != 0,
                 AndroidFileRateBridgeActive = contract.AndroidFileRateBridgeActive != 0,
+                PlaybackConfirmed = contract.PlaybackConfirmed != 0,
             };
         }
 
