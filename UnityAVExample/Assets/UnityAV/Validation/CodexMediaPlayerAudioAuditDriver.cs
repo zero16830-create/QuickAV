@@ -459,6 +459,10 @@ namespace UnityAV
                 MediaNativeInteropCommon.CreateNativeVideoPathSelectionObservation(
                     hasPathSelection,
                     pathSelection);
+            var hasPresentedNativeVideoFrame =
+                hasPresentedVideoTime
+                || (playerSessionAvailable && playerSessionContract.HasPresentedVideoFrame)
+                || (hasPathSelection && pathSelection.HasPresentedFrame);
             var nativeVideoRuntimeObservation =
                 MediaNativeInteropCommon.CreateNativeVideoRuntimeObservation(
                     Player != null,
@@ -525,7 +529,7 @@ namespace UnityAV
                 SourceReconnects = runtimeHealthObservation.SourceReconnects,
                 NativeVideoActive = Player.IsNativeVideoPathActive,
                 NativeActivationDecision = nativeVideoRuntimeObservation.ActivationDecision,
-                HasPresentedNativeVideoFrame = Player.HasPresentedNativeVideoFrame,
+                HasPresentedNativeVideoFrame = hasPresentedNativeVideoFrame,
                 HasPresentedVideoTime = hasPresentedVideoTime,
                 PresentedVideoTimeSec = hasPresentedVideoTime ? presentedVideoTimeSec : -1.0,
                 HasAvSyncSample = hasAvSyncSample,
