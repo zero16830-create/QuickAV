@@ -196,7 +196,7 @@ namespace UnityAV
                             now,
                             startupElapsed,
                             validationWindowStartObservation.Reason,
-                            snapshot.PlaybackTime);
+                            snapshot.ValidationGatePlaybackTimeSec);
                         RecordValidationObservation(snapshot);
                     }
                 }
@@ -492,10 +492,15 @@ namespace UnityAV
                     hasRealtimeLatencySample = true;
                 }
             }
+            var validationGatePlaybackTimeSec =
+                MediaNativeInteropCommon.ResolveValidationGatePlaybackTime(
+                    playbackTime,
+                    referencePlaybackTime);
 
             return new ValidationSnapshot
             {
                 PlaybackTime = playbackTime,
+                ValidationGatePlaybackTimeSec = validationGatePlaybackTimeSec,
                 HasTexture = textureObservation.HasTexture,
                 AudioPlaying = audioPlaybackObservation.Playing,
                 AudioSourcePresent = audioPlaybackObservation.SourcePresent,
@@ -604,7 +609,7 @@ namespace UnityAV
                 Started = snapshot.Started,
                 RuntimePlaybackConfirmed = snapshot.RuntimePlaybackConfirmed,
                 HasPresentedNativeVideoFrame = snapshot.HasPresentedNativeVideoFrame,
-                PlaybackTimeSec = snapshot.PlaybackTime,
+                PlaybackTimeSec = snapshot.ValidationGatePlaybackTimeSec,
             };
         }
 
@@ -1042,6 +1047,7 @@ namespace UnityAV
         private struct ValidationSnapshot
         {
             public double PlaybackTime;
+            public double ValidationGatePlaybackTimeSec;
             public bool HasTexture;
             public bool AudioPlaying;
             public bool AudioSourcePresent;
