@@ -694,24 +694,11 @@ namespace UnityAV
                     SummaryFileName);
                 var summarySnapshot = ResolveValidationWindowSnapshot(finalSnapshot);
                 var builder = new StringBuilder();
-                var fallbackPlayerSessionAudit =
-                    MediaNativeInteropCommon.CreatePlayerSessionAuditStringsFallback(
-                        summarySnapshot.PlayerSessionAvailable,
-                        summarySnapshot.PlayerSessionLifecycleState,
-                        summarySnapshot.PlayerSessionPublicState,
-                        summarySnapshot.PlayerSessionRuntimeState,
-                        summarySnapshot.PlayerSessionPlaybackIntent,
-                        summarySnapshot.PlayerSessionStopReason,
-                        summarySnapshot.PlayerSessionSourceState,
-                        summarySnapshot.PlayerSessionCanSeek,
-                        summarySnapshot.PlayerSessionIsRealtime,
-                        summarySnapshot.PlayerSessionIsBuffering,
-                        summarySnapshot.PlayerSessionIsSyncing);
                 var summaryPlayerSession =
                     MediaNativeInteropCommon.CreateValidationSummaryPlayerSession(
                         summarySnapshot.PlayerSessionAudit.Available,
                         summarySnapshot.PlayerSessionAudit,
-                        fallbackPlayerSessionAudit);
+                        summarySnapshot.PlayerSessionAudit);
                 var summaryAvSyncContract =
                     MediaNativeInteropCommon.CreateValidationSummaryAvSyncContract(
                         summarySnapshot.HasAvSyncContract,
