@@ -61,8 +61,6 @@ namespace UnityAV
         private string _validationWindowStartReason = string.Empty;
         private double _validationWindowInitialPlaybackTime = -1.0;
         private double _maxObservedPlaybackTime = -1.0;
-        private MediaNativeInteropCommon.PullValidationAudioGatePolicyView
-            _validationWindowAudioGatePolicy;
         private long _publisherStartUnixMs = -1;
         private bool _hasPublisherStartUnixMs;
         private bool _observedTextureDuringWindow;
@@ -257,8 +255,7 @@ namespace UnityAV
                             now,
                             startupElapsed,
                             validationWindowStartObservation.Reason,
-                            snapshot.ValidationGatePlaybackTimeSec,
-                            audioGatePolicy);
+                            snapshot.ValidationGatePlaybackTimeSec);
                         snapshot = RecordValidationObservation(snapshot);
                     }
                 }
@@ -652,9 +649,6 @@ namespace UnityAV
             var currentValidationAudioGatePolicy =
                 CreateValidationAudioGatePolicy(
                     audioStartRuntimeCommand);
-            var validationAudioGatePolicy = _validationWindowStarted
-                ? _validationWindowAudioGatePolicy
-                : currentValidationAudioGatePolicy;
             MediaNativeInteropCommon.AudioOutputPolicyView audioOutputPolicy;
             var hasAudioOutputPolicy = Player.TryGetAudioOutputPolicy(out audioOutputPolicy);
             var audioOutputPolicyObservation =
@@ -1003,15 +997,13 @@ namespace UnityAV
             float now,
             float startupElapsed,
             string reason,
-            double playbackTime,
-            MediaNativeInteropCommon.PullValidationAudioGatePolicyView audioGatePolicy)
+            double playbackTime)
         {
             _validationWindowStarted = true;
             _validationWindowStartTime = now;
             _validationWindowStartReason = reason;
             _validationWindowInitialPlaybackTime = playbackTime;
             _maxObservedPlaybackTime = playbackTime;
-            _validationWindowAudioGatePolicy = audioGatePolicy;
             Debug.Log(
                 MediaNativeInteropCommon.CreateValidationWindowStartedLogLine(
                     ValidationLogPrefix,
@@ -1465,14 +1457,14 @@ namespace UnityAV
         {
             if (hasPlaybackTimingContract)
             {
-                if (playbackTimingContract.ExternalTimeSec >= 0.0)
-                {
-                    return playbackTimingContract.ExternalTimeSec;
-                }
-
                 if (playbackTimingContract.MasterTimeSec >= 0.0)
                 {
                     return playbackTimingContract.MasterTimeSec;
+                }
+
+                if (playbackTimingContract.ExternalTimeSec >= 0.0)
+                {
+                    return playbackTimingContract.ExternalTimeSec;
                 }
             }
 
@@ -2147,6 +2139,3 @@ namespace UnityAV
         }
     }
 }
-
-
-
