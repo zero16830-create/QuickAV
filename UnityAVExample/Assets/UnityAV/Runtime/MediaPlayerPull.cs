@@ -2150,6 +2150,12 @@ namespace UnityAV
         {
             var delaySec = 0.0;
             var audioStarted = _audioSource != null && _audioSource.isPlaying;
+            if (ShouldUseOutputOnlyAudioSinkDelay(audioStarted))
+            {
+                // 实时 GStreamer steady-state 下，native audio_time 已经贴近输出前沿，
+                // 再叠加 native/export/ring 全链路缓冲会把 presented audio 过度往后扣。
+                return ComputeUnityAudioOutputDelaySeconds();
+            }
             if (EnableAudio && _audioSampleRate > 0 && _audioChannels > 0)
             {
                 delaySec += MediaNativeInteropCommon.ResolveBufferedAudioSecondsFromBytes(
@@ -2185,6 +2191,21 @@ namespace UnityAV
             }
 
             return delaySec;
+        }
+
+        private bool ShouldUseOutputOnlyAudioSinkDelay(bool audioStarted)
+        {
+            return _isRealtimeSource
+                && audioStarted
+                && _actualBackendKind == MediaBackendKind.Gstreamer
+                && IsRtspSourceUri();
+        }
+
+        private bool IsRtspSourceUri()
+        {
+            global::System.Uri parsedUri;
+            return global::System.Uri.TryCreate(Uri, UriKind.Absolute, out parsedUri)
+                && string.Equals(parsedUri.Scheme, "rtsp", StringComparison.OrdinalIgnoreCase);
         }
 
         private double ComputeUnityAudioOutputDelaySeconds()

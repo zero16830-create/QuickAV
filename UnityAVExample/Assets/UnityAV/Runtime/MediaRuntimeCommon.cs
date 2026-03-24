@@ -1520,6 +1520,8 @@ namespace UnityAV
         {
             public bool HasTexture;
             public bool RequireAudioOutput;
+            public bool ConfiguredRequireAudioOutput;
+            public bool AudioGateDecisionReady;
             public bool AudioEnabled;
             public bool AudioPlaying;
             public bool Started;
@@ -4882,6 +4884,8 @@ namespace UnityAV
             return CreatePullValidationWindowStartObservation(
                 inputs.HasTexture,
                 inputs.RequireAudioOutput,
+                inputs.ConfiguredRequireAudioOutput,
+                inputs.AudioGateDecisionReady,
                 inputs.AudioPlaying,
                 startupElapsedSeconds,
                 startupTimeoutSeconds);
@@ -4896,16 +4900,11 @@ namespace UnityAV
             var source = "config_disabled";
             if (requireAudioOutput)
             {
+                source = "runtime_" + runtimeCommand.Source;
                 if (runtimeCommand.ContractAvailable
                     && runtimeCommand.StateReported)
                 {
                     effectiveRequireAudioOutput = runtimeCommand.ShouldPlay;
-                    source = "runtime_" + runtimeCommand.Source;
-                }
-                else
-                {
-                    effectiveRequireAudioOutput = audioEnabled;
-                    source = "player_enable_audio";
                 }
             }
 
@@ -4959,10 +4958,31 @@ namespace UnityAV
             CreatePullValidationWindowStartObservation(
                 bool hasTexture,
                 bool requireAudioOutput,
+                bool configuredRequireAudioOutput,
+                bool audioGateDecisionReady,
                 bool audioPlaying,
                 float startupElapsedSeconds,
                 float startupTimeoutSeconds)
         {
+            if (configuredRequireAudioOutput
+                && !audioGateDecisionReady)
+            {
+                if (startupElapsedSeconds >= startupTimeoutSeconds)
+                {
+                    return new ValidationWindowStartObservationView
+                    {
+                        ShouldStart = true,
+                        Reason = "startup-timeout-audio-gate-pending",
+                    };
+                }
+
+                return new ValidationWindowStartObservationView
+                {
+                    ShouldStart = false,
+                    Reason = string.Empty,
+                };
+            }
+
             var outputsReady = hasTexture
                 && (!requireAudioOutput || audioPlaying);
             if (outputsReady)
@@ -5086,6 +5106,16 @@ namespace UnityAV
             var playbackAdvanceSeconds = ComputeValidationPlaybackAdvanceSeconds(
                 validationWindowInitialPlaybackTimeSec,
                 maxObservedPlaybackTimeSec);
+
+            if (validationWindowStartReason == "startup-timeout-audio-gate-pending")
+            {
+                return new ValidationResultObservationView
+                {
+                    Passed = false,
+                    Reason = "audio-gate-runtime-not-ready",
+                    PlaybackAdvanceSeconds = playbackAdvanceSeconds,
+                };
+            }
 
             if (validationWindowStartReason == "startup-timeout"
                 && !observedStartedDuringWindow)
@@ -8346,6 +8376,9 @@ namespace UnityAV
 
             if (IsRemoteUri(uri))
             {
+                Debug.Log(
+                    "[MediaSourceResolver] resolve_remote_source"
+                    + " uri=" + uri);
                 onResolved(
                     new PreparedMediaSource(
                         uri,

@@ -1526,6 +1526,13 @@ namespace UnityAV
                 value => preparedSource = value,
                 error => resolveError = error);
 
+            Debug.Log(
+                "[MediaPlayer] prepare_playable_source_complete"
+                + " resolved=" + (preparedSource != null)
+                + " playback_uri=" + (preparedSource != null ? preparedSource.PlaybackUri : "null")
+                + " is_realtime=" + (preparedSource != null && preparedSource.IsRealtimeSource)
+                + " resolve_error=" + (resolveError != null ? resolveError.ToString() : "null"));
+
             if (resolveError != null)
             {
                 throw resolveError;
@@ -1797,8 +1804,9 @@ namespace UnityAV
                     Play();
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                Debug.LogError("[MediaPlayer] initialize_native_player_failed " + ex);
                 ReleaseNativePlayerSilently();
                 ReleaseManagedResources();
                 throw;
@@ -2706,6 +2714,12 @@ namespace UnityAV
 
             var delaySec = 0.0;
             var audioStarted = _audioSource != null && _audioSource.isPlaying;
+            if (ShouldUseOutputOnlyAudioSinkDelay(audioStarted))
+            {
+                // 实时 GStreamer steady-state 下，native audio_time 已经贴近输出前沿，
+                // 再叠加 native/export/ring 全链路缓冲会把 presented audio 过度往后扣。
+                return ComputeUnityAudioOutputDelaySeconds();
+            }
             if (_audioSampleRate > 0 && _audioChannels > 0)
             {
                 delaySec += MediaNativeInteropCommon.ResolveBufferedAudioSecondsFromBytes(
@@ -2741,6 +2755,45 @@ namespace UnityAV
             }
 
             return delaySec;
+        }
+
+        private double ComputeUnityAudioOutputDelaySeconds()
+        {
+            var delaySec = 0.0;
+            if (EnableAudio && _audioSampleRate > 0 && _audioChannels > 0)
+            {
+                int dspBufferLength;
+                int dspBufferCount;
+                AudioSettings.GetDSPBufferSize(out dspBufferLength, out dspBufferCount);
+                delaySec += MediaNativeInteropCommon.ResolveUnityDspBufferedSeconds(
+                    _audioSampleRate,
+                    dspBufferLength,
+                    dspBufferCount);
+            }
+
+            var realtimeAdditionalDelayMilliseconds =
+                GetRealtimeAdditionalAudioSinkDelayMilliseconds(true);
+            if (realtimeAdditionalDelayMilliseconds > 0)
+            {
+                delaySec += (double)realtimeAdditionalDelayMilliseconds / 1000.0;
+            }
+
+            return delaySec;
+        }
+
+        private bool ShouldUseOutputOnlyAudioSinkDelay(bool audioStarted)
+        {
+            return _isRealtimeSource
+                && audioStarted
+                && _actualBackendKind == MediaBackendKind.Gstreamer
+                && IsRtspSourceUri();
+        }
+
+        private bool IsRtspSourceUri()
+        {
+            global::System.Uri parsedUri;
+            return global::System.Uri.TryCreate(Uri, UriKind.Absolute, out parsedUri)
+                && string.Equals(parsedUri.Scheme, "rtsp", StringComparison.OrdinalIgnoreCase);
         }
 
         private int GetRealtimeAdditionalAudioSinkDelayMilliseconds(bool audioStarted)
