@@ -230,21 +230,6 @@ namespace UnityAV
         private ValidationSnapshot EmitStatus()
         {
             var snapshot = CaptureSnapshot();
-            var backendRuntimeObservation =
-                MediaNativeInteropCommon.CreateMediaPlayerBackendRuntimeObservation(
-                    Player != null,
-                    Player != null ? Player.PreferredBackend : default(MediaBackendKind),
-                    Player != null ? Player.ActualBackendKind : default(MediaBackendKind));
-            var nativeVideoRuntimeObservation =
-                MediaNativeInteropCommon.CreateNativeVideoRuntimeObservation(
-                    Player != null,
-                    snapshot.NativeVideoActive,
-                    Player != null
-                        ? Player.NativeVideoPresentationPath
-                        : default(MediaPlayer.NativeVideoPresentationPathKind),
-                    Player != null
-                        ? Player.NativeVideoActivationDecision
-                        : default(MediaPlayer.NativeVideoActivationDecisionKind));
 
             Debug.Log(
                 MediaNativeInteropCommon.CreateMediaPlayerAuditStatusLogLine(
@@ -264,9 +249,9 @@ namespace UnityAV
                     snapshot.TextureHeight,
                     Screen.fullScreen,
                     Screen.fullScreenMode,
-                    backendRuntimeObservation.ActualBackend,
-                    backendRuntimeObservation.RequestedVideoRenderer,
-                    nativeVideoRuntimeObservation.ActualRenderer,
+                    snapshot.ActualBackend,
+                    snapshot.RequestedVideoRenderer,
+                    snapshot.ActualVideoRenderer,
                     snapshot.PlaybackContractAudit,
                     snapshot.SourceTimelineAudit,
                     snapshot.PlayerSessionAudit,
@@ -280,7 +265,7 @@ namespace UnityAV
                     snapshot.NativeVideoActive,
                     snapshot.NativeActivationDecision,
                     snapshot.HasPresentedNativeVideoFrame,
-                    backendRuntimeObservation.ActualBackend));
+                    snapshot.ActualBackend));
 
             if (snapshot.PlayerSessionAvailable)
             {
@@ -469,6 +454,11 @@ namespace UnityAV
                     Player != null
                         ? Player.NativeVideoActivationDecision
                         : default(MediaPlayer.NativeVideoActivationDecisionKind));
+            var backendRuntimeObservation =
+                MediaNativeInteropCommon.CreateMediaPlayerBackendRuntimeObservation(
+                    Player != null,
+                    Player != null ? Player.PreferredBackend : default(MediaBackendKind),
+                    Player != null ? Player.ActualBackendKind : default(MediaBackendKind));
             var hasRealtimeLatencySample = false;
             var realtimeLatencyMilliseconds = 0.0;
             var publisherElapsedTimeSec = 0.0;
@@ -498,6 +488,11 @@ namespace UnityAV
             }
             return new ValidationSnapshot
             {
+                Uri = Player != null ? Player.Uri : string.Empty,
+                RequestedBackend = backendRuntimeObservation.RequestedBackend,
+                ActualBackend = backendRuntimeObservation.ActualBackend,
+                RequestedVideoRenderer = backendRuntimeObservation.RequestedVideoRenderer,
+                ActualVideoRenderer = nativeVideoRuntimeObservation.ActualRenderer,
                 PlaybackTime = playbackTime,
                 ValidationGatePlaybackTimeSec = validationGatePlaybackTimeSec,
                 HasTexture = textureObservation.HasTexture,
@@ -712,20 +707,15 @@ namespace UnityAV
                 var summaryPassiveAvSync = summarySnapshot.PassiveAvSyncAudit;
                 var summaryAvSyncEnterprise = summarySnapshot.AvSyncEnterpriseAudit;
                 var summaryAudioOutputPolicy = summarySnapshot.AudioOutputPolicyAudit;
-                var backendRuntimeObservation =
-                    MediaNativeInteropCommon.CreateMediaPlayerBackendRuntimeObservation(
-                        Player != null,
-                        Player != null ? Player.PreferredBackend : default(MediaBackendKind),
-                        Player != null ? Player.ActualBackendKind : default(MediaBackendKind));
                 MediaNativeInteropCommon.AppendValidationSummaryHeader(
                     builder,
                     new MediaNativeInteropCommon.ValidationSummaryHeaderView
                     {
                         Passed = result.Passed,
                         Reason = result.Reason,
-                        Uri = Player != null ? Player.Uri : string.Empty,
-                        RequestedBackend = backendRuntimeObservation.RequestedBackend,
-                        ActualBackend = backendRuntimeObservation.ActualBackend,
+                        Uri = summarySnapshot.Uri,
+                        RequestedBackend = summarySnapshot.RequestedBackend,
+                        ActualBackend = summarySnapshot.ActualBackend,
                         PlaybackAdvanceSeconds = result.PlaybackAdvanceSeconds,
                     });
                 MediaNativeInteropCommon.AppendValidationSummaryWindow(
@@ -1032,6 +1022,11 @@ namespace UnityAV
 
         private struct ValidationSnapshot
         {
+            public string Uri;
+            public string RequestedBackend;
+            public string ActualBackend;
+            public string RequestedVideoRenderer;
+            public string ActualVideoRenderer;
             public double PlaybackTime;
             public double ValidationGatePlaybackTimeSec;
             public bool HasTexture;
