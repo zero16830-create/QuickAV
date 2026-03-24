@@ -390,9 +390,7 @@ namespace UnityAV
             MediaNativeInteropCommon.PlayerSessionContractView playerSessionContract;
             var playerSessionAvailable = Player.TryGetPlayerSessionContract(out playerSessionContract);
             var runtimePlaybackConfirmed =
-                MediaNativeInteropCommon.IsPlayerSessionRuntimePlaybackConfirmed(
-                    playerSessionAvailable,
-                    playerSessionContract);
+                playerSessionAvailable && playerSessionContract.PlaybackConfirmed;
             var playbackStartObservation =
                 MediaNativeInteropCommon.CreatePlaybackStartObservation(
                     runtimePlaybackConfirmed,
