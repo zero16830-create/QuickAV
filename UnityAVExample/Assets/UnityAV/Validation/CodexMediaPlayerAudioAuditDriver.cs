@@ -444,6 +444,18 @@ namespace UnityAV
                 MediaNativeInteropCommon.CreatePassiveAvSyncAuditStrings(
                     Player.TryGetPassiveAvSyncSnapshot(out passiveAvSyncSnapshot),
                     passiveAvSyncSnapshot);
+            MediaNativeInteropCommon.NativeVideoBridgeDescriptorView bridgeDescriptor;
+            var hasBridgeDescriptor = Player.TryGetNativeVideoBridgeDescriptor(out bridgeDescriptor);
+            var bridgeDescriptorObservation =
+                MediaNativeInteropCommon.CreateNativeVideoBridgeDescriptorObservation(
+                    hasBridgeDescriptor,
+                    bridgeDescriptor);
+            MediaNativeInteropCommon.NativeVideoPathSelectionView pathSelection;
+            var hasPathSelection = Player.TryGetNativeVideoPathSelection(out pathSelection);
+            var pathSelectionObservation =
+                MediaNativeInteropCommon.CreateNativeVideoPathSelectionObservation(
+                    hasPathSelection,
+                    pathSelection);
             var nativeVideoRuntimeObservation =
                 MediaNativeInteropCommon.CreateNativeVideoRuntimeObservation(
                     Player != null,
@@ -567,6 +579,26 @@ namespace UnityAV
                     avSyncEnterpriseObservation.DriftProjected2hMs,
                 AvSyncEnterpriseAudit = avSyncEnterpriseObservation,
                 PassiveAvSyncAudit = passiveAvSyncObservation,
+                HasBridgeDescriptor = bridgeDescriptorObservation.Available,
+                BridgeDescriptorState = bridgeDescriptorObservation.State,
+                BridgeDescriptorRuntimeKind = bridgeDescriptorObservation.RuntimeKind,
+                BridgeDescriptorZeroCopySupported =
+                    bridgeDescriptorObservation.ZeroCopySupported,
+                BridgeDescriptorDirectBindable =
+                    bridgeDescriptorObservation.PresentedFrameDirectBindable,
+                BridgeDescriptorSourcePlaneTexturesSupported =
+                    bridgeDescriptorObservation.SourcePlaneTexturesSupported,
+                BridgeDescriptorFallbackCopyPath =
+                    bridgeDescriptorObservation.FallbackCopyPath,
+                HasPathSelection = pathSelectionObservation.Available,
+                PathSelectionKind = pathSelectionObservation.Kind,
+                PathSelectionSourceMemoryKind = pathSelectionObservation.SourceMemoryKind,
+                PathSelectionPresentedMemoryKind =
+                    pathSelectionObservation.PresentedMemoryKind,
+                PathSelectionTargetZeroCopy = pathSelectionObservation.TargetZeroCopy,
+                PathSelectionSourcePlaneTexturesSupported =
+                    pathSelectionObservation.SourcePlaneTexturesSupported,
+                PathSelectionCpuFallback = pathSelectionObservation.CpuFallback,
             };
         }
 
@@ -773,6 +805,46 @@ namespace UnityAV
                         summarySnapshot.SourcePackets,
                         summarySnapshot.SourceTimeouts,
                         summarySnapshot.SourceReconnects));
+                builder.AppendLine(
+                    "bridge_descriptor_available=" + summarySnapshot.HasBridgeDescriptor);
+                builder.AppendLine(
+                    "bridge_descriptor_state=" + summarySnapshot.BridgeDescriptorState);
+                builder.AppendLine(
+                    "bridge_descriptor_runtime=" + summarySnapshot.BridgeDescriptorRuntimeKind);
+                builder.AppendLine(
+                    "bridge_descriptor_zero_copy="
+                    + summarySnapshot.BridgeDescriptorZeroCopySupported);
+                builder.AppendLine(
+                    "bridge_descriptor_direct_bindable="
+                    + summarySnapshot.BridgeDescriptorDirectBindable);
+                builder.AppendLine(
+                    "bridge_descriptor_source_plane_textures="
+                    + summarySnapshot.BridgeDescriptorSourcePlaneTexturesSupported);
+                builder.AppendLine(
+                    "bridge_descriptor_fallback_copy="
+                    + summarySnapshot.BridgeDescriptorFallbackCopyPath);
+                MediaNativeInteropCommon.AppendValidationSummaryPathSelection(
+                    builder,
+                    new MediaNativeInteropCommon.ValidationSummaryPathSelectionView
+                    {
+                        Available = summarySnapshot.HasPathSelection,
+                        Kind = summarySnapshot.PathSelectionKind,
+                    });
+                builder.AppendLine(
+                    "path_selection_source_memory="
+                    + summarySnapshot.PathSelectionSourceMemoryKind);
+                builder.AppendLine(
+                    "path_selection_presented_memory="
+                    + summarySnapshot.PathSelectionPresentedMemoryKind);
+                builder.AppendLine(
+                    "path_selection_target_zero_copy="
+                    + summarySnapshot.PathSelectionTargetZeroCopy);
+                builder.AppendLine(
+                    "path_selection_source_plane_textures="
+                    + summarySnapshot.PathSelectionSourcePlaneTexturesSupported);
+                builder.AppendLine(
+                    "path_selection_cpu_fallback="
+                    + summarySnapshot.PathSelectionCpuFallback);
                 MediaNativeInteropCommon.AppendValidationSummaryNativeVideoRuntime(
                     builder,
                     MediaNativeInteropCommon.CreateValidationSummaryNativeVideoRuntime(
@@ -1134,6 +1206,20 @@ namespace UnityAV
             public string AvSyncEnterpriseDriftProjected2hMs;
             public MediaNativeInteropCommon.AvSyncEnterpriseAuditStringsView AvSyncEnterpriseAudit;
             public MediaNativeInteropCommon.PassiveAvSyncAuditStringsView PassiveAvSyncAudit;
+            public bool HasBridgeDescriptor;
+            public string BridgeDescriptorState;
+            public string BridgeDescriptorRuntimeKind;
+            public bool BridgeDescriptorZeroCopySupported;
+            public bool BridgeDescriptorDirectBindable;
+            public bool BridgeDescriptorSourcePlaneTexturesSupported;
+            public bool BridgeDescriptorFallbackCopyPath;
+            public bool HasPathSelection;
+            public string PathSelectionKind;
+            public string PathSelectionSourceMemoryKind;
+            public string PathSelectionPresentedMemoryKind;
+            public bool PathSelectionTargetZeroCopy;
+            public bool PathSelectionSourcePlaneTexturesSupported;
+            public bool PathSelectionCpuFallback;
         }
 
         private struct ValidationResultInfo
