@@ -394,6 +394,10 @@ namespace UnityAV
                     RealtimeReferenceLagToleranceSeconds);
             var referencePlaybackTime = referencePlaybackObservation.ReferenceTimeSec;
             var referencePlaybackKind = referencePlaybackObservation.ReferenceKind;
+            var validationGatePlaybackTimeSec =
+                MediaNativeInteropCommon.ResolveValidationGatePlaybackTime(
+                    playbackTime,
+                    referencePlaybackTime);
             MediaNativeInteropCommon.PlayerSessionContractView playerSessionContract;
             var playerSessionAvailable = Player.TryGetPlayerSessionContract(out playerSessionContract);
             var runtimePlaybackConfirmed =
@@ -406,7 +410,7 @@ namespace UnityAV
                     runtimePlaybackConfirmed,
                     runtimeHealthObservation.Available,
                     runtimeHealthObservation.IsPlaying,
-                    playbackTime,
+                    validationGatePlaybackTimeSec,
                     true);
             var playerSessionObservation =
                 MediaNativeInteropCommon.CreatePlayerSessionAuditStrings(
@@ -492,11 +496,6 @@ namespace UnityAV
                     hasRealtimeLatencySample = true;
                 }
             }
-            var validationGatePlaybackTimeSec =
-                MediaNativeInteropCommon.ResolveValidationGatePlaybackTime(
-                    playbackTime,
-                    referencePlaybackTime);
-
             return new ValidationSnapshot
             {
                 PlaybackTime = playbackTime,
