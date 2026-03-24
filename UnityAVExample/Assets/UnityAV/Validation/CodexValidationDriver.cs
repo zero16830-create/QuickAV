@@ -652,28 +652,13 @@ namespace UnityAV
                 MediaNativeInteropCommon.CreatePlayerSessionObservation(
                     hasPlayerSessionContract,
                     playerSessionContract);
+            var audioStartRuntimeCommand =
+                MediaNativeInteropCommon.ResolveAudioStartRuntimeCommand(
+                    hasPlayerSessionContract,
+                    playerSessionContract);
             var validationAudioGatePolicy =
                 CreateValidationAudioGatePolicy(
-                    new ValidationSnapshot
-                    {
-                        HasPlayerSessionContract = hasPlayerSessionContract,
-                        PlayerSessionAudioStartStateReported =
-                            playerSessionObservation.AudioStartStateReported,
-                        PlayerSessionShouldStartAudio =
-                            playerSessionObservation.ShouldStartAudio,
-                        PlayerSessionAudioStartBlockReason =
-                            playerSessionObservation.AudioStartBlockReason,
-                        PlayerSessionRequiredBufferedSamples =
-                            playerSessionObservation.RequiredBufferedSamples,
-                        PlayerSessionReportedBufferedSamples =
-                            playerSessionObservation.ReportedBufferedSamples,
-                        PlayerSessionRequiresPresentedVideoFrame =
-                            playerSessionObservation.RequiresPresentedVideoFrame,
-                        PlayerSessionHasPresentedVideoFrame =
-                            playerSessionObservation.HasPresentedVideoFrame,
-                        PlayerSessionAndroidFileRateBridgeActive =
-                            playerSessionObservation.AndroidFileRateBridgeActive,
-                    });
+                    audioStartRuntimeCommand);
             MediaNativeInteropCommon.AudioOutputPolicyView audioOutputPolicy;
             var hasAudioOutputPolicy = Player.TryGetAudioOutputPolicy(out audioOutputPolicy);
             var audioOutputPolicyObservation =
@@ -754,6 +739,7 @@ namespace UnityAV
             {
                 PlaybackTime = playbackTime,
                 ValidationGatePlaybackTimeSec = validationGatePlaybackTimeSec,
+                AudioStartRuntimeCommand = audioStartRuntimeCommand,
                 AudioGatePolicy = validationAudioGatePolicy,
                 HasTexture = textureObservation.HasTexture,
                 AudioPlaying = audioPlaybackObservation.Playing,
@@ -1028,28 +1014,13 @@ namespace UnityAV
         private MediaNativeInteropCommon.PullValidationAudioGatePolicyView
             CreateValidationAudioGatePolicy(ValidationSnapshot snapshot)
         {
-            var runtimeCommand =
-                MediaNativeInteropCommon.ResolveAudioStartRuntimeCommand(
-                    snapshot.HasPlayerSessionContract,
-                    new MediaNativeInteropCommon.PlayerSessionContractView
-                    {
-                        AudioStartStateReported =
-                            snapshot.PlayerSessionAudioStartStateReported,
-                        ShouldStartAudio =
-                            snapshot.PlayerSessionShouldStartAudio,
-                        AudioStartBlockReason =
-                            snapshot.PlayerSessionAudioStartBlockReason,
-                        RequiredBufferedSamples =
-                            snapshot.PlayerSessionRequiredBufferedSamples,
-                        ReportedBufferedSamples =
-                            snapshot.PlayerSessionReportedBufferedSamples,
-                        RequiresPresentedVideoFrame =
-                            snapshot.PlayerSessionRequiresPresentedVideoFrame,
-                        HasPresentedVideoFrame =
-                            snapshot.PlayerSessionHasPresentedVideoFrame,
-                        AndroidFileRateBridgeActive =
-                            snapshot.PlayerSessionAndroidFileRateBridgeActive,
-                    });
+            return CreateValidationAudioGatePolicy(snapshot.AudioStartRuntimeCommand);
+        }
+
+        private MediaNativeInteropCommon.PullValidationAudioGatePolicyView
+            CreateValidationAudioGatePolicy(
+                MediaNativeInteropCommon.AudioStartRuntimeCommandView runtimeCommand)
+        {
             return MediaNativeInteropCommon.CreatePullValidationAudioGatePolicy(
                 RequireAudioOutput,
                 Player != null && Player.EnableAudio,
@@ -1904,6 +1875,7 @@ namespace UnityAV
         {
             public double PlaybackTime;
             public double ValidationGatePlaybackTimeSec;
+            public MediaNativeInteropCommon.AudioStartRuntimeCommandView AudioStartRuntimeCommand;
             public MediaNativeInteropCommon.PullValidationAudioGatePolicyView AudioGatePolicy;
             public bool HasTexture;
             public bool AudioPlaying;
