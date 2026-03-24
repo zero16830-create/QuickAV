@@ -460,8 +460,7 @@ namespace UnityAV
                     hasPathSelection,
                     pathSelection);
             var hasPresentedNativeVideoFrame =
-                hasPresentedVideoTime
-                || (playerSessionAvailable && playerSessionContract.HasPresentedVideoFrame)
+                (playerSessionAvailable && playerSessionContract.HasPresentedVideoFrame)
                 || (hasPathSelection && pathSelection.HasPresentedFrame);
             var nativeVideoRuntimeObservation =
                 MediaNativeInteropCommon.CreateNativeVideoRuntimeObservation(
