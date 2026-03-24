@@ -241,7 +241,7 @@ namespace UnityAV
                 if (!_validationWindowStarted)
                 {
                     var startupElapsed = now - startTime;
-                    var audioGatePolicy = ResolveValidationAudioGatePolicy(snapshot);
+                    var audioGatePolicy = snapshot.AudioGatePolicy;
                     var validationGateInputs =
                         CreateValidationGateInputs(
                             snapshot,
@@ -656,9 +656,12 @@ namespace UnityAV
                 MediaNativeInteropCommon.ResolveAudioStartRuntimeCommand(
                     hasPlayerSessionContract,
                     playerSessionContract);
-            var validationAudioGatePolicy =
+            var currentValidationAudioGatePolicy =
                 CreateValidationAudioGatePolicy(
                     audioStartRuntimeCommand);
+            var validationAudioGatePolicy = _validationWindowStarted
+                ? _validationWindowAudioGatePolicy
+                : currentValidationAudioGatePolicy;
             MediaNativeInteropCommon.AudioOutputPolicyView audioOutputPolicy;
             var hasAudioOutputPolicy = Player.TryGetAudioOutputPolicy(out audioOutputPolicy);
             var audioOutputPolicyObservation =
@@ -1001,17 +1004,6 @@ namespace UnityAV
         }
 
         private MediaNativeInteropCommon.PullValidationAudioGatePolicyView
-            ResolveValidationAudioGatePolicy(ValidationSnapshot snapshot)
-        {
-            if (_validationWindowStarted)
-            {
-                return _validationWindowAudioGatePolicy;
-            }
-
-            return snapshot.AudioGatePolicy;
-        }
-
-        private MediaNativeInteropCommon.PullValidationAudioGatePolicyView
             CreateValidationAudioGatePolicy(ValidationSnapshot snapshot)
         {
             return CreateValidationAudioGatePolicy(snapshot.AudioStartRuntimeCommand);
@@ -1032,7 +1024,7 @@ namespace UnityAV
         {
             return CreateValidationGateInputs(
                 snapshot,
-                ResolveValidationAudioGatePolicy(snapshot));
+                snapshot.AudioGatePolicy);
         }
 
         private MediaNativeInteropCommon.PullValidationGateInputsView
