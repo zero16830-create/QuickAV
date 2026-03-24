@@ -682,8 +682,11 @@ namespace UnityAV
                     hasPathSelection,
                     pathSelection);
             var hasPresentedNativeVideoFrame =
-                (hasPlayerSessionContract && playerSessionContract.HasPresentedVideoFrame)
-                || (hasPathSelection && pathSelection.HasPresentedFrame);
+                MediaNativeInteropCommon.ResolveHasPresentedNativeVideoFrame(
+                    hasPlayerSessionContract,
+                    playerSessionContract,
+                    hasPathSelection,
+                    pathSelection);
             var textureObservation =
                 MediaNativeInteropCommon.CreatePullValidationVideoTextureObservation(
                     hasPresentedNativeVideoFrame,

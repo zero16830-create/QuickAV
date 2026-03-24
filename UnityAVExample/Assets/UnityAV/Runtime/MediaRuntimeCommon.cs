@@ -2545,6 +2545,16 @@ namespace UnityAV
             };
         }
 
+        internal static bool ResolveHasPresentedNativeVideoFrame(
+            bool playerSessionContractAvailable,
+            PlayerSessionContractView playerSessionContract,
+            bool pathSelectionAvailable,
+            NativeVideoPathSelectionView pathSelection)
+        {
+            return (playerSessionContractAvailable && playerSessionContract.HasPresentedVideoFrame)
+                || (pathSelectionAvailable && pathSelection.HasPresentedFrame);
+        }
+
         internal static AudioOutputPolicyAuditStringsView CreateAudioOutputPolicyAuditStrings(
             bool available,
             AudioOutputPolicyView policy)
