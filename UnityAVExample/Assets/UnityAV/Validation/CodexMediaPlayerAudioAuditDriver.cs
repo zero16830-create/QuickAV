@@ -73,7 +73,9 @@ namespace UnityAV
                 return;
             }
 
-            var overrideUri = TryReadOverrideValue(UriArgumentName, AndroidUriExtraName);
+            var overrideUri = MediaSourceResolver.TryReadOverrideValue(
+                UriArgumentName,
+                AndroidUriExtraName);
             if (!string.IsNullOrEmpty(overrideUri))
             {
                 Player.Uri = overrideUri;
@@ -83,9 +85,11 @@ namespace UnityAV
                         overrideUri));
             }
 
-            var overrideBackend = TryReadOverrideValue(BackendArgumentName, AndroidBackendExtraName);
+            var overrideBackend = MediaSourceResolver.TryReadOverrideValue(
+                BackendArgumentName,
+                AndroidBackendExtraName);
             MediaBackendKind parsedBackend;
-            if (TryParseBackend(overrideBackend, out parsedBackend))
+            if (MediaSourceResolver.TryParseBackendKind(overrideBackend, out parsedBackend))
             {
                 Player.PreferredBackend = parsedBackend;
                 Player.StrictBackend = parsedBackend != MediaBackendKind.Auto;
@@ -95,27 +99,34 @@ namespace UnityAV
                         parsedBackend.ToString(),
                         Player.StrictBackend));
             }
+            else if (!string.IsNullOrEmpty(overrideBackend))
+            {
+                Debug.LogWarning(
+                    MediaNativeInteropCommon.CreateIgnoreUnknownBackendLogLine(
+                        ValidationLogPrefix,
+                        overrideBackend));
+            }
 
-            ValidationSeconds = TryReadFloatArgument(
+            ValidationSeconds = MediaSourceResolver.TryReadPositiveFloatOverride(
                 ValidationSecondsArgumentName,
                 AndroidValidationSecondsExtraName,
                 ValidationSeconds);
-            StartupTimeoutSeconds = TryReadFloatArgument(
+            StartupTimeoutSeconds = MediaSourceResolver.TryReadPositiveFloatOverride(
                 StartupTimeoutSecondsArgumentName,
                 AndroidStartupTimeoutSecondsExtraName,
                 StartupTimeoutSeconds);
-            _publisherStartUnixMs = TryReadLongArgument(
+            _publisherStartUnixMs = MediaSourceResolver.TryReadLongOverride(
                 PublisherStartUnixMsArgumentName,
                 AndroidPublisherStartUnixMsExtraName,
                 -1L,
                 out _hasPublisherStartUnixMs);
 
-            _requestedWindowWidth = TryReadIntArgument(
+            _requestedWindowWidth = MediaSourceResolver.TryReadPositiveIntOverride(
                 WindowWidthArgumentName,
                 AndroidWindowWidthExtraName,
                 Player.Width,
                 out _hasExplicitWindowWidth);
-            _requestedWindowHeight = TryReadIntArgument(
+            _requestedWindowHeight = MediaSourceResolver.TryReadPositiveIntOverride(
                 WindowHeightArgumentName,
                 AndroidWindowHeightExtraName,
                 Player.Height,
@@ -154,7 +165,7 @@ namespace UnityAV
                 MediaNativeInteropCommon.CreateRunInBackgroundEnabledLogLine(
                     ValidationLogPrefix));
 
-            _hasAudioListener = FindObjectsOfType<AudioListener>().Length > 0;
+            _hasAudioListener = MediaNativeInteropCommon.HasAnyAudioListener();
             _lastLogTime = Time.realtimeSinceStartup;
             _startTime = _lastLogTime;
             Debug.Log(
@@ -163,11 +174,22 @@ namespace UnityAV
                     ValidationSeconds,
                     Player.Width,
                     Player.Height,
-                    HasExplicitWindowOverride()));
+                    MediaSourceResolver.HasExplicitWindowOverride(
+                        _hasExplicitWindowWidth,
+                        _hasExplicitWindowHeight)));
 
-            if (HasExplicitWindowOverride())
+            if (MediaSourceResolver.HasExplicitWindowOverride(
+                    _hasExplicitWindowWidth,
+                    _hasExplicitWindowHeight))
             {
-                ConfigureWindow(Player.Width, Player.Height, "explicit-override");
+                MediaNativeInteropCommon.ConfigureValidationWindowAndView(
+                    ValidationLogPrefix,
+                    ForceWindowedMode,
+                    VideoSurface,
+                    ValidationCamera,
+                    Player.Width,
+                    Player.Height,
+                    "explicit-override");
                 _windowConfigured = true;
             }
 
@@ -230,138 +252,110 @@ namespace UnityAV
         private ValidationSnapshot EmitStatus()
         {
             var snapshot = CaptureSnapshot();
-
-            Debug.Log(
-                MediaNativeInteropCommon.CreateMediaPlayerAuditStatusLogLine(
-                    ValidationLogPrefix,
-                    snapshot.PlaybackTime,
-                    snapshot.HasTexture,
-                    snapshot.AudioPlaying,
-                    snapshot.Started,
-                    snapshot.StartupElapsedSeconds,
-                    snapshot.SourceState,
-                    snapshot.SourcePackets,
-                    snapshot.SourceTimeouts,
-                    snapshot.SourceReconnects,
-                    Screen.width,
-                    Screen.height,
-                    snapshot.TextureWidth,
-                    snapshot.TextureHeight,
-                    Screen.fullScreen,
-                    Screen.fullScreenMode,
-                    snapshot.ActualBackend,
-                    snapshot.RequestedVideoRenderer,
-                    snapshot.ActualVideoRenderer,
-                    snapshot.PlaybackContractAudit,
-                    snapshot.SourceTimelineAudit,
-                    snapshot.PlayerSessionAudit,
-                    snapshot.AudioOutputPolicyAudit,
-                    snapshot.AvSyncEnterpriseAudit));
-            Debug.Log(
-                MediaNativeInteropCommon.CreateMediaPlayerAuditDetailLogLine(
-                    ValidationLogPrefix,
-                    snapshot.AudioSourcePresent,
-                    snapshot.HasAudioListener,
-                    snapshot.NativeVideoActive,
-                    snapshot.NativeActivationDecision,
-                    snapshot.HasPresentedNativeVideoFrame,
-                    snapshot.ActualBackend));
-
-            if (snapshot.PlayerSessionAvailable)
-            {
-                Debug.Log(
-                    MediaNativeInteropCommon.CreatePlayerSessionDetailLogLine(
-                        ValidationLogPrefix,
-                        snapshot.PlayerSessionLifecycleState,
-                        snapshot.PlayerSessionPublicState,
-                        snapshot.PlayerSessionRuntimeState,
-                        snapshot.PlayerSessionPlaybackIntent,
-                        snapshot.PlayerSessionStopReason,
-                        snapshot.PlayerSessionSourceState,
-                        snapshot.PlayerSessionCanSeek,
-                        snapshot.PlayerSessionIsRealtime,
-                        snapshot.PlayerSessionIsBuffering,
-                        snapshot.PlayerSessionIsSyncing));
-            }
-            if (snapshot.HasAvSyncContract)
-            {
-                Debug.Log(
-                    MediaNativeInteropCommon.CreateAvSyncContractLogLine(
-                        logPrefix: ValidationLogPrefix,
-                        masterClock: snapshot.AvSyncContractMasterClock,
-                        hasAudioClockSec: snapshot.AvSyncContractHasAudioClockSec,
-                        audioClockSec: snapshot.AvSyncContractAudioClockSec,
-                        hasVideoClockSec: snapshot.AvSyncContractHasVideoClockSec,
-                        videoClockSec: snapshot.AvSyncContractVideoClockSec,
-                        clockDeltaMs: snapshot.AvSyncContractClockDeltaMs,
-                        driftMs: snapshot.AvSyncContractDriftMs,
-                        startupWarmupComplete: snapshot.AvSyncContractStartupWarmupComplete,
-                        dropTotal: snapshot.AvSyncContractDropTotal,
-                        duplicateTotal: snapshot.AvSyncContractDuplicateTotal));
-                if (snapshot.AvSyncContractHasAudioClockSec
-                    && snapshot.AvSyncContractHasVideoClockSec)
-                {
-                    Debug.Log(
-                        MediaNativeInteropCommon.CreateAvSyncContractSampleLogLine(
-                            logPrefix: ValidationLogPrefix,
-                            clockDeltaMs: snapshot.AvSyncContractClockDeltaMs,
-                            audioClockSec: snapshot.AvSyncContractAudioClockSec,
-                            videoClockSec: snapshot.AvSyncContractVideoClockSec));
-                }
-            }
-            if (snapshot.HasAvSyncSample)
-            {
-                Debug.Log(
-                    MediaNativeInteropCommon.CreateAvSyncLogLine(
-                        logPrefix: ValidationLogPrefix,
-                        deltaMilliseconds: snapshot.AvSyncDeltaMilliseconds,
-                        audioPresentedTimeSec: snapshot.AudioPresentedTimeSec,
-                        referencePlaybackTimeSec: snapshot.ReferencePlaybackTimeSec,
-                        referencePlaybackKind: snapshot.ReferencePlaybackKind,
-                        playbackTime: snapshot.PlaybackTime,
-                        presentedVideoTimeSec: snapshot.PresentedVideoTimeSec,
-                        playbackContractAudioTimeSec: snapshot.PlaybackContractAudioTimeSec,
-                        playbackContractAudioPresentedTimeSec:
-                            snapshot.PlaybackContractAudioPresentedTimeSec,
-                        playbackContractAudioSinkDelayMs:
-                            snapshot.PlaybackContractAudioSinkDelaySec * 1000.0,
-                        audioPipelineDelayMs: snapshot.AudioPipelineDelaySec * 1000.0));
-            }
-            if (snapshot.HasRealtimeLatencySample)
-            {
-                Debug.Log(
-                    MediaNativeInteropCommon.CreateRealtimeLatencyLogLine(
-                        logPrefix: ValidationLogPrefix,
-                        realtimeLatencyMilliseconds: snapshot.RealtimeLatencyMilliseconds,
-                        publisherElapsedTimeSec: snapshot.PublisherElapsedTimeSec,
-                        realtimeReferenceTimeSec: snapshot.RealtimeReferenceTimeSec));
-            }
-            if (snapshot.HasRealtimeProbeSample)
-            {
-                Debug.Log(
-                    MediaNativeInteropCommon.CreateRealtimeProbeLogLine(
-                        logPrefix: ValidationLogPrefix,
-                        realtimeProbeUnixMs: snapshot.RealtimeProbeUnixMs,
-                        realtimeReferenceTimeSec: snapshot.RealtimeReferenceTimeSec));
-            }
+            MediaNativeInteropCommon.EmitMediaPlayerAuditStatusLogs(
+                Debug.Log,
+                ValidationLogPrefix,
+                CreateEmitStatusView(snapshot));
 
             return snapshot;
+        }
+
+        private MediaNativeInteropCommon.MediaPlayerAuditEmitStatusView
+            CreateEmitStatusView(ValidationSnapshot snapshot)
+        {
+            return new MediaNativeInteropCommon.MediaPlayerAuditEmitStatusView
+            {
+                PlaybackTime = snapshot.PlaybackTime,
+                HasTexture = snapshot.HasTexture,
+                AudioPlaying = snapshot.AudioPlaying,
+                Started = snapshot.Started,
+                StartupElapsedSeconds = snapshot.StartupElapsedSeconds,
+                SourceState = snapshot.SourceState,
+                SourcePackets = snapshot.SourcePackets,
+                SourceTimeouts = snapshot.SourceTimeouts,
+                SourceReconnects = snapshot.SourceReconnects,
+                WindowWidth = Screen.width,
+                WindowHeight = Screen.height,
+                TextureWidth = snapshot.TextureWidth,
+                TextureHeight = snapshot.TextureHeight,
+                Fullscreen = Screen.fullScreen,
+                FullscreenMode = Screen.fullScreenMode,
+                ActualBackend = snapshot.ActualBackend,
+                RequestedVideoRenderer = snapshot.RequestedVideoRenderer,
+                ActualVideoRenderer = snapshot.ActualVideoRenderer,
+                PlaybackContractAudit = snapshot.PlaybackContractAudit,
+                SourceTimelineAudit = snapshot.SourceTimelineAudit,
+                PlayerSessionAudit = snapshot.PlayerSessionAudit,
+                AudioOutputPolicyAudit = snapshot.AudioOutputPolicyAudit,
+                AvSyncEnterpriseAudit = snapshot.AvSyncEnterpriseAudit,
+                AudioSourcePresent = snapshot.AudioSourcePresent,
+                HasAudioListener = snapshot.HasAudioListener,
+                NativeVideoActive = snapshot.NativeVideoActive,
+                NativeActivationDecision = snapshot.NativeActivationDecision,
+                HasPresentedNativeVideoFrame = snapshot.HasPresentedNativeVideoFrame,
+                PlayerSessionAvailable = snapshot.PlayerSessionAvailable,
+                PlayerSessionLifecycleState = snapshot.PlayerSessionLifecycleState,
+                PlayerSessionPublicState = snapshot.PlayerSessionPublicState,
+                PlayerSessionRuntimeState = snapshot.PlayerSessionRuntimeState,
+                PlayerSessionPlaybackIntent = snapshot.PlayerSessionPlaybackIntent,
+                PlayerSessionStopReason = snapshot.PlayerSessionStopReason,
+                PlayerSessionSourceState = snapshot.PlayerSessionSourceState,
+                PlayerSessionCanSeek = snapshot.PlayerSessionCanSeek,
+                PlayerSessionIsRealtime = snapshot.PlayerSessionIsRealtime,
+                PlayerSessionIsBuffering = snapshot.PlayerSessionIsBuffering,
+                PlayerSessionIsSyncing = snapshot.PlayerSessionIsSyncing,
+                HasAvSyncContract = snapshot.HasAvSyncContract,
+                AvSyncContractMasterClock = snapshot.AvSyncContractMasterClock,
+                AvSyncContractHasAudioClockSec = snapshot.AvSyncContractHasAudioClockSec,
+                AvSyncContractAudioClockSec = snapshot.AvSyncContractAudioClockSec,
+                AvSyncContractHasVideoClockSec = snapshot.AvSyncContractHasVideoClockSec,
+                AvSyncContractVideoClockSec = snapshot.AvSyncContractVideoClockSec,
+                AvSyncContractClockDeltaMs = snapshot.AvSyncContractClockDeltaMs,
+                AvSyncContractDriftMs = snapshot.AvSyncContractDriftMs,
+                AvSyncContractStartupWarmupComplete =
+                    snapshot.AvSyncContractStartupWarmupComplete,
+                AvSyncContractDropTotal = snapshot.AvSyncContractDropTotal,
+                AvSyncContractDuplicateTotal = snapshot.AvSyncContractDuplicateTotal,
+                HasAvSyncSample = snapshot.HasAvSyncSample,
+                AvSyncDeltaMilliseconds = snapshot.AvSyncDeltaMilliseconds,
+                AudioPresentedTimeSec = snapshot.AudioPresentedTimeSec,
+                ReferencePlaybackTimeSec = snapshot.ReferencePlaybackTimeSec,
+                ReferencePlaybackKind = snapshot.ReferencePlaybackKind,
+                PresentedVideoTimeSec = snapshot.PresentedVideoTimeSec,
+                PlaybackContractAudioTimeSec = snapshot.PlaybackContractAudioTimeSec,
+                PlaybackContractAudioPresentedTimeSec =
+                    snapshot.PlaybackContractAudioPresentedTimeSec,
+                PlaybackContractAudioSinkDelaySec =
+                    snapshot.PlaybackContractAudioSinkDelaySec,
+                AudioPipelineDelaySec = snapshot.AudioPipelineDelaySec,
+                HasRealtimeLatencySample = snapshot.HasRealtimeLatencySample,
+                RealtimeLatencyMilliseconds = snapshot.RealtimeLatencyMilliseconds,
+                PublisherElapsedTimeSec = snapshot.PublisherElapsedTimeSec,
+                RealtimeReferenceTimeSec = snapshot.RealtimeReferenceTimeSec,
+                HasRealtimeProbeSample = snapshot.HasRealtimeProbeSample,
+                RealtimeProbeUnixMs = snapshot.RealtimeProbeUnixMs,
+            };
         }
 
         private ValidationSnapshot CaptureSnapshot()
         {
             MediaNativeInteropCommon.PlaybackTimingContractView playbackTimingContract;
             var hasPlaybackTimingContract = Player.TryGetPlaybackTimingContract(out playbackTimingContract);
-            var playbackTime = ResolveObservedPlaybackTime(
-                hasPlaybackTimingContract,
-                playbackTimingContract);
+            double playbackTime;
+            if (!MediaNativeInteropCommon.TryResolvePlaybackTimingContractTime(
+                    hasPlaybackTimingContract,
+                    playbackTimingContract,
+                    MediaNativeInteropCommon.PlaybackTimingPreference.ExternalThenMaster,
+                    out playbackTime))
+            {
+                playbackTime = SafeReadPlaybackTime();
+            }
             var textureObservation =
                 MediaNativeInteropCommon.CreateMediaPlayerValidationVideoTextureObservation(
-                    Player.TargetMaterial != null ? Player.TargetMaterial.mainTexture : null);
-            var audioSource = Player.GetComponent<AudioSource>();
+                    Player != null ? Player.TargetMaterial : null);
             var audioPlaybackObservation =
                 MediaNativeInteropCommon.CreateValidationAudioPlaybackObservation(
-                    audioSource);
+                    Player);
             double presentedVideoTimeSec;
             var hasPresentedVideoTime = Player.TryGetPresentedNativeVideoTimeSec(
                 out presentedVideoTimeSec);
@@ -377,9 +371,7 @@ namespace UnityAV
                     playbackTime,
                     hasPresentedVideoTime,
                     presentedVideoTimeSec,
-                    hasHealth,
-                    hasHealth ? health.CurrentTimeSec : -1.0,
-                    hasHealth && health.IsRealtime,
+                    runtimeHealthObservation,
                     RealtimeReferenceLagToleranceSeconds);
             var referencePlaybackTime = referencePlaybackObservation.ReferenceTimeSec;
             var referencePlaybackKind = referencePlaybackObservation.ReferenceKind;
@@ -389,26 +381,29 @@ namespace UnityAV
                     referencePlaybackTime);
             MediaNativeInteropCommon.PlayerSessionContractView playerSessionContract;
             var playerSessionAvailable = Player.TryGetPlayerSessionContract(out playerSessionContract);
-            var playerSessionPlaybackConfirmed =
-                playerSessionAvailable && playerSessionContract.PlaybackConfirmed;
-            var playbackStartObservation =
-                MediaNativeInteropCommon.CreatePlaybackStartObservation(
-                    playerSessionPlaybackConfirmed,
-                    playerSessionPlaybackConfirmed,
-                    runtimeHealthObservation.Available,
-                    runtimeHealthObservation.IsPlaying,
-                    validationGatePlaybackTimeSec,
-                    true);
-            var playerSessionObservation =
-                MediaNativeInteropCommon.CreatePlayerSessionAuditStrings(
+            var playerSessionContractObservation =
+                MediaNativeInteropCommon.CreatePlayerSessionObservation(
                     playerSessionAvailable,
                     playerSessionContract);
+            var playerSessionPlaybackConfirmed =
+                playerSessionContractObservation.PlaybackConfirmed;
+            var playbackStartObservation =
+                MediaNativeInteropCommon.CreateMediaPlayerPlaybackStartObservation(
+                    playerSessionContractObservation,
+                    runtimeHealthObservation,
+                    validationGatePlaybackTimeSec);
+            var playerSessionObservation =
+                MediaNativeInteropCommon.CreatePlayerSessionAuditStrings(
+                    playerSessionContractObservation);
             MediaNativeInteropCommon.SourceTimelineContractView sourceTimelineContract;
             var sourceTimelineAvailable = Player.TryGetSourceTimelineContract(out sourceTimelineContract);
-            var sourceTimelineObservation =
-                MediaNativeInteropCommon.CreateSourceTimelineAuditStrings(
+            var sourceTimelineContractObservation =
+                MediaNativeInteropCommon.CreateSourceTimelineObservation(
                     sourceTimelineAvailable,
                     sourceTimelineContract);
+            var sourceTimelineObservation =
+                MediaNativeInteropCommon.CreateSourceTimelineAuditStrings(
+                    sourceTimelineContractObservation);
             var playbackContractObservation =
                 MediaNativeInteropCommon.CreatePlaybackTimingAuditStrings(
                     hasPlaybackTimingContract,
@@ -464,47 +459,32 @@ namespace UnityAV
                     hasPathSelection,
                     pathSelection);
             var nativeVideoRuntimeObservation =
-                MediaNativeInteropCommon.CreateNativeVideoRuntimeObservation(
-                    Player != null,
-                    Player != null && Player.IsNativeVideoPathActive,
-                    Player != null
-                        ? Player.NativeVideoPresentationPath
-                        : default(MediaPlayer.NativeVideoPresentationPathKind),
-                    Player != null
-                        ? Player.NativeVideoActivationDecision
-                        : default(MediaPlayer.NativeVideoActivationDecisionKind));
+                MediaNativeInteropCommon.CreateNativeVideoRuntimeObservation(Player);
             var backendRuntimeObservation =
-                MediaNativeInteropCommon.CreateMediaPlayerBackendRuntimeObservation(
-                    Player != null,
-                    Player != null ? Player.PreferredBackend : default(MediaBackendKind),
-                    Player != null ? Player.ActualBackendKind : default(MediaBackendKind));
-            var hasRealtimeLatencySample = false;
-            var realtimeLatencyMilliseconds = 0.0;
-            var publisherElapsedTimeSec = 0.0;
-            var hasRealtimeProbeSample = false;
-            long realtimeProbeUnixMs = 0;
-            if (hasHealth
-                && health.IsRealtime
-                && referencePlaybackTime >= 0.0)
-            {
-                realtimeProbeUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                hasRealtimeProbeSample = true;
-            }
-            if (_hasPublisherStartUnixMs
-                && hasHealth
-                && health.IsRealtime
-                && referencePlaybackTime >= 0.0)
-            {
-                var nowUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                if (nowUnixMs >= _publisherStartUnixMs)
-                {
-                    publisherElapsedTimeSec =
-                        (nowUnixMs - _publisherStartUnixMs) / 1000.0;
-                    realtimeLatencyMilliseconds =
-                        (publisherElapsedTimeSec - referencePlaybackTime) * 1000.0;
-                    hasRealtimeLatencySample = true;
-                }
-            }
+                MediaNativeInteropCommon.CreateMediaPlayerBackendRuntimeObservation(Player);
+            var realtimeProbeObservation =
+                MediaNativeInteropCommon.CreateRealtimeProbeObservation(
+                    runtimeHealthObservation,
+                    referencePlaybackTime,
+                    _hasPublisherStartUnixMs,
+                    _publisherStartUnixMs);
+            var playbackContractProjection =
+                MediaNativeInteropCommon.CreateValidationPlaybackContractProjection(
+                    hasPlaybackTimingContract,
+                    playbackTimingContract);
+            var avSyncContractProjection =
+                MediaNativeInteropCommon.CreateValidationAvSyncContractProjection(
+                    avSyncContractObservation);
+            var nativeVideoRuntimeProjection =
+                MediaNativeInteropCommon.CreateValidationSummaryNativeVideoRuntime(
+                    nativeVideoRuntimeObservation,
+                    hasPresentedNativeVideoFrame);
+            var bridgeDescriptorProjection =
+                MediaNativeInteropCommon.CreateValidationSummaryBridgeDescriptor(
+                    bridgeDescriptorAudit);
+            var pathSelectionProjection =
+                MediaNativeInteropCommon.CreateValidationSummaryPathSelectionExtended(
+                    pathSelectionAudit);
             return new ValidationSnapshot
             {
                 Uri = Player != null ? Player.Uri : string.Empty,
@@ -527,9 +507,9 @@ namespace UnityAV
                 SourcePackets = runtimeHealthObservation.SourcePackets,
                 SourceTimeouts = runtimeHealthObservation.SourceTimeouts,
                 SourceReconnects = runtimeHealthObservation.SourceReconnects,
-                NativeVideoActive = Player.IsNativeVideoPathActive,
-                NativeActivationDecision = nativeVideoRuntimeObservation.ActivationDecision,
-                HasPresentedNativeVideoFrame = hasPresentedNativeVideoFrame,
+                NativeVideoActive = nativeVideoRuntimeProjection.Active,
+                NativeActivationDecision = nativeVideoRuntimeProjection.ActivationDecision,
+                HasPresentedNativeVideoFrame = nativeVideoRuntimeProjection.HasPresentedFrame,
                 HasPresentedVideoTime = hasPresentedVideoTime,
                 PresentedVideoTimeSec = hasPresentedVideoTime ? presentedVideoTimeSec : -1.0,
                 HasAvSyncSample = hasAvSyncSample,
@@ -538,15 +518,17 @@ namespace UnityAV
                 AvSyncDeltaMilliseconds = avSyncDeltaMilliseconds,
                 ReferencePlaybackTimeSec = referencePlaybackTime,
                 ReferencePlaybackKind = referencePlaybackKind,
-                PlaybackContractAudioTimeSec = playbackTimingContract.AudioTimeSec,
+                PlaybackContractAudioTimeSec = playbackContractProjection.AudioTimeSec,
                 PlaybackContractAudioPresentedTimeSec =
-                    playbackTimingContract.AudioPresentedTimeSec,
-                PlaybackContractAudioSinkDelaySec = playbackTimingContract.AudioSinkDelaySec,
-                HasRealtimeLatencySample = hasRealtimeLatencySample,
-                RealtimeLatencyMilliseconds = realtimeLatencyMilliseconds,
-                PublisherElapsedTimeSec = publisherElapsedTimeSec,
-                HasRealtimeProbeSample = hasRealtimeProbeSample,
-                RealtimeProbeUnixMs = realtimeProbeUnixMs,
+                    playbackContractProjection.AudioPresentedTimeSec,
+                PlaybackContractAudioSinkDelaySec = playbackContractProjection.AudioSinkDelaySec,
+                HasRealtimeLatencySample = realtimeProbeObservation.HasRealtimeLatencySample,
+                RealtimeLatencyMilliseconds =
+                    realtimeProbeObservation.RealtimeLatencyMilliseconds,
+                PublisherElapsedTimeSec =
+                    realtimeProbeObservation.PublisherElapsedTimeSec,
+                HasRealtimeProbeSample = realtimeProbeObservation.HasRealtimeProbeSample,
+                RealtimeProbeUnixMs = realtimeProbeObservation.RealtimeProbeUnixMs,
                 RealtimeReferenceTimeSec = referencePlaybackTime,
                 PlayerSessionAvailable = playerSessionObservation.Available,
                 PlayerSessionLifecycleState = playerSessionObservation.LifecycleState,
@@ -564,21 +546,22 @@ namespace UnityAV
                 SourceTimelineModel = sourceTimelineObservation.Model,
                 SourceTimelineAnchorKind = sourceTimelineObservation.AnchorKind,
                 SourceTimelineAudit = sourceTimelineObservation,
-                PlaybackContractAvailable = playbackContractObservation.Available,
-                PlaybackContractHasUsMirror = playbackContractObservation.HasMicrosecondMirror,
+                PlaybackContractAvailable = playbackContractProjection.Available,
+                PlaybackContractHasUsMirror =
+                    playbackContractProjection.HasMicrosecondMirror.ToString(),
                 PlaybackContractAudit = playbackContractObservation,
-                HasAvSyncContract = avSyncContractObservation.Available,
-                AvSyncContractMasterClock = avSyncContractObservation.MasterClock,
-                AvSyncContractHasAudioClockSec = avSyncContractObservation.HasAudioClockSec,
-                AvSyncContractAudioClockSec = avSyncContractObservation.AudioClockSec,
-                AvSyncContractHasVideoClockSec = avSyncContractObservation.HasVideoClockSec,
-                AvSyncContractVideoClockSec = avSyncContractObservation.VideoClockSec,
-                AvSyncContractClockDeltaMs = avSyncContractObservation.ClockDeltaMs,
-                AvSyncContractDriftMs = avSyncContractObservation.DriftMs,
+                HasAvSyncContract = avSyncContractProjection.Available,
+                AvSyncContractMasterClock = avSyncContractProjection.MasterClock,
+                AvSyncContractHasAudioClockSec = avSyncContractProjection.HasAudioClockSec,
+                AvSyncContractAudioClockSec = avSyncContractProjection.AudioClockSec,
+                AvSyncContractHasVideoClockSec = avSyncContractProjection.HasVideoClockSec,
+                AvSyncContractVideoClockSec = avSyncContractProjection.VideoClockSec,
+                AvSyncContractClockDeltaMs = avSyncContractProjection.ClockDeltaMs,
+                AvSyncContractDriftMs = avSyncContractProjection.DriftMs,
                 AvSyncContractStartupWarmupComplete =
-                    avSyncContractObservation.StartupWarmupComplete,
-                AvSyncContractDropTotal = avSyncContractObservation.DropTotal,
-                AvSyncContractDuplicateTotal = avSyncContractObservation.DuplicateTotal,
+                    avSyncContractProjection.StartupWarmupComplete,
+                AvSyncContractDropTotal = avSyncContractProjection.DropTotal,
+                AvSyncContractDuplicateTotal = avSyncContractProjection.DuplicateTotal,
                 AudioOutputPolicyAvailable = audioOutputPolicyAvailable,
                 AudioOutputPolicyAudit = audioOutputPolicyObservation,
                 AvSyncEnterpriseAvailable = avSyncEnterpriseObservation.Available,
@@ -587,67 +570,67 @@ namespace UnityAV
                     avSyncEnterpriseObservation.DriftProjected2hMs,
                 AvSyncEnterpriseAudit = avSyncEnterpriseObservation,
                 PassiveAvSyncAudit = passiveAvSyncObservation,
-                HasBridgeDescriptor = bridgeDescriptorAudit.Available,
-                BridgeDescriptorState = bridgeDescriptorAudit.State,
-                BridgeDescriptorRuntimeKind = bridgeDescriptorAudit.RuntimeKind,
-                BridgeDescriptorZeroCopySupported = bridgeDescriptorAudit.ZeroCopySupported,
+                HasBridgeDescriptor = bridgeDescriptorProjection.Available,
+                BridgeDescriptorState = bridgeDescriptorProjection.State,
+                BridgeDescriptorRuntimeKind = bridgeDescriptorProjection.RuntimeKind,
+                BridgeDescriptorZeroCopySupported = bridgeDescriptorProjection.ZeroCopySupported,
                 BridgeDescriptorDirectBindable =
-                    bridgeDescriptorAudit.PresentedFrameDirectBindable,
+                    bridgeDescriptorProjection.DirectBindable,
                 BridgeDescriptorSourcePlaneTexturesSupported =
-                    bridgeDescriptorAudit.SourcePlaneTexturesSupported,
+                    bridgeDescriptorProjection.SourcePlaneTexturesSupported,
                 BridgeDescriptorFallbackCopyPath =
-                    bridgeDescriptorAudit.FallbackCopyPath,
-                BridgeDescriptorBackendKind = bridgeDescriptorAudit.BackendKind,
+                    bridgeDescriptorProjection.FallbackCopyPath,
+                BridgeDescriptorBackendKind = bridgeDescriptorProjection.BackendKind,
                 BridgeDescriptorTargetPlatformKind =
-                    bridgeDescriptorAudit.TargetPlatformKind,
+                    bridgeDescriptorProjection.TargetPlatformKind,
                 BridgeDescriptorTargetSurfaceKind =
-                    bridgeDescriptorAudit.TargetSurfaceKind,
-                BridgeDescriptorTargetWidth = bridgeDescriptorAudit.TargetWidth,
-                BridgeDescriptorTargetHeight = bridgeDescriptorAudit.TargetHeight,
+                    bridgeDescriptorProjection.TargetSurfaceKind,
+                BridgeDescriptorTargetWidth = bridgeDescriptorProjection.TargetWidth,
+                BridgeDescriptorTargetHeight = bridgeDescriptorProjection.TargetHeight,
                 BridgeDescriptorTargetPixelFormat =
-                    bridgeDescriptorAudit.TargetPixelFormat,
-                BridgeDescriptorTargetFlags = bridgeDescriptorAudit.TargetFlags,
-                BridgeDescriptorPlatformKind = bridgeDescriptorAudit.PlatformKind,
-                BridgeDescriptorSurfaceKind = bridgeDescriptorAudit.SurfaceKind,
-                BridgeDescriptorSupported = bridgeDescriptorAudit.Supported,
+                    bridgeDescriptorProjection.TargetPixelFormat,
+                BridgeDescriptorTargetFlags = bridgeDescriptorProjection.TargetFlags,
+                BridgeDescriptorPlatformKind = bridgeDescriptorProjection.PlatformKind,
+                BridgeDescriptorSurfaceKind = bridgeDescriptorProjection.SurfaceKind,
+                BridgeDescriptorSupported = bridgeDescriptorProjection.Supported,
                 BridgeDescriptorHardwareDecodeSupported =
-                    bridgeDescriptorAudit.HardwareDecodeSupported,
+                    bridgeDescriptorProjection.HardwareDecodeSupported,
                 BridgeDescriptorAcquireReleaseSupported =
-                    bridgeDescriptorAudit.AcquireReleaseSupported,
-                BridgeDescriptorCapsFlags = bridgeDescriptorAudit.CapsFlags,
-                BridgeDescriptorTargetValid = bridgeDescriptorAudit.TargetValid,
+                    bridgeDescriptorProjection.AcquireReleaseSupported,
+                BridgeDescriptorCapsFlags = bridgeDescriptorProjection.CapsFlags,
+                BridgeDescriptorTargetValid = bridgeDescriptorProjection.TargetValid,
                 BridgeDescriptorRequestedExternalTextureTarget =
-                    bridgeDescriptorAudit.RequestedExternalTextureTarget,
+                    bridgeDescriptorProjection.RequestedExternalTextureTarget,
                 BridgeDescriptorDirectTargetPresentAllowed =
-                    bridgeDescriptorAudit.DirectTargetPresentAllowed,
+                    bridgeDescriptorProjection.DirectTargetPresentAllowed,
                 BridgeDescriptorTargetBindingSupported =
-                    bridgeDescriptorAudit.TargetBindingSupported,
+                    bridgeDescriptorProjection.TargetBindingSupported,
                 BridgeDescriptorExternalTextureTargetSupported =
-                    bridgeDescriptorAudit.ExternalTextureTargetSupported,
+                    bridgeDescriptorProjection.ExternalTextureTargetSupported,
                 BridgeDescriptorFrameAcquireSupported =
-                    bridgeDescriptorAudit.FrameAcquireSupported,
+                    bridgeDescriptorProjection.FrameAcquireSupported,
                 BridgeDescriptorFrameReleaseSupported =
-                    bridgeDescriptorAudit.FrameReleaseSupported,
+                    bridgeDescriptorProjection.FrameReleaseSupported,
                 BridgeDescriptorSourceSurfaceZeroCopy =
-                    bridgeDescriptorAudit.SourceSurfaceZeroCopy,
+                    bridgeDescriptorProjection.SourceSurfaceZeroCopy,
                 BridgeDescriptorPresentedFrameStrictZeroCopy =
-                    bridgeDescriptorAudit.PresentedFrameStrictZeroCopy,
+                    bridgeDescriptorProjection.PresentedFrameStrictZeroCopy,
                 BridgeDescriptorSourcePlaneViewsSupported =
-                    bridgeDescriptorAudit.SourcePlaneViewsSupported,
-                HasPathSelection = pathSelectionAudit.Available,
-                PathSelectionKind = pathSelectionAudit.Kind,
-                PathSelectionSourceMemoryKind = pathSelectionAudit.SourceMemoryKind,
+                    bridgeDescriptorProjection.SourcePlaneViewsSupported,
+                HasPathSelection = pathSelectionProjection.Available,
+                PathSelectionKind = pathSelectionProjection.Kind,
+                PathSelectionSourceMemoryKind = pathSelectionProjection.SourceMemoryKind,
                 PathSelectionPresentedMemoryKind =
-                    pathSelectionAudit.PresentedMemoryKind,
-                PathSelectionTargetZeroCopy = pathSelectionAudit.TargetZeroCopy,
+                    pathSelectionProjection.PresentedMemoryKind,
+                PathSelectionTargetZeroCopy = pathSelectionProjection.TargetZeroCopy,
                 PathSelectionSourcePlaneTexturesSupported =
-                    pathSelectionAudit.SourcePlaneTexturesSupported,
-                PathSelectionCpuFallback = pathSelectionAudit.CpuFallback,
-                PathSelectionHasSourceFrame = pathSelectionAudit.HasSourceFrame,
-                PathSelectionHasPresentedFrame = pathSelectionAudit.HasPresentedFrame,
-                PathSelectionBridgeState = pathSelectionAudit.BridgeState,
+                    pathSelectionProjection.SourcePlaneTexturesSupported,
+                PathSelectionCpuFallback = pathSelectionProjection.CpuFallback,
+                PathSelectionHasSourceFrame = pathSelectionProjection.HasSourceFrame,
+                PathSelectionHasPresentedFrame = pathSelectionProjection.HasPresentedFrame,
+                PathSelectionBridgeState = pathSelectionProjection.BridgeState,
                 PathSelectionSourceSurfaceZeroCopy =
-                    pathSelectionAudit.SourceSurfaceZeroCopy,
+                    pathSelectionProjection.SourceSurfaceZeroCopy,
             };
         }
 
@@ -657,11 +640,17 @@ namespace UnityAV
             string reason,
             double playbackTime)
         {
-            _validationWindowStarted = true;
-            _validationWindowStartTime = now;
-            _validationWindowStartReason = reason;
-            _validationWindowInitialPlaybackTime = playbackTime;
-            _maxObservedPlaybackTime = playbackTime;
+            var validationWindowState =
+                MediaNativeInteropCommon.CreateStartedValidationWindowState(
+                    now,
+                    reason,
+                    playbackTime);
+            _validationWindowStarted = validationWindowState.Started;
+            _validationWindowStartTime = validationWindowState.StartTime;
+            _validationWindowStartReason = validationWindowState.StartReason;
+            _validationWindowInitialPlaybackTime =
+                validationWindowState.InitialPlaybackTime;
+            _maxObservedPlaybackTime = validationWindowState.MaxObservedPlaybackTime;
             Debug.Log(
                 MediaNativeInteropCommon.CreateValidationWindowStartedLogLine(
                     ValidationLogPrefix,
@@ -671,47 +660,44 @@ namespace UnityAV
 
         private ValidationSnapshot ResolveValidationWindowSnapshot(ValidationSnapshot fallbackSnapshot)
         {
-            return _hasValidationWindowSnapshot ? _lastValidationWindowSnapshot : fallbackSnapshot;
+            return MediaNativeInteropCommon.ResolveValidationWindowSnapshot(
+                _hasValidationWindowSnapshot,
+                _lastValidationWindowSnapshot,
+                fallbackSnapshot);
         }
 
         private MediaNativeInteropCommon.MediaPlayerValidationGateInputsView
             CreateValidationGateInputs(ValidationSnapshot snapshot)
         {
-            return new MediaNativeInteropCommon.MediaPlayerValidationGateInputsView
-            {
-                HasTexture = snapshot.HasTexture,
-                AudioPlaying = snapshot.AudioPlaying,
-                Started = snapshot.Started,
-                PlayerSessionPlaybackConfirmed = snapshot.PlayerSessionPlaybackConfirmed,
-                HasPresentedNativeVideoFrame = snapshot.HasPresentedNativeVideoFrame,
-                PlaybackTimeSec = snapshot.ValidationGatePlaybackTimeSec,
-            };
+            return MediaNativeInteropCommon.CreateMediaPlayerValidationGateInputs(
+                snapshot.HasTexture,
+                snapshot.AudioPlaying,
+                snapshot.Started,
+                snapshot.PlayerSessionPlaybackConfirmed,
+                snapshot.HasPresentedNativeVideoFrame,
+                snapshot.ValidationGatePlaybackTimeSec);
         }
 
         private MediaNativeInteropCommon.ValidationWindowEvidenceObservationView
             CreateCurrentValidationEvidenceObservation()
         {
-            return new MediaNativeInteropCommon.ValidationWindowEvidenceObservationView
-            {
-                ObservedTextureDuringWindow = _observedTextureDuringWindow,
-                ObservedAudioDuringWindow = _observedAudioDuringWindow,
-                ObservedStartedDuringWindow = _observedStartedDuringWindow,
-                ObservedNativeFrameDuringWindow = _observedNativeFrameDuringWindow,
-                MaxObservedPlaybackTime = _maxObservedPlaybackTime,
-            };
+            return MediaNativeInteropCommon.CreateValidationWindowEvidenceObservation(
+                _observedTextureDuringWindow,
+                _observedAudioDuringWindow,
+                _observedStartedDuringWindow,
+                _observedNativeFrameDuringWindow,
+                _maxObservedPlaybackTime);
         }
 
         private static MediaNativeInteropCommon.ValidationWindowEvidenceObservationView
             CreateValidationEvidenceObservation(ValidationSnapshot snapshot)
         {
-            return new MediaNativeInteropCommon.ValidationWindowEvidenceObservationView
-            {
-                ObservedTextureDuringWindow = snapshot.ObservedTextureDuringWindow,
-                ObservedAudioDuringWindow = snapshot.ObservedAudioDuringWindow,
-                ObservedStartedDuringWindow = snapshot.ObservedStartedDuringWindow,
-                ObservedNativeFrameDuringWindow = snapshot.ObservedNativeFrameDuringWindow,
-                MaxObservedPlaybackTime = snapshot.MaxObservedPlaybackTimeSec,
-            };
+            return MediaNativeInteropCommon.CreateValidationWindowEvidenceObservation(
+                snapshot.ObservedTextureDuringWindow,
+                snapshot.ObservedAudioDuringWindow,
+                snapshot.ObservedStartedDuringWindow,
+                snapshot.ObservedNativeFrameDuringWindow,
+                snapshot.MaxObservedPlaybackTimeSec);
         }
 
         private ValidationSnapshot RecordValidationObservation(ValidationSnapshot snapshot)
@@ -721,16 +707,13 @@ namespace UnityAV
                 MediaNativeInteropCommon.AccumulateMediaPlayerValidationWindowEvidenceObservation(
                     CreateCurrentValidationEvidenceObservation(),
                     validationGateInputs);
-            _observedTextureDuringWindow =
-                evidenceObservation.ObservedTextureDuringWindow;
-            _observedAudioDuringWindow =
-                evidenceObservation.ObservedAudioDuringWindow;
-            _observedStartedDuringWindow =
-                evidenceObservation.ObservedStartedDuringWindow;
-            _observedNativeFrameDuringWindow =
-                evidenceObservation.ObservedNativeFrameDuringWindow;
-            _maxObservedPlaybackTime =
-                evidenceObservation.MaxObservedPlaybackTime;
+            MediaNativeInteropCommon.ApplyValidationWindowEvidenceObservation(
+                evidenceObservation,
+                ref _observedTextureDuringWindow,
+                ref _observedAudioDuringWindow,
+                ref _observedStartedDuringWindow,
+                ref _observedNativeFrameDuringWindow,
+                ref _maxObservedPlaybackTime);
             snapshot.ObservedTextureDuringWindow =
                 evidenceObservation.ObservedTextureDuringWindow;
             snapshot.ObservedAudioDuringWindow =
@@ -815,192 +798,96 @@ namespace UnityAV
                 var summaryPassiveAvSync = summarySnapshot.PassiveAvSyncAudit;
                 var summaryAvSyncEnterprise = summarySnapshot.AvSyncEnterpriseAudit;
                 var summaryAudioOutputPolicy = summarySnapshot.AudioOutputPolicyAudit;
-                MediaNativeInteropCommon.AppendValidationSummaryHeader(
-                    builder,
-                    new MediaNativeInteropCommon.ValidationSummaryHeaderView
-                    {
-                        Passed = result.Passed,
-                        Reason = result.Reason,
-                        Uri = summarySnapshot.Uri,
-                        RequestedBackend = summarySnapshot.RequestedBackend,
-                        ActualBackend = summarySnapshot.ActualBackend,
-                        PlaybackAdvanceSeconds = result.PlaybackAdvanceSeconds,
-                    });
-                MediaNativeInteropCommon.AppendValidationSummaryWindow(
-                    builder,
-                    new MediaNativeInteropCommon.ValidationSummaryWindowView
-                    {
-                        HasTexture = summarySnapshot.HasTexture,
-                        AudioPlaying = summarySnapshot.AudioPlaying,
-                        Started = summarySnapshot.Started,
-                        IncludeAudioSourcePresent = true,
-                        AudioSourcePresent = summarySnapshot.AudioSourcePresent,
-                        IncludeHasAudioListener = true,
-                        HasAudioListener = summarySnapshot.HasAudioListener,
-                        ObservedTextureDuringWindow = summarySnapshot.ObservedTextureDuringWindow,
-                        ObservedAudioDuringWindow = summarySnapshot.ObservedAudioDuringWindow,
-                        ObservedStartedDuringWindow = summarySnapshot.ObservedStartedDuringWindow,
-                        IncludeObservedNativeFrameDuringWindow = true,
-                        ObservedNativeFrameDuringWindow =
-                            summarySnapshot.ObservedNativeFrameDuringWindow,
-                        IncludeValidationWindowStartReason = true,
-                        ValidationWindowStartReason =
-                            summarySnapshot.ValidationWindowStartReason,
-                    });
-                MediaNativeInteropCommon.AppendValidationSummarySourceRuntime(
-                    builder,
+                var summaryHeader =
+                    MediaNativeInteropCommon.CreateMediaPlayerValidationSummaryHeader(
+                        result.Passed,
+                        result.Reason,
+                        summarySnapshot.Uri,
+                        summarySnapshot.RequestedBackend,
+                        summarySnapshot.ActualBackend,
+                        result.PlaybackAdvanceSeconds);
+                var summaryWindow =
+                    MediaNativeInteropCommon.CreateMediaPlayerValidationSummaryWindow(
+                        summarySnapshot.HasTexture,
+                        summarySnapshot.AudioPlaying,
+                        summarySnapshot.AudioSourcePresent,
+                        summarySnapshot.HasAudioListener,
+                        summarySnapshot.Started,
+                        summarySnapshot.ObservedTextureDuringWindow,
+                        summarySnapshot.ObservedAudioDuringWindow,
+                        summarySnapshot.ObservedStartedDuringWindow,
+                        summarySnapshot.ObservedNativeFrameDuringWindow,
+                        summarySnapshot.ValidationWindowStartReason);
+                var summarySourceRuntime =
                     MediaNativeInteropCommon.CreateValidationSummarySourceRuntime(
                         summarySnapshot.SourceState,
                         summarySnapshot.SourcePackets,
                         summarySnapshot.SourceTimeouts,
-                        summarySnapshot.SourceReconnects));
-                builder.AppendLine(
-                    "bridge_descriptor_available=" + summarySnapshot.HasBridgeDescriptor);
-                builder.AppendLine(
-                    "bridge_descriptor_state=" + summarySnapshot.BridgeDescriptorState);
-                builder.AppendLine(
-                    "bridge_descriptor_runtime=" + summarySnapshot.BridgeDescriptorRuntimeKind);
-                builder.AppendLine(
-                    "bridge_descriptor_zero_copy="
-                    + summarySnapshot.BridgeDescriptorZeroCopySupported);
-                builder.AppendLine(
-                    "bridge_descriptor_direct_bindable="
-                    + summarySnapshot.BridgeDescriptorDirectBindable);
-                builder.AppendLine(
-                    "bridge_descriptor_source_plane_textures="
-                    + summarySnapshot.BridgeDescriptorSourcePlaneTexturesSupported);
-                builder.AppendLine(
-                    "bridge_descriptor_fallback_copy="
-                    + summarySnapshot.BridgeDescriptorFallbackCopyPath);
-                builder.AppendLine(
-                    "bridge_descriptor_backend="
-                    + summarySnapshot.BridgeDescriptorBackendKind);
-                builder.AppendLine(
-                    "bridge_descriptor_target_platform="
-                    + summarySnapshot.BridgeDescriptorTargetPlatformKind);
-                builder.AppendLine(
-                    "bridge_descriptor_target_surface="
-                    + summarySnapshot.BridgeDescriptorTargetSurfaceKind);
-                builder.AppendLine(
-                    "bridge_descriptor_target_width="
-                    + summarySnapshot.BridgeDescriptorTargetWidth);
-                builder.AppendLine(
-                    "bridge_descriptor_target_height="
-                    + summarySnapshot.BridgeDescriptorTargetHeight);
-                builder.AppendLine(
-                    "bridge_descriptor_target_pixel_format="
-                    + summarySnapshot.BridgeDescriptorTargetPixelFormat);
-                builder.AppendLine(
-                    "bridge_descriptor_target_flags="
-                    + summarySnapshot.BridgeDescriptorTargetFlags);
-                builder.AppendLine(
-                    "bridge_descriptor_platform="
-                    + summarySnapshot.BridgeDescriptorPlatformKind);
-                builder.AppendLine(
-                    "bridge_descriptor_surface="
-                    + summarySnapshot.BridgeDescriptorSurfaceKind);
-                builder.AppendLine(
-                    "bridge_descriptor_supported="
-                    + summarySnapshot.BridgeDescriptorSupported);
-                builder.AppendLine(
-                    "bridge_descriptor_hardware_decode_supported="
-                    + summarySnapshot.BridgeDescriptorHardwareDecodeSupported);
-                builder.AppendLine(
-                    "bridge_descriptor_acquire_release_supported="
-                    + summarySnapshot.BridgeDescriptorAcquireReleaseSupported);
-                builder.AppendLine(
-                    "bridge_descriptor_caps_flags="
-                    + summarySnapshot.BridgeDescriptorCapsFlags);
-                builder.AppendLine(
-                    "bridge_descriptor_target_valid="
-                    + summarySnapshot.BridgeDescriptorTargetValid);
-                builder.AppendLine(
-                    "bridge_descriptor_requested_external_texture_target="
-                    + summarySnapshot.BridgeDescriptorRequestedExternalTextureTarget);
-                builder.AppendLine(
-                    "bridge_descriptor_direct_target_present_allowed="
-                    + summarySnapshot.BridgeDescriptorDirectTargetPresentAllowed);
-                builder.AppendLine(
-                    "bridge_descriptor_target_binding_supported="
-                    + summarySnapshot.BridgeDescriptorTargetBindingSupported);
-                builder.AppendLine(
-                    "bridge_descriptor_external_texture_target_supported="
-                    + summarySnapshot.BridgeDescriptorExternalTextureTargetSupported);
-                builder.AppendLine(
-                    "bridge_descriptor_frame_acquire_supported="
-                    + summarySnapshot.BridgeDescriptorFrameAcquireSupported);
-                builder.AppendLine(
-                    "bridge_descriptor_frame_release_supported="
-                    + summarySnapshot.BridgeDescriptorFrameReleaseSupported);
-                builder.AppendLine(
-                    "bridge_descriptor_source_surface_zero_copy="
-                    + summarySnapshot.BridgeDescriptorSourceSurfaceZeroCopy);
-                builder.AppendLine(
-                    "bridge_descriptor_presented_frame_strict_zero_copy="
-                    + summarySnapshot.BridgeDescriptorPresentedFrameStrictZeroCopy);
-                builder.AppendLine(
-                    "bridge_descriptor_source_plane_views_supported="
-                    + summarySnapshot.BridgeDescriptorSourcePlaneViewsSupported);
-                MediaNativeInteropCommon.AppendValidationSummaryPathSelection(
-                    builder,
-                    new MediaNativeInteropCommon.ValidationSummaryPathSelectionView
-                    {
-                        Available = summarySnapshot.HasPathSelection,
-                        Kind = summarySnapshot.PathSelectionKind,
-                    });
-                builder.AppendLine(
-                    "path_selection_source_memory="
-                    + summarySnapshot.PathSelectionSourceMemoryKind);
-                builder.AppendLine(
-                    "path_selection_presented_memory="
-                    + summarySnapshot.PathSelectionPresentedMemoryKind);
-                builder.AppendLine(
-                    "path_selection_target_zero_copy="
-                    + summarySnapshot.PathSelectionTargetZeroCopy);
-                builder.AppendLine(
-                    "path_selection_source_plane_textures="
-                    + summarySnapshot.PathSelectionSourcePlaneTexturesSupported);
-                builder.AppendLine(
-                    "path_selection_cpu_fallback="
-                    + summarySnapshot.PathSelectionCpuFallback);
-                builder.AppendLine(
-                    "path_selection_has_source_frame="
-                    + summarySnapshot.PathSelectionHasSourceFrame);
-                builder.AppendLine(
-                    "path_selection_has_presented_frame="
-                    + summarySnapshot.PathSelectionHasPresentedFrame);
-                builder.AppendLine(
-                    "path_selection_bridge_state="
-                    + summarySnapshot.PathSelectionBridgeState);
-                builder.AppendLine(
-                    "path_selection_source_surface_zero_copy="
-                    + summarySnapshot.PathSelectionSourceSurfaceZeroCopy);
-                MediaNativeInteropCommon.AppendValidationSummaryNativeVideoRuntime(
-                    builder,
+                        summarySnapshot.SourceReconnects);
+                var summaryBridgeDescriptor =
+                    MediaNativeInteropCommon.CreateValidationSummaryBridgeDescriptor(
+                        summarySnapshot.HasBridgeDescriptor,
+                        summarySnapshot.BridgeDescriptorState,
+                        summarySnapshot.BridgeDescriptorRuntimeKind,
+                        summarySnapshot.BridgeDescriptorZeroCopySupported,
+                        summarySnapshot.BridgeDescriptorDirectBindable,
+                        summarySnapshot.BridgeDescriptorSourcePlaneTexturesSupported,
+                        summarySnapshot.BridgeDescriptorFallbackCopyPath,
+                        summarySnapshot.BridgeDescriptorBackendKind,
+                        summarySnapshot.BridgeDescriptorTargetPlatformKind,
+                        summarySnapshot.BridgeDescriptorTargetSurfaceKind,
+                        summarySnapshot.BridgeDescriptorTargetWidth,
+                        summarySnapshot.BridgeDescriptorTargetHeight,
+                        summarySnapshot.BridgeDescriptorTargetPixelFormat,
+                        summarySnapshot.BridgeDescriptorTargetFlags,
+                        summarySnapshot.BridgeDescriptorPlatformKind,
+                        summarySnapshot.BridgeDescriptorSurfaceKind,
+                        summarySnapshot.BridgeDescriptorSupported,
+                        summarySnapshot.BridgeDescriptorHardwareDecodeSupported,
+                        summarySnapshot.BridgeDescriptorAcquireReleaseSupported,
+                        summarySnapshot.BridgeDescriptorCapsFlags,
+                        summarySnapshot.BridgeDescriptorTargetValid,
+                        summarySnapshot.BridgeDescriptorRequestedExternalTextureTarget,
+                        summarySnapshot.BridgeDescriptorDirectTargetPresentAllowed,
+                        summarySnapshot.BridgeDescriptorTargetBindingSupported,
+                        summarySnapshot.BridgeDescriptorExternalTextureTargetSupported,
+                        summarySnapshot.BridgeDescriptorFrameAcquireSupported,
+                        summarySnapshot.BridgeDescriptorFrameReleaseSupported,
+                        summarySnapshot.BridgeDescriptorSourceSurfaceZeroCopy,
+                        summarySnapshot.BridgeDescriptorPresentedFrameStrictZeroCopy,
+                        summarySnapshot.BridgeDescriptorSourcePlaneViewsSupported);
+                var summaryPathSelection =
+                    MediaNativeInteropCommon.CreateValidationSummaryPathSelectionExtended(
+                        summarySnapshot.HasPathSelection,
+                        summarySnapshot.PathSelectionKind,
+                        summarySnapshot.PathSelectionSourceMemoryKind,
+                        summarySnapshot.PathSelectionPresentedMemoryKind,
+                        summarySnapshot.PathSelectionTargetZeroCopy,
+                        summarySnapshot.PathSelectionSourcePlaneTexturesSupported,
+                        summarySnapshot.PathSelectionCpuFallback,
+                        summarySnapshot.PathSelectionHasSourceFrame,
+                        summarySnapshot.PathSelectionHasPresentedFrame,
+                        summarySnapshot.PathSelectionBridgeState,
+                        summarySnapshot.PathSelectionSourceSurfaceZeroCopy);
+                var summaryNativeVideoRuntime =
                     MediaNativeInteropCommon.CreateValidationSummaryNativeVideoRuntime(
                         summarySnapshot.NativeVideoActive,
                         summarySnapshot.NativeActivationDecision,
-                        summarySnapshot.HasPresentedNativeVideoFrame));
-                MediaNativeInteropCommon.AppendValidationSummaryPlayerSession(
+                        summarySnapshot.HasPresentedNativeVideoFrame);
+                MediaNativeInteropCommon.AppendMediaPlayerValidationSummarySections(
                     builder,
-                    summaryPlayerSession);
-                MediaNativeInteropCommon.AppendValidationSummarySourceTimeline(
-                    builder,
-                    summarySourceTimeline);
-                MediaNativeInteropCommon.AppendValidationSummaryPlaybackContract(
-                    builder,
-                    summaryPlaybackContract);
-                MediaNativeInteropCommon.AppendValidationSummaryAvSyncContract(
-                    builder,
-                    summaryAvSyncContract);
-                MediaNativeInteropCommon.AppendValidationSummaryAudioOutputPolicy(
-                    builder,
-                    summaryAudioOutputPolicy);
-                MediaNativeInteropCommon.AppendValidationSummaryAvSyncEnterpriseExtended(
-                    builder,
-                    summaryAvSyncEnterprise);
-                MediaNativeInteropCommon.AppendValidationSummaryPassiveAvSync(
-                    builder,
+                    summaryHeader,
+                    summaryWindow,
+                    summarySourceRuntime,
+                    summaryBridgeDescriptor,
+                    summaryPathSelection,
+                    summaryNativeVideoRuntime,
+                    summaryPlayerSession,
+                    summarySourceTimeline,
+                    summaryPlaybackContract,
+                    summaryAvSyncContract,
+                    summaryAudioOutputPolicy,
+                    summaryAvSyncEnterprise,
                     summaryPassiveAvSync);
                 builder.AppendLine("summary_path=" + summaryPath);
                 File.WriteAllText(summaryPath, builder.ToString(), Encoding.UTF8);
@@ -1034,26 +921,6 @@ namespace UnityAV
             }
         }
 
-        private double ResolveObservedPlaybackTime(
-            bool hasPlaybackTimingContract,
-            MediaNativeInteropCommon.PlaybackTimingContractView playbackTimingContract)
-        {
-            if (hasPlaybackTimingContract)
-            {
-                if (playbackTimingContract.ExternalTimeSec >= 0.0)
-                {
-                    return playbackTimingContract.ExternalTimeSec;
-                }
-
-                if (playbackTimingContract.MasterTimeSec >= 0.0)
-                {
-                    return playbackTimingContract.MasterTimeSec;
-                }
-            }
-
-            return SafeReadPlaybackTime();
-        }
-
         private void Update()
         {
             TryConfigureWindow();
@@ -1071,15 +938,24 @@ namespace UnityAV
                 return;
             }
 
-            if (HasExplicitWindowOverride())
+            if (MediaSourceResolver.HasExplicitWindowOverride(
+                    _hasExplicitWindowWidth,
+                    _hasExplicitWindowHeight))
             {
-                ConfigureWindow(Player.Width, Player.Height, "explicit-override");
-                ConfigureView(Player.Width, Player.Height);
+                MediaNativeInteropCommon.ConfigureValidationWindowAndView(
+                    ValidationLogPrefix,
+                    ForceWindowedMode,
+                    VideoSurface,
+                    ValidationCamera,
+                    Player.Width,
+                    Player.Height,
+                    "explicit-override");
                 _windowConfigured = true;
                 return;
             }
 
-            var texture = Player.TargetMaterial != null ? Player.TargetMaterial.mainTexture : null;
+            var texture = MediaNativeInteropCommon.ResolveMainTexture(
+                Player != null ? Player.TargetMaterial : null);
             if (texture == null)
             {
                 return;
@@ -1090,174 +966,16 @@ namespace UnityAV
                 return;
             }
 
-            ConfigureWindow(texture.width, texture.height, "texture-fallback");
-            ConfigureView(texture.width, texture.height);
+            MediaNativeInteropCommon.ConfigureValidationWindowAndView(
+                ValidationLogPrefix,
+                ForceWindowedMode,
+                VideoSurface,
+                ValidationCamera,
+                texture.width,
+                texture.height,
+                "texture-fallback");
             _windowConfigured = true;
             _sourceSizedWindowApplied = true;
-        }
-
-        private bool HasExplicitWindowOverride()
-        {
-            return _hasExplicitWindowWidth || _hasExplicitWindowHeight;
-        }
-
-        private void ConfigureWindow(int width, int height, string source)
-        {
-            if (width <= 0 || height <= 0)
-            {
-                return;
-            }
-
-            if (ForceWindowedMode)
-            {
-                Screen.fullScreenMode = FullScreenMode.Windowed;
-                Screen.fullScreen = false;
-            }
-
-            Screen.SetResolution(width, height, false);
-            Debug.Log(
-                MediaNativeInteropCommon.CreateWindowConfiguredLogLine(
-                    ValidationLogPrefix,
-                    width,
-                    height,
-                    source,
-                    Screen.fullScreen,
-                    Screen.fullScreenMode));
-        }
-
-        private void ConfigureView(int width, int height)
-        {
-            if (width <= 0 || height <= 0)
-            {
-                return;
-            }
-
-            var aspect = (float)width / height;
-
-            if (VideoSurface != null)
-            {
-                VideoSurface.localScale = new Vector3(aspect, 1f, 1f);
-            }
-
-            if (ValidationCamera != null)
-            {
-                ValidationCamera.orthographic = true;
-                ValidationCamera.orthographicSize = 0.5f;
-            }
-        }
-
-        private string TryReadOverrideValue(string prefix, string androidExtraName)
-        {
-            var argumentValue = TryReadStringArgument(prefix);
-            if (!string.IsNullOrEmpty(argumentValue))
-            {
-                return argumentValue;
-            }
-
-            string androidExtraValue;
-            return MediaSourceResolver.TryReadAndroidIntentStringExtra(
-                androidExtraName,
-                out androidExtraValue)
-                ? androidExtraValue
-                : string.Empty;
-        }
-
-        private static string TryReadStringArgument(string prefix)
-        {
-            var args = Environment.GetCommandLineArgs();
-            if (args == null)
-            {
-                return string.Empty;
-            }
-
-            foreach (var arg in args)
-            {
-                if (arg != null && arg.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                {
-                    return arg.Substring(prefix.Length);
-                }
-            }
-
-            return string.Empty;
-        }
-
-        private int TryReadIntArgument(
-            string prefix,
-            string androidExtraName,
-            int fallback,
-            out bool hasExplicitValue)
-        {
-            var value = TryReadOverrideValue(prefix, androidExtraName);
-            hasExplicitValue = !string.IsNullOrEmpty(value);
-            int parsed;
-            if (string.IsNullOrEmpty(value) || !int.TryParse(value, out parsed) || parsed <= 0)
-            {
-                return fallback;
-            }
-
-            return parsed;
-        }
-
-        private float TryReadFloatArgument(
-            string prefix,
-            string androidExtraName,
-            float fallback)
-        {
-            var value = TryReadOverrideValue(prefix, androidExtraName);
-            float parsed;
-            if (string.IsNullOrEmpty(value)
-                || !float.TryParse(value, out parsed)
-                || parsed <= 0f)
-            {
-                return fallback;
-            }
-
-            return parsed;
-        }
-
-        private long TryReadLongArgument(
-            string prefix,
-            string androidExtraName,
-            long fallback,
-            out bool hasExplicitValue)
-        {
-            var value = TryReadOverrideValue(prefix, androidExtraName);
-            hasExplicitValue = !string.IsNullOrEmpty(value);
-            long parsed;
-            if (string.IsNullOrEmpty(value) || !long.TryParse(value, out parsed))
-            {
-                return fallback;
-            }
-
-            return parsed;
-        }
-
-        private static bool TryParseBackend(string rawValue, out MediaBackendKind backend)
-        {
-            backend = MediaBackendKind.Auto;
-            if (string.IsNullOrEmpty(rawValue))
-            {
-                return false;
-            }
-
-            switch (rawValue.Trim().ToLowerInvariant())
-            {
-                case "auto":
-                    backend = MediaBackendKind.Auto;
-                    return true;
-                case "ffmpeg":
-                    backend = MediaBackendKind.Ffmpeg;
-                    return true;
-                case "gstreamer":
-                    backend = MediaBackendKind.Gstreamer;
-                    return true;
-                default:
-                    Debug.LogWarning(
-                        MediaNativeInteropCommon.CreateIgnoreUnknownBackendLogLine(
-                            ValidationLogPrefix,
-                            rawValue));
-                    return false;
-            }
         }
 
         private IEnumerator QuitAfterDelay(float seconds, int exitCode)
