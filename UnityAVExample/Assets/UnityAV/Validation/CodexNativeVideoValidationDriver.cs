@@ -287,16 +287,24 @@ namespace UnityAV
 
                 if (!_validationWindowStarted)
                 {
-                    var startupElapsed = now - startRealtime;
+                    var overallStartupElapsed = now - startRealtime;
+                    var playerStartupElapsed = Mathf.Max(0f, Player.StartupElapsedSeconds);
+                    var playerStartupClockStarted = playerStartupElapsed > 0f;
+                    var effectiveStartupTimedOut = playerStartupClockStarted
+                        ? playerStartupElapsed >= StartupTimeoutSeconds
+                        : overallStartupElapsed >= Mathf.Max(StartupTimeoutSeconds + 10f, 30f);
                     if (snapshot.HasNativeFrame)
                     {
                         StartValidationWindow(now, snapshot);
                     }
-                    else if (startupElapsed >= StartupTimeoutSeconds)
+                    else if (effectiveStartupTimedOut)
                     {
                         Debug.LogError(
                             "[CodexNativeValidation] result=failed reason=startup-timeout"
                             + " native_video_active=" + Player.IsNativeVideoPathActive
+                            + " overall_startup_elapsed=" + overallStartupElapsed.ToString("F3")
+                            + " player_startup_elapsed=" + playerStartupElapsed.ToString("F3")
+                            + " player_startup_clock_started=" + playerStartupClockStarted
                             + " acquire_count=" + Player.NativeVideoFrameAcquireCount
                             + " frame_direct_bindable=" + snapshot.FrameDirectBindable
                             + " prefer_unity_direct_shader="
@@ -320,6 +328,9 @@ namespace UnityAV
                         Debug.LogError(
                             "[CodexNativeValidation] startup_timeout native_video_active="
                             + Player.IsNativeVideoPathActive
+                            + " overall_startup_elapsed=" + overallStartupElapsed.ToString("F3")
+                            + " player_startup_elapsed=" + playerStartupElapsed.ToString("F3")
+                            + " player_startup_clock_started=" + playerStartupClockStarted
                             + " acquire_count=" + Player.NativeVideoFrameAcquireCount
                             + " frame_direct_bindable=" + snapshot.FrameDirectBindable
                             + " prefer_unity_direct_shader="
@@ -545,6 +556,45 @@ namespace UnityAV
                 snapshot.Flags,
                 MediaNativeInteropCommon.NativeVideoFrameFlagCpuFallback);
             var strictZeroCopyObserved = EvaluateStrictZeroCopyObserved(snapshot);
+            MediaNativeInteropCommon.SourceTimelineContractView sourceTimelineContract =
+                default(MediaNativeInteropCommon.SourceTimelineContractView);
+            var hasSourceTimelineContract = Player != null
+                && Player.TryGetSourceTimelineContract(out sourceTimelineContract);
+            var sourceTimelineObservation = MediaNativeInteropCommon.CreateSourceTimelineObservation(
+                hasSourceTimelineContract,
+                sourceTimelineContract);
+            var sourceTimelineAudit = MediaNativeInteropCommon.CreateSourceTimelineAuditStrings(
+                sourceTimelineObservation);
+            MediaNativeInteropCommon.PlayerSessionContractView playerSessionContract =
+                default(MediaNativeInteropCommon.PlayerSessionContractView);
+            var hasPlayerSessionContract = Player != null
+                && Player.TryGetPlayerSessionContract(out playerSessionContract);
+            var playerSessionObservation = MediaNativeInteropCommon.CreatePlayerSessionObservation(
+                hasPlayerSessionContract,
+                playerSessionContract);
+            var playerSessionAudit = MediaNativeInteropCommon.CreatePlayerSessionAuditStrings(
+                playerSessionObservation);
+            MediaNativeInteropCommon.AudioOutputPolicyView audioOutputPolicy =
+                default(MediaNativeInteropCommon.AudioOutputPolicyView);
+            var hasAudioOutputPolicy = Player != null
+                && Player.TryGetAudioOutputPolicy(out audioOutputPolicy);
+            var audioOutputPolicyAudit = MediaNativeInteropCommon.CreateAudioOutputPolicyAuditStrings(
+                hasAudioOutputPolicy,
+                audioOutputPolicy);
+            MediaNativeInteropCommon.AvSyncEnterpriseMetricsView avSyncEnterpriseMetrics =
+                default(MediaNativeInteropCommon.AvSyncEnterpriseMetricsView);
+            var hasAvSyncEnterpriseMetrics = Player != null
+                && Player.TryGetAvSyncEnterpriseMetrics(out avSyncEnterpriseMetrics);
+            var avSyncEnterpriseAudit = MediaNativeInteropCommon.CreateAvSyncEnterpriseAuditStrings(
+                hasAvSyncEnterpriseMetrics,
+                avSyncEnterpriseMetrics);
+            MediaNativeInteropCommon.PassiveAvSyncSnapshotView passiveAvSyncSnapshot =
+                default(MediaNativeInteropCommon.PassiveAvSyncSnapshotView);
+            var hasPassiveAvSyncSnapshot = Player != null
+                && Player.TryGetPassiveAvSyncSnapshot(out passiveAvSyncSnapshot);
+            var passiveAvSyncAudit = MediaNativeInteropCommon.CreatePassiveAvSyncAuditStrings(
+                hasPassiveAvSyncSnapshot,
+                passiveAvSyncSnapshot);
             Debug.Log(
                 "[CodexNativeValidation] time=" + snapshot.PlaybackTime.ToString("F3") + "s"
                 + " native_active=" + Player.IsNativeVideoPathActive
@@ -648,6 +698,81 @@ namespace UnityAV
                 + (hasPresentationSnapshot ? presentationSnapshot.ComputePlaneTexturesUsabilityFailureCount : 0)
                 + " presentation_compute_exception_count="
                 + (hasPresentationSnapshot ? presentationSnapshot.ComputeExceptionCount : 0)
+                + " source_timeline_available=" + sourceTimelineAudit.Available
+                + " source_timeline_model=" + sourceTimelineAudit.Model
+                + " source_timeline_anchor_kind=" + sourceTimelineAudit.AnchorKind
+                + " source_timeline_has_current_source_time_us="
+                + sourceTimelineAudit.HasCurrentSourceTimeUs
+                + " source_timeline_current_source_time_us=" + sourceTimelineAudit.CurrentSourceTimeUs
+                + " source_timeline_has_timeline_origin_us="
+                + sourceTimelineAudit.HasTimelineOriginUs
+                + " source_timeline_timeline_origin_us=" + sourceTimelineAudit.TimelineOriginUs
+                + " source_timeline_has_anchor_value_us=" + sourceTimelineAudit.HasAnchorValueUs
+                + " source_timeline_anchor_value_us=" + sourceTimelineAudit.AnchorValueUs
+                + " source_timeline_has_anchor_mono_us=" + sourceTimelineAudit.HasAnchorMonoUs
+                + " source_timeline_anchor_mono_us=" + sourceTimelineAudit.AnchorMonoUs
+                + " source_timeline_is_realtime=" + sourceTimelineAudit.IsRealtime
+                + " player_session_available=" + playerSessionAudit.Available
+                + " player_session_lifecycle=" + playerSessionAudit.LifecycleState
+                + " player_session_public_state="
+                + (playerSessionObservation.Available ? playerSessionObservation.PublicState.ToString() : "n/a")
+                + " player_session_runtime_state="
+                + (playerSessionObservation.Available ? playerSessionObservation.RuntimeState.ToString() : "n/a")
+                + " player_session_playback_intent="
+                + (playerSessionObservation.Available
+                    ? playerSessionObservation.PlaybackIntent.ToString()
+                    : "n/a")
+                + " player_session_stop_reason="
+                + (playerSessionObservation.Available ? playerSessionObservation.StopReason.ToString() : "n/a")
+                + " player_session_source_state=" + playerSessionAudit.SourceState
+                + " player_session_can_seek=" + playerSessionAudit.CanSeek
+                + " player_session_is_realtime=" + playerSessionAudit.IsRealtime
+                + " player_session_is_buffering=" + playerSessionAudit.IsBuffering
+                + " player_session_is_syncing=" + playerSessionAudit.IsSyncing
+                + " player_session_audio_start_state_reported="
+                + playerSessionObservation.AudioStartStateReported
+                + " player_session_should_start_audio="
+                + playerSessionObservation.ShouldStartAudio
+                + " player_session_audio_start_block_reason="
+                + (playerSessionObservation.Available
+                    ? playerSessionObservation.AudioStartBlockReason.ToString()
+                    : "n/a")
+                + " player_session_required_buffered_samples="
+                + (playerSessionObservation.Available
+                    ? playerSessionObservation.RequiredBufferedSamples.ToString()
+                    : "n/a")
+                + " player_session_reported_buffered_samples="
+                + (playerSessionObservation.Available
+                    ? playerSessionObservation.ReportedBufferedSamples.ToString()
+                    : "n/a")
+                + " player_session_requires_presented_video_frame="
+                + playerSessionObservation.RequiresPresentedVideoFrame
+                + " player_session_has_presented_video_frame="
+                + playerSessionObservation.HasPresentedVideoFrame
+                + " player_session_android_file_rate_bridge_active="
+                + playerSessionObservation.AndroidFileRateBridgeActive
+                + " audio_output_policy_available=" + audioOutputPolicyAudit.Available
+                + " av_sync_enterprise_available=" + avSyncEnterpriseAudit.Available
+                + " av_sync_enterprise_sample_count=" + avSyncEnterpriseAudit.SampleCount
+                + " av_sync_enterprise_latest_raw_offset_us="
+                + avSyncEnterpriseAudit.LatestRawOffsetUs
+                + " av_sync_enterprise_drift_projected_2h_ms="
+                + avSyncEnterpriseAudit.DriftProjected2hMs
+                + " passive_av_sync_available=" + passiveAvSyncAudit.Available
+                + " passive_av_sync_raw_offset_us=" + passiveAvSyncAudit.RawOffsetUs
+                + " passive_av_sync_smooth_offset_us=" + passiveAvSyncAudit.SmoothOffsetUs
+                + " passive_av_sync_drift_ppm=" + passiveAvSyncAudit.DriftPpm
+                + " passive_av_sync_drift_intercept_us="
+                + passiveAvSyncAudit.DriftInterceptUs
+                + " passive_av_sync_drift_sample_count="
+                + passiveAvSyncAudit.DriftSampleCount
+                + " passive_av_sync_video_schedule=" + passiveAvSyncAudit.VideoSchedule
+                + " passive_av_sync_audio_resample_ratio="
+                + passiveAvSyncAudit.AudioResampleRatio
+                + " passive_av_sync_audio_resample_active="
+                + passiveAvSyncAudit.AudioResampleActive
+                + " passive_av_sync_should_rebuild_anchor="
+                + passiveAvSyncAudit.ShouldRebuildAnchor
                 + " backend=" + Player.ActualBackendKind);
             return snapshot;
         }
